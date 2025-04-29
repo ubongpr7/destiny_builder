@@ -1,7 +1,9 @@
 from django.db import models
-from django.contrib.auth.models import User
-from projects.models import Project
+from django.contrib.auth import get_user_model
+from mainapps.project.models import Project
 from django.utils.translation import gettext_lazy as _
+
+User = get_user_model()
 
 class Report(models.Model):
     """General reports generated in the system"""

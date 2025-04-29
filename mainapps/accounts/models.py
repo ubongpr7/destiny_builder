@@ -3,11 +3,10 @@ import random
 from PIL import Image
 from django.db import models
 from django.urls import reverse
-from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.contrib.auth.models import AbstractUser, BaseUserManager,PermissionsMixin
 from django.conf import settings
 from django.db.models import Q
 from django.conf import settings
-from django.contrib.auth.models import PermissionsMixin
 from django.utils.translation import gettext_lazy as _
 from mainapps.common.models import Address
 from mainapps.inventory.helpers.field_validators import *
@@ -55,18 +54,6 @@ class CustomUserManager(BaseUserManager):
             return user
 
 class User(AbstractUser, PermissionsMixin,models.Model):
-    phone = models.CharField(
-        max_length=60, 
-        blank=True, 
-        null=True
-    )
-    
-    picture = models.ImageField(
-        upload_to='profile_pictures/%y/%m/%d/', 
-        default='default.png', 
-        null=True
-    
-        )
     email = models.EmailField(blank=False, null=True,unique=True)
     sex=models.CharField(
         max_length=20,
@@ -78,22 +65,12 @@ class User(AbstractUser, PermissionsMixin,models.Model):
     is_verified=models.BooleanField(default=False)
     is_staff=models.BooleanField(default=False)
     is_worker=models.BooleanField(default=False, editable=False)
-    is_main = models.BooleanField(editable=False,default=False)
     date_of_birth = models.DateField(
         validators=[adult_validator], 
         verbose_name='Date Of Birth',
         help_text='You must be above 18 years of age.',
         blank=True,
         null=True,
-    )
-    profile=models.ForeignKey(
-        'management.CompanyProfile',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='staff',
-        editable=False
-        
     )
 
     custom_permissions = models.ManyToManyField(
@@ -105,21 +82,6 @@ class User(AbstractUser, PermissionsMixin,models.Model):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
     objects = CustomUserManager()
-  
-    def save(self, *args, **kwargs):
-        self.username = self.email
-        super().save(*args, **kwargs)
-
-
-        try:
-            img = Image.open(self.picture.path)
-            if img.height > 300 or img.width > 300:
-                output_size = (300, 300)
-                img.thumbnail(output_size)
-                img.save(self.picture.path)
-        except:
-            pass
-        
 
     @property
     def get_full_name(self):
@@ -129,17 +91,9 @@ class User(AbstractUser, PermissionsMixin,models.Model):
         return full_name
 
     def __str__(self):
-        return self.email
+        return self.get_full_name
 
         
-
-    def get_picture(self):
-        try:
-            return self.picture.url
-        except:
-            no_picture = settings.MEDIA_URL + 'default.png'
-            return no_picture
-
 
     def delete(self, *args, **kwargs):
         if self.picture.url != settings.MEDIA_URL + 'default.png':

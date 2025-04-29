@@ -72,10 +72,6 @@ class TypeOf(MPTTModel):
 
 
 class Address(models.Model):
-
-    class Meta:
-        abstract= True
-
     
     country = models.ForeignKey(
         Country, 

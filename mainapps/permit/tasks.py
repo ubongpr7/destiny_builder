@@ -1,7 +1,7 @@
 from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
-from mainapps.management.models import ActivityLog
+from mainapps.permit.models import ActivityLog
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def async_log_activity(log_data: dict):
             user=user,
             **log_data
         )
-        
+    
     except KeyError as e:
         logger.error(f"Missing required field in activity log: {str(e)}")
     except Exception as e:

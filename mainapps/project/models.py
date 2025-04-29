@@ -1,8 +1,9 @@
 from django.db import models
-from django.contrib.auth.models import User
-from mptt.models import MPTTModel, TreeForeignKey
 from django.utils.translation import gettext_lazy as _
-from inventory.models import Asset
+from mainapps.inventory.models import Asset
+from mptt.models import MPTTModel, TreeForeignKey
+from django.contrib.auth import get_user_model
+User=get_user_model()
 
 class ProjectCategory(MPTTModel):
     """Categories for projects"""

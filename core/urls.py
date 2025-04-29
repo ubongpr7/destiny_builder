@@ -10,6 +10,8 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from schema_graph.views import Schema
+from django.conf import settings
+from django.conf.urls.static import static
 
 schema_view = get_schema_view(
    openapi.Info(
@@ -38,9 +40,9 @@ urlpatterns = [
 
     # db sync
 
-    path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
+    # path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
     # path('inventory_api/', include("mainapps.inventory.api.urls",)),
     # path('permission_api/', include("mainapps.permit.api.urls",)),
     # path('common_api/', include("mainapps.common.api.urls")),
     # path('management_api/', include("mainapps.management.api.urls")),
-]
+]+static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

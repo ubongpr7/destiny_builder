@@ -3,7 +3,6 @@ from rest_framework.validators import UniqueValidator
 from mainapps.accounts.models import User
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from mainapps.management.api.serializers import StaffRoleAssignmentSerializer
 from mainapps.permit.models import CustomUserPermission
 
 from django.contrib.auth.password_validation import validate_password
@@ -61,7 +60,7 @@ class LogoutSerializer(serializers.Serializer):
     refresh=serializers.CharField()
 
 class MyUserSerializer(serializers.ModelSerializer):
-    roles = serializers.SerializerMethodField()
+    # roles = serializers.SerializerMethodField()
     
     class Meta:
         model = User
@@ -73,9 +72,9 @@ class MyUserSerializer(serializers.ModelSerializer):
             'email': {'required': True}
         }
     
-    def get_roles(self, obj):
-        active_assignments = obj.roles.filter(is_active=True)
-        return StaffRoleAssignmentSerializer(active_assignments, many=True).data
+    # def get_roles(self, obj):
+    #     active_assignments = obj.roles.filter(is_active=True)
+    #     return StaffRoleAssignmentSerializer(active_assignments, many=True).data
     
 class UserPictureSerializer(serializers.ModelSerializer):
     class Meta:

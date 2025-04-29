@@ -1,8 +1,9 @@
 
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from mptt.models import MPTTModel, TreeForeignKey
+User = get_user_model()
 
 class AssetCategory(MPTTModel):
     """Categories for assets"""
@@ -191,3 +192,6 @@ class AuditAsset(models.Model):
     
     def __str__(self):
         return f"{self.audit.title} - {self.asset.name}"
+    
+
+registerable_models=[AssetCategory, AssetLocation, Supplier, Asset, AssetMaintenance, AssetCheckout, AssetAttachment, InventoryAudit, AuditAsset]

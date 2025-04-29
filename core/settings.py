@@ -150,10 +150,7 @@ USE_I18N = True
 
 USE_TZ = True
 
-LOGIN_URL='/accounts/signin'
-LOGIN_REDIRECT_URL='/accounts/signin/?next={url}'
-DEFAULT_REDIEECT_URL='/'
-STATIC_URL = '/static/'
+
 STATIC_URL = "static/" 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
@@ -172,12 +169,10 @@ AWS_S3_TIMEOUT = 60
 AWS_S3_FILE_OVERWRITE=True
 
 
-
 STORAGES = {
         "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
         "staticfiles": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
 }
-
 
 EMAIL_BACKEND = 'django_smtp_ssl.SSLEmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

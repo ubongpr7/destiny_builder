@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
-from mainapps.management.models import StaffGroup,StaffRole, StaffRoleAssignment
+from mainapps.permit.models import UserGroup,UserRole, UserRoleAssignment
 from mainapps.permit.permit import HasModelRequestPermission
 
 from .serializers import (PermissionDetailSerializer, RoleAssignmentSerializer,
@@ -83,125 +83,125 @@ class UserPermissionManager(RetrieveUpdateAPIView):
         return Response({'status': 'permissions updated'}, status=status.HTTP_200_OK)
     
     
-class GroupPermissionManager(RetrieveUpdateAPIView):
-    queryset = StaffGroup.objects.all() 
-    permission_classes = [permissions.IsAuthenticated,HasModelRequestPermission]
+# class GroupPermissionManager(RetrieveUpdateAPIView):
+#     queryset = StaffGroup.objects.all() 
+#     permission_classes = [permissions.IsAuthenticated,HasModelRequestPermission]
 
-    def get_serializer_class(self):
-        if getattr(self, 'swagger_fake_view', False):
-            return PermissionDetailSerializer
-        group = self.get_object()
+#     def get_serializer_class(self):
+#         if getattr(self, 'swagger_fake_view', False):
+#             return PermissionDetailSerializer
+#         group = self.get_object()
 
-        if group.profile != self.request.user.profile:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        if self.request.method == 'GET':
-            return PermissionDetailSerializer
-        return GroupPermissionUpdateSerializer
+#         if group.profile != self.request.user.profile:
+#             return Response(status=status.HTTP_403_FORBIDDEN)
+#         if self.request.method == 'GET':
+#             return PermissionDetailSerializer
+#         return GroupPermissionUpdateSerializer
 
-    def get(self, request, *args, **kwargs):
-        """Get all permissions with current groups's access status"""
-        group = self.get_object()
-        if group.profile != request.user.profile:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+#     def get(self, request, *args, **kwargs):
+#         """Get all permissions with current groups's access status"""
+#         group = self.get_object()
+#         if group.profile != request.user.profile:
+#             return Response(status=status.HTTP_403_FORBIDDEN)
         
-        permissions = CustomUserPermission.objects.annotate(
-            has_permission=Exists(
-                StaffGroup.permissions.through.objects.filter(
-                    staffgroup_id=group.id,  
-                    customuserpermission_id=OuterRef('id')
-                )
-            )
-        ).select_related('category')
-        serializer = self.get_serializer(permissions, many=True)
-        return Response({'permissions': serializer.data})
+#         permissions = CustomUserPermission.objects.annotate(
+#             has_permission=Exists(
+#                 StaffGroup.permissions.through.objects.filter(
+#                     staffgroup_id=group.id,  
+#                     customuserpermission_id=OuterRef('id')
+#                 )
+#             )
+#         ).select_related('category')
+#         serializer = self.get_serializer(permissions, many=True)
+#         return Response({'permissions': serializer.data})
 
-    def put(self, request, *args, **kwargs):
+#     def put(self, request, *args, **kwargs):
 
-        """Update group permissions with complete list"""
-        group = self.get_object()
+#         """Update group permissions with complete list"""
+#         group = self.get_object()
         
-        if group.profile != request.user.profile:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+#         if group.profile != request.user.profile:
+#             return Response(status=status.HTTP_403_FORBIDDEN)
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
         
-        # Validate all permission codenames exist
-        codenames = serializer.validated_data['permissions']
-        valid_perms = CustomUserPermission.objects.filter(codename__in=codenames)
+#         # Validate all permission codenames exist
+#         codenames = serializer.validated_data['permissions']
+#         valid_perms = CustomUserPermission.objects.filter(codename__in=codenames)
         
-        # Check for invalid permissions
-        received_perms = set(codenames)
-        valid_codenames = set(valid_perms.values_list('codename', flat=True))
-        if invalid := received_perms - valid_codenames:
-            return Response(
-                {"detail": f"Invalid permissions: {', '.join(invalid)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+#         # Check for invalid permissions
+#         received_perms = set(codenames)
+#         valid_codenames = set(valid_perms.values_list('codename', flat=True))
+#         if invalid := received_perms - valid_codenames:
+#             return Response(
+#                 {"detail": f"Invalid permissions: {', '.join(invalid)}"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
         
-        with transaction.atomic():
-            group.permissions.set(valid_perms)
+#         with transaction.atomic():
+#             group.permissions.set(valid_perms)
         
-        return Response({'status': 'permissions updated'}, status=status.HTTP_200_OK)
+#         return Response({'status': 'permissions updated'}, status=status.HTTP_200_OK)
     
-class RolePermissionManager(RetrieveUpdateAPIView):
-    queryset = StaffRole.objects.all() 
-    permission_classes = [permissions.IsAuthenticated,HasModelRequestPermission]
+# class RolePermissionManager(RetrieveUpdateAPIView):
+#     queryset = StaffRole.objects.all() 
+#     permission_classes = [permissions.IsAuthenticated,HasModelRequestPermission]
 
-    def get_serializer_class(self):
-        if getattr(self, 'swagger_fake_view', False):
-            return PermissionDetailSerializer
-        role = self.get_object()
+#     def get_serializer_class(self):
+#         if getattr(self, 'swagger_fake_view', False):
+#             return PermissionDetailSerializer
+#         role = self.get_object()
 
-        if role.profile != self.request.user.profile:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        if self.request.method == 'GET':
-            return PermissionDetailSerializer
-        return RolePermissionUpdateSerializer
+#         if role.profile != self.request.user.profile:
+#             return Response(status=status.HTTP_403_FORBIDDEN)
+#         if self.request.method == 'GET':
+#             return PermissionDetailSerializer
+#         return RolePermissionUpdateSerializer
 
-    def get(self, request, *args, **kwargs):
-        """Get all permissions with current role's access status"""
-        role = self.get_object()
-        if role.profile != request.user.profile:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+#     def get(self, request, *args, **kwargs):
+#         """Get all permissions with current role's access status"""
+#         role = self.get_object()
+#         if role.profile != request.user.profile:
+#             return Response(status=status.HTTP_403_FORBIDDEN)
         
-        permissions = CustomUserPermission.objects.annotate(
-            has_permission=Exists(
-                StaffRole.permissions.through.objects.filter(
-                    staffrole_id=role.id,  
-                    customuserpermission_id=OuterRef('id')
-                )
-            )
-        ).select_related('category')
-        serializer = self.get_serializer(permissions, many=True)
-        return Response({'permissions': serializer.data})
+#         permissions = CustomUserPermission.objects.annotate(
+#             has_permission=Exists(
+#                 StaffRole.permissions.through.objects.filter(
+#                     staffrole_id=role.id,  
+#                     customuserpermission_id=OuterRef('id')
+#                 )
+#             )
+#         ).select_related('category')
+#         serializer = self.get_serializer(permissions, many=True)
+#         return Response({'permissions': serializer.data})
 
-    def put(self, request, *args, **kwargs):
+#     def put(self, request, *args, **kwargs):
 
-        """Update group permissions with complete list"""
-        role = self.get_object()
+#         """Update group permissions with complete list"""
+#         role = self.get_object()
         
-        if role.profile != request.user.profile:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+#         if role.profile != request.user.profile:
+#             return Response(status=status.HTTP_403_FORBIDDEN)
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
         
-        # Validate all permission codenames exist
-        codenames = serializer.validated_data['permissions']
-        valid_perms = CustomUserPermission.objects.filter(codename__in=codenames)
+#         # Validate all permission codenames exist
+#         codenames = serializer.validated_data['permissions']
+#         valid_perms = CustomUserPermission.objects.filter(codename__in=codenames)
         
-        # Check for invalid permissions
-        received_perms = set(codenames)
-        valid_codenames = set(valid_perms.values_list('codename', flat=True))
-        if invalid := received_perms - valid_codenames:
-            return Response(
-                {"detail": f"Invalid permissions: {', '.join(invalid)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+#         # Check for invalid permissions
+#         received_perms = set(codenames)
+#         valid_codenames = set(valid_perms.values_list('codename', flat=True))
+#         if invalid := received_perms - valid_codenames:
+#             return Response(
+#                 {"detail": f"Invalid permissions: {', '.join(invalid)}"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
         
-        with transaction.atomic():
-            role.permissions.set(valid_perms)
+#         with transaction.atomic():
+#             role.permissions.set(valid_perms)
         
-        return Response({'status': 'permissions updated'}, status=status.HTTP_200_OK)
+#         return Response({'status': 'permissions updated'}, status=status.HTTP_200_OK)
     
 
 
@@ -259,7 +259,7 @@ class UserGroupManager(RetrieveUpdateAPIView):
             user.staff_groups.set(valid_groups)
         return Response({'status': 'permissions updated'}, status=status.HTTP_200_OK)
     
-class RoleAssignmentManager(ModelViewSet):
-    queryset = StaffRoleAssignment.objects.all() 
-    permission_classes = [permissions.IsAuthenticated,HasModelRequestPermission]
-    serializer_class = RoleAssignmentSerializer
+# class RoleAssignmentManager(ModelViewSet):
+#     queryset = UserRoleAssignment.objects.all() 
+#     permission_classes = [permissions.IsAuthenticated,HasModelRequestPermission]
+#     serializer_class = RoleAssignmentSerializer

@@ -1,6 +1,5 @@
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
-from django.conf import settings
+
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import FileUploadParser
@@ -13,9 +12,9 @@ from rest_framework.generics import ListAPIView
 from django.db.models import Prefetch
 from rest_framework_simplejwt.views import TokenObtainPairView
 from mainapps.accounts.models import User,VerificationCode
-from mainapps.accounts.views import send_html_email
+from mainapps.email_system.emails import send_html_email
+
 from mainapps.common.settings import get_company_or_profile
-from mainapps.management.models import StaffRoleAssignment
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated
 from mainapps.permit.permit import HasModelRequestPermission
@@ -217,20 +216,5 @@ class StaffUserRegistrationAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class StaffUsersView(ListAPIView):
-    permission_classes = [IsAuthenticated, HasModelRequestPermission]
-    serializer_class = MyUserSerializer
-    
-    def get_queryset(self):
-        company = get_company_or_profile(self.request.user)
-        user= User.objects.filter(profile=company).prefetch_related(
-            Prefetch(
-                'roles',
-                queryset=StaffRoleAssignment.objects.select_related('role'),
-                to_attr='active_roles'
-            )
-        )
-        print(user)
-        return user
 
 
