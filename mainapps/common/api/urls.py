@@ -1,8 +1,13 @@
 # types/urls.py
-from django.urls import path
+from django.urls import path, include
 from . import  views
+from rest_framework.routers import DefaultRouter
+
+router = DefaultRouter()
+router.register(r'addresses', views.AddressViewSet)
 
 urlpatterns = [
+    path('', include(router.urls)),
     path('types/', views.TypeOfListView.as_view(), name='type-of-list'),
     path('units/', views.UnitListView.as_view(), name='unit-of-list'),
     path('currencies/', views.get_currencies, name='get-currencies'),

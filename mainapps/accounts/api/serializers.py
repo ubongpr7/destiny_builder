@@ -8,6 +8,10 @@ from mainapps.permit.models import CustomUserPermission
 from django.contrib.auth.password_validation import validate_password
 
 
+
+
+
+
 class RootUserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True,)
     re_password = serializers.CharField(write_only=True, required=True)
@@ -54,27 +58,27 @@ class StaffUserCreateSerializer(serializers.ModelSerializer):
     
 
         return user
-
+class UserActivationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'is_active']
+        read_only_fields = ['id', 'email', 'is_active']
 
 class LogoutSerializer(serializers.Serializer):
     refresh=serializers.CharField()
 
 class MyUserSerializer(serializers.ModelSerializer):
-    # roles = serializers.SerializerMethodField()
     
     class Meta:
+        # depth=1
         model = User
-        exclude = ['last_login', 'is_superuser','is_verified', 'is_main', 'is_worker', 
+        exclude = ['last_login', 'is_superuser','is_verified', 
                  'is_staff', 'groups', 'user_permissions','date_joined', 'is_active']
-        # read_only_fields = []
         extra_kwargs = {
             'password': {'write_only': True},
             'email': {'required': True}
         }
     
-    # def get_roles(self, obj):
-    #     active_assignments = obj.roles.filter(is_active=True)
-    #     return StaffRoleAssignmentSerializer(active_assignments, many=True).data
     
 class UserPictureSerializer(serializers.ModelSerializer):
     class Meta:
@@ -90,20 +94,15 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
         user = self.user  
-        try:
-            company_id = user.company.id
-        except user._meta.get_field("company").related_model.DoesNotExist:
-            company_id = None
+        
         data.update({
             'id': user.id,
             'username': user.username,
-            'is_worker': user.is_worker,
-            'is_main': user.is_main,
             'is_verified': user.is_verified,
             'profile': user.profile.id if user.profile else None,
             'email': user.email,
-            'company': company_id,
             'first_name': user.first_name,
+            'profile':user.profile.id if user.profile else None,
         })
         
         return data 
@@ -127,3 +126,4 @@ class UserPermissionSerializer(serializers.ModelSerializer):
                 'help_text': 'List of permission codenames to assign to the user'
             }
         }
+

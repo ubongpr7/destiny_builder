@@ -11,7 +11,6 @@ from django.utils.translation import gettext_lazy as _
 from mainapps.common.models import Address
 from mainapps.inventory.helpers.field_validators import *
 from django.utils import timezone
-
 from mainapps.permit.models import CustomUserPermission
 
 
@@ -78,27 +77,29 @@ class User(AbstractUser, PermissionsMixin,models.Model):
         related_name='users',
         blank=True
     )
+    profile = models.OneToOneField('UserProfile',null=True,blank=True, on_delete=models.CASCADE, related_name='user')
     
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
     objects = CustomUserManager()
-
+    
     @property
     def get_full_name(self):
         full_name = self.email
         if self.first_name and self.last_name:
             full_name = self.first_name + " " + self.last_name
         return full_name
+    def save(self, *args, **kwargs):
+        if not self.username:
+            self.username = self.email
+        super().save(*args, **kwargs)
+        
 
     def __str__(self):
         return self.get_full_name
 
         
 
-    def delete(self, *args, **kwargs):
-        if self.picture.url != settings.MEDIA_URL + 'default.png':
-            self.picture.delete()
-        super().delete(*args, **kwargs)
     
     
 class VerificationCode(models.Model):
@@ -133,10 +134,46 @@ class VerificationCode(models.Model):
 
 
 
+class Membership(models.Model):
+    name=models.CharField(max_length=255, unique=True)
+    slug=models.SlugField(editable=False,blank=True)
+    is_active=models.BooleanField(default=True)
+    description=models.TextField(blank=True,null=True)
+    def __str__(self):
+        return self.name
+
+class Industry(models.Model):
+    name = models.CharField(max_length=100)
+    
+    def __str__(self):
+        return self.name
+
+class Expertise(models.Model):
+    name = models.CharField(max_length=100)
+    
+    def __str__(self):
+        return self.name
+
+class PartnershipType(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    
+    def __str__(self):
+        return self.name
+
+class PartnershipLevel(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    benefits = models.TextField(blank=True, null=True)
+    
+    def __str__(self):
+        return self.name
 
 class UserProfile(models.Model):
     """Extended user profile with additional information"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    membership_type = models.ForeignKey(Membership, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Basic information
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.ForeignKey('common.Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profile')
     bio = models.TextField(blank=True, null=True)
@@ -154,17 +191,42 @@ class UserProfile(models.Model):
     kyc_verification_date = models.DateTimeField(blank=True, null=True)
     kyc_rejection_reason = models.TextField(blank=True, null=True)
     
-    # Additional fields
+    # Role Fields
     is_project_manager = models.BooleanField(default=False)
     is_donor = models.BooleanField(default=False)
     is_volunteer = models.BooleanField(default=False)
     is_partner = models.BooleanField(default=False)
     
+    # Additional Fields for Organization Members
+    organization = models.CharField(max_length=255, blank=True, null=True)
+    position = models.CharField(max_length=255, blank=True, null=True)
+    industry = models.ForeignKey(Industry, on_delete=models.SET_NULL, null=True, blank=True)
+    expertise = models.ManyToManyField(Expertise,related_name='expertise',blank=True)
+    
+    # Fields for Country Directors and Regional Heads
+    is_country_director = models.BooleanField(default=False)
+    is_regional_head = models.BooleanField(default=False)
+    assigned_region = models.ForeignKey('cities_light.Region', on_delete=models.SET_NULL, null=True, blank=True)
+    assigned_countries = models.ManyToManyField('cities_light.Country', blank=True, related_name='directors')
+    
+    # Fields for Partnership Bodies
+    partnership_type = models.ForeignKey(PartnershipType, on_delete=models.SET_NULL, null=True, blank=True)
+    partnership_level = models.ForeignKey(PartnershipLevel, on_delete=models.SET_NULL, null=True, blank=True)
+    partnership_start_date = models.DateField(blank=True, null=True)
+    
+    # Fields for Executives and CEOs
+    is_executive = models.BooleanField(default=False)
+    is_ceo = models.BooleanField(default=False)
+    company_size = models.CharField(max_length=50, blank=True, null=True)
+    company_website = models.URLField(blank=True, null=True)
+    linkedin_profile = models.URLField(blank=True, null=True)
+    
+    # Common fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return f"{self.user.username}'s Profile"
+        return f"{self.user}'s Profile"
 
 
 

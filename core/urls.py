@@ -40,9 +40,9 @@ urlpatterns = [
 
     # db sync
 
-    # path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
+    path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
     # path('inventory_api/', include("mainapps.inventory.api.urls",)),
     # path('permission_api/', include("mainapps.permit.api.urls",)),
-    # path('common_api/', include("mainapps.common.api.urls")),
-    # path('management_api/', include("mainapps.management.api.urls")),
+    path('common_api/', include("mainapps.common.api.urls")),
+    path('profile_api/', include("mainapps.user_profile.api.urls")),
 ]+static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

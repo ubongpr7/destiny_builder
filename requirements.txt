@@ -18,7 +18,7 @@ django-cors-headers==4.7.0
 django-countries==7.6.1
 django-environ==0.12.0
 django-extensions==3.2.3
-django-js-asset==2.2.0
+django-js-asset==2.n 2.0
 django-money==3.5.2
 django-mptt==0.16.0
 django-restframework==0.0.1

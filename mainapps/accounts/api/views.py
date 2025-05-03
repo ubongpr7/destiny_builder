@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
-
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import FileUploadParser
@@ -11,7 +12,7 @@ from rest_framework import permissions
 from rest_framework.generics import ListAPIView 
 from django.db.models import Prefetch
 from rest_framework_simplejwt.views import TokenObtainPairView
-from mainapps.accounts.models import User,VerificationCode
+from mainapps.accounts.models import User, UserProfile,VerificationCode
 from mainapps.email_system.emails import send_html_email
 
 from mainapps.common.settings import get_company_or_profile
@@ -19,8 +20,34 @@ from .serializers import *
 from rest_framework.permissions import IsAuthenticated
 from mainapps.permit.permit import HasModelRequestPermission
 
+from django.contrib.auth import get_user_model
+from rest_framework import generics
+from .serializers import UserActivationSerializer
+from rest_framework.throttling import AnonRateThrottle
+User = get_user_model()
 
+class UserActivationAPIView(generics.RetrieveAPIView):
+    """
+    Check if user account is active by user ID
+    """
+    serializer_class = UserActivationSerializer
+    lookup_url_kwarg = 'user_id'
+    lookup_field = 'id'
+    
+    def get_queryset(self):
+        return User.objects.filter(id=self.kwargs.get('user_id'))
 
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
 class UploadProfileView(APIView):
     parser_classes=[FileUploadParser]
     def post(self, request ):
@@ -42,71 +69,98 @@ def ge_route(request):
     route=['/api/token','api/token/refresh']
     return Response(route,status=201)
 
+
 class VerificationAPI(APIView):
+    throttle_classes = [AnonRateThrottle]
+    
     def get(self, request):
-        pk = request.query_params.get('id')
+        """Send verification code via email (GET)"""
+        email = request.query_params.get('email')
+        password= request.query_params.get('password')
+
+
+        if not email:
+            return Response(
+                {"error": "Email parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        if not pk:
-            return Response({"error": "User ID required"}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-
-            user = User.objects.get(pk=pk)
-            code = VerificationCode.objects.get(slug=user.email)
             
+            user = User.objects.get(email=email)
+            print(password,user.password)
             
-            code.total_attempts += 1
+            code = VerificationCode.objects.get(
+                user=user
+            )
             code.save()
             
             send_html_email(
-                subject=f'Verification code: {code}',
-                message=str(code),
+                subject=f'Your Verification Code: {code.code}',
+                message=f'Use this code to verify your login: {code.code}',
                 to_email=[user.email],
                 html_file='accounts/verify.html'
             )
             
-            return Response("Confirmation code has been resent", status=status.HTTP_200_OK)
+            return Response(
+                {"message": "Verification code sent successfully"},
+                status=status.HTTP_200_OK
+            )
             
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        except VerificationCode.DoesNotExist:
-            return Response({"error": "Verification code not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User not found with this email"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
     def post(self, request):
-        pk = request.data.get('userId')
-        print(pk)
+        """Verify code submission (POST)"""
+        email = request.data.get('email')
         code_input = request.data.get('code')
-        print(code_input)
-        if not pk or not code_input:
+        print(email,code_input)
+        print(request.data)
+        
+        if not email or not code_input:
+            print("Both email and code are required")
             return Response(
-                {"error": "Both user ID and code are required"},
+                {"error": "Both email and code are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            user = User.objects.get(pk=pk)
+            user = User.objects.get(email=email)
             verification_code = VerificationCode.objects.get(slug=user.email)
             
-            if str(verification_code) == str(code_input):
-                verification_code.total_attempts=0
-                verification_code.save() 
-                user.is_verified = True
-                user.save()
-                
+
+            if str(verification_code.code) != code_input.strip():
+                print(verification_code.code,code_input)
+                print("Invalid verification code")
                 return Response(
-                    {"message": "Authentication Successful"},
-                    status=status.HTTP_200_OK
+                    {"error": "Invalid verification code"},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-                
+
             return Response(
-                {"error": "Invalid verification code"},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "message": "Verification successful",
+                    "user_id": user.id,
+                    "email": user.email
+                },
+                status=status.HTTP_200_OK
             )
             
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except VerificationCode.DoesNotExist:
-            return Response({"error": "Verification code not found"}, status=status.HTTP_404_NOT_FOUND)
+            print("No active verification code for this user")
+            return Response(
+                {"error": "No active verification code for this user"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 class UserDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -115,8 +169,15 @@ class UserDetailView(APIView):
     def get(self, request, *args, **kwargs):
         """Return details of the logged-in user"""
         user = request.user
+        if not user.profile:
+            profile=UserProfile.objects.create()
+            user.profile = profile
+            user.save()
+
         serializer = MyUserSerializer(user)
+        print(serializer.data)
         return Response(serializer.data)
+    
 
 class TokenGenerator(TokenObtainPairView):
     def post(self, request: Request, *args, **kwargs)  :
@@ -138,24 +199,25 @@ class UserProfileView(APIView):
         email=request.COOKIES.get('email')
         user=User.objects.get(username=email)
         return Response({'user':user},status=200)
+from rest_framework_simplejwt.exceptions import TokenError
 
 class LogoutAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        try:
-            # request.user.auth_token.delete()
-            token=request.data.get('refresh')
-            print('refresh_token',token)
-            token = RefreshToken(token)
+        refresh_token = request.data.get('refresh')
+        
+        if not refresh_token:
+            return Response({"error": "Refresh token is required"}, status=400)
 
-            token.blacklist()  # Add to blacklist
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response({"message": "Logged out successfully"}, status=200)
+        except TokenError as e:
             return Response({"message": "Logged out successfully"}, status=200)
         except Exception as e:
-            print(e)
             return Response({"error": str(e)}, status=400)
-        
-
 class RootUserRegistrationAPIView(APIView):
     """
     Create new user with first name, email and password
@@ -216,5 +278,13 @@ class StaffUserRegistrationAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class UpdateUserView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = MyUserSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'  
 
+    # def get_object(self):
+    #     """Override to get the user object based on the request user"""
+    #     return self.request.user
 

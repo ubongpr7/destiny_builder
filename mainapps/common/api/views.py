@@ -1,9 +1,11 @@
 from rest_framework import generics
-from mainapps.common.models import Currency, TypeOf, Unit
+from mainapps.common.models import Address, Currency, TypeOf, Unit
 from mainapps.common.settings import currency_code_mappings
-from .serializers import CurrencySerializer, TypeOfSerializer, UnitSerializer
+from .serializers import AddressSerializer, CurrencySerializer, TypeOfSerializer, UnitSerializer
 from django.http import JsonResponse
 # views.py
+from rest_framework import viewsets
+
 from rest_framework import generics
 from cities_light.models import Country, Region, SubRegion, City
 from .serializers import CountrySerializer, RegionSerializer, SubRegionSerializer, CitySerializer
@@ -62,3 +64,8 @@ class CityListView(generics.ListAPIView):
     def get_queryset(self):
         subregion_id = self.request.query_params.get('subregion_id')
         return City.objects.filter(subregion_id=subregion_id)
+    
+
+class AddressViewSet(viewsets.ModelViewSet):
+    queryset = Address.objects.all()
+    serializer_class = AddressSerializer

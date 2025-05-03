@@ -51,6 +51,7 @@ CORE_APPS = [
     'mainapps.communication',
     'mainapps.membership',
     'mainapps.permit',
+    'mainapps.user_profile',
 ]
 INSTALLED_APPS=[
 ]
@@ -209,8 +210,8 @@ DJOSER = {
     'USER_CREATE_PASSWORD_RETYPE': True,
     'PASSWORD_RESET_CONFIRM_RETYPE': True,
     'LOGOUT_ON_PASSWORD_CHANGE': True,
-    # 'EMAIL_FRONTEND_DOMAIN':'localhost:3000',
-    # 'EMAIL_FRONTEND_PROTOCOL':'http',
+    'EMAIL_FRONTEND_DOMAIN':'www.destinybuilders.africa',
+    'EMAIL_FRONTEND_PROTOCOL':'https',
     'TOKEN_MODEL': 'rest_framework.authtoken.models.Token',  
 
     'SOCIAL_AUTH_ALLOWED_REDIRECT_URIS': os.getenv('SOCIAL_AUTH_ALLOWED_REDIRECT_URIS', '').split(','),
@@ -307,3 +308,9 @@ CELERY_BROKER_URL = 'redis://redis:6379/0'
 CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 USE_L10N = True
 USE_THOUSAND_SEPARATOR = True
+
+ALLOWED_HOSTS = ['dev.destinybuilders.africa']
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+# SECURE_HSTS_SECONDS = 3600
