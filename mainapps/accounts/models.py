@@ -98,6 +98,18 @@ class User(AbstractUser, PermissionsMixin,models.Model):
     def __str__(self):
         return self.get_full_name
 
+    def delete(self, *args, **kwargs):
+            # Delete the associated profile if it exists
+            if self.profile:
+                # Store the profile to delete it
+                profile = self.profile
+                # Set profile to None to avoid circular delete issues
+                self.profile = None
+                self.save()
+                # Delete the profile
+                profile.delete()
+            # Call the parent delete method
+            super().delete(*args, **kwargs)
         
 
     
