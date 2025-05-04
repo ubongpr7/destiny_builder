@@ -163,7 +163,9 @@ class AddressViewSet(viewsets.ModelViewSet):
             )
         
         # Create the address linked to the user profile
-        serializer.save(user_profile=user_profile)
+        serializer.save()
+        user_profile.address= serializer.instance
+        user_profile.save()
     
     def perform_update(self, serializer):
         """
