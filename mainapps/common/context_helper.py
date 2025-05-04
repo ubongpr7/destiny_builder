@@ -17,12 +17,11 @@ def get_context_heper(self,context):
     except Exception as error:
         context['item_name'] = self.get_model().__name__
 
-        print(self.get_model().__name__ ,error)    
 
     try:
 
         context['plural'] = self.get_model()._meta.verbose_name_plural.title
     except Exception as error:
-        print(self.get_model().__name__ ,error)  
+        pass
     context['model_label']  =self.kwargs['model_name']
     context['app_label']  =self.kwargs['app_name']

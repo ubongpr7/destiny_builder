@@ -19,30 +19,24 @@ class HasModelRequestPermission(permissions.BasePermission):
             current_time = timezone.now()
             for role in request.user.roles.all().iterator():
                 if role.start_date and role.end_date:
-                    # Debug prints
-                    print(f"Current time: {current_time}")
-                    print(f"Role {role.id}: Start={role.start_date}, End={role.end_date}")
 
                     if role.end_date < current_time:
                         role.delete()
-                        print(f"Deleted inactive role {role.id}")
                     else:
                         perms = role.role.permissions.all().values_list('codename', flat=True)
                         user_perms.update(perms)
         except Exception as e:
-            print(f"Error: {e}")
+            pass
         try:
             groups=request.user.staff_groups.all()
             for group in groups:
                 user_perms.update(group.permissions.all().values_list('codename', flat=True))
         except Exception as e:
-            print(e)
-    
+            pass
         if permission:
          
             if isinstance(permission, dict):
                 action = view.action
-                print(action)
                 permission= permission.get(action)
             return permission in user_perms
 

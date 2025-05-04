@@ -9,7 +9,6 @@ def validate_currency_code(value):
         get_currency_by_code(value)
     except CurrencyNotFoundError:
         raise ValidationError(f"{value} is not a valid currency code.")
-        print("Non-existent code have been used")
 
 
 

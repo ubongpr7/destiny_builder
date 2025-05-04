@@ -52,14 +52,11 @@ class UploadProfileView(APIView):
     parser_classes=[FileUploadParser]
     def post(self, request ):
         user=request.user
-        print(user)
         picture=request.data["file"]
-        print(request.data["file"])
         user.picture=picture
         user.save()
         #serializer=UserPictureSerializer(picture,data=request.data)
         if user.picture==picture:
-            print("saved")
             return Response("Profile picture updated Successfully",status=200)
         else:
             return Response("Error uploading picture!",status=400)
@@ -88,7 +85,6 @@ class VerificationAPI(APIView):
         try:
             
             user = User.objects.get(email=email)
-            print(password,user.password)
             
             code = VerificationCode.objects.get(
                 user=user
@@ -117,11 +113,8 @@ class VerificationAPI(APIView):
         """Verify code submission (POST)"""
         email = request.data.get('email')
         code_input = request.data.get('code')
-        print(email,code_input)
-        print(request.data)
         
         if not email or not code_input:
-            print("Both email and code are required")
             return Response(
                 {"error": "Both email and code are required"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -133,8 +126,6 @@ class VerificationAPI(APIView):
             
 
             if str(verification_code.code) != code_input.strip():
-                print(verification_code.code,code_input)
-                print("Invalid verification code")
                 return Response(
                     {"error": "Invalid verification code"},
                     status=status.HTTP_400_BAD_REQUEST
@@ -155,7 +146,6 @@ class VerificationAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except VerificationCode.DoesNotExist:
-            print("No active verification code for this user")
             return Response(
                 {"error": "No active verification code for this user"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -175,7 +165,6 @@ class UserDetailView(APIView):
             user.save()
 
         serializer = MyUserSerializer(user)
-        print(serializer.data)
         return Response(serializer.data)
     
 
@@ -230,7 +219,6 @@ class RootUserRegistrationAPIView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             code=VerificationCode.objects.get(slug=user.email)
-            print(f'this is the code: {code}')
             subject=f'Verification code: {code}. {user.first_name} {user.last_name}'
             message= code
             html_file='accounts/verify.html'
@@ -251,7 +239,6 @@ class StaffUserRegistrationAPIView(APIView):
     permission_classes = [IsAuthenticated,HasModelRequestPermission]
 
     def post(self, request):
-        print(request.data)
 
         serializer = StaffUserCreateSerializer(data=request.data)
         
@@ -263,7 +250,6 @@ class StaffUserRegistrationAPIView(APIView):
             password = serializer.validated_data.get('password')  # Get from validated data
                 
             code=VerificationCode.objects.get(slug=user.email)
-            print(f'this is the code: {code}')
             subject=f'Verification code: {code}. {user.first_name}'
             message= f'Code: {code}, Password: {password}'
             

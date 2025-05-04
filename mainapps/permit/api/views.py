@@ -238,7 +238,6 @@ class UserGroupManager(RetrieveUpdateAPIView):
             )
         )
         serializer = self.get_serializer(groups, many=True)
-        print(serializer.data)
         return Response({'groups': serializer.data})
 
     def put(self, request, *args, **kwargs):

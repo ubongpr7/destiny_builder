@@ -59,5 +59,4 @@ def settings(user):
 
 @register.simple_tag(takes_context=True)
 def current_user(context):
-    print(context)
     return context

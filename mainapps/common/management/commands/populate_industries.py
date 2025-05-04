@@ -746,7 +746,6 @@ class Command(BaseCommand):
         def delete_industries():
             for industry in TypeOf.objects.filter(which_model=ModelChoice.inventory):
                 industry.delete()
-                print(f'Deleted industry: ')
 
             self.stdout.write(self.style.WARNING('Deleted all industries!'))
         self.stdout.write(self.style.WARNING('Starting industry population...'))
