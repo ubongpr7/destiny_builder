@@ -1,6 +1,9 @@
 from mainapps.accounts.models import Membership, Industry, Expertise, PartnershipType, PartnershipLevel, Skill, UserProfile
 from rest_framework import serializers
 
+from mainapps.common.api.serializers import CitySerializer, CountrySerializer, RegionSerializer, SubRegionSerializer
+from mainapps.common.models import Address
+
 
 class IndustrySerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,3 +66,18 @@ class ProfileSerialIzerAttachment(serializers.ModelSerializer):
             
         instance.save()
         return instance
+
+class AddressSerializer(serializers.ModelSerializer):
+    country_details = CountrySerializer(source='country', read_only=True)
+    region_details = RegionSerializer(source='region', read_only=True)
+    subregion_details = SubRegionSerializer(source='subregion', read_only=True)
+    city_details = CitySerializer(source='city', read_only=True)
+    
+    class Meta:
+        model = Address
+        fields = [
+            'id', 'country', 'region', 'subregion', 'city', 
+            'apt_number', 'street_number', 'street', 'postal_code',
+            'country_details', 'region_details', 'subregion_details', 'city_details'
+        ]
+        read_only_fields = ['id']

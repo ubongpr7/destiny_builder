@@ -10,8 +10,17 @@ router.register(r'skills', SkillViewSet)
 router.register(r'profile', ProfileViewSet)
 router.register(r'membership', MembershipViewSet)
 
-urlpatterns=[
-    path('',include(router.urls)),
-
-
+urlpatterns = [
+    path('', include(router.urls)),
+    # Manual nested routes for addresses
+    path('profiles/<str:user_profile_id>/addresses/', 
+         AddressViewSet.as_view({'get': 'list', 'post': 'create'}),
+         name='profile-addresses-list'),
+    path('profiles/<str:user_profile_id>/addresses/<int:pk>/', 
+         AddressViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}),
+         name='profile-addresses-detail'),
 ]
+
+
+
+

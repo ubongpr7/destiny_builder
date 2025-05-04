@@ -7,7 +7,12 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from .serializers import AddressSerializer
+from django.shortcuts import get_object_or_404
+from mainapps.common.models import Address
 from mainapps.accounts.models import Industry, Expertise, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
 from .serializers import (
     IndustrySerializer, ExpertiseSerializer, MembershipSerializer, PartnershipTypeSerializer,
@@ -128,3 +133,66 @@ class ProfileViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+
+
+
+class AddressViewSet(viewsets.ModelViewSet):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Filter addresses by the user_profile_id parameter
+        """
+        user_profile_id = self.kwargs.get('user_profile_id')
+        return Address.objects.filter(user_profile_id=user_profile_id)
+    
+    def perform_create(self, serializer):
+        """
+        Create a new address for the specified user profile
+        """
+        user_profile_id = self.kwargs.get('user_profile_id')
+        user_profile = get_object_or_404(UserProfile, id=user_profile_id)
+        
+        # Check if the current user has permission to modify this profile
+        if user_profile.user != self.request.user and not self.request.user.is_staff:
+            return Response(
+                {"detail": "You do not have permission to perform this action."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Create the address linked to the user profile
+        serializer.save(user_profile=user_profile)
+    
+    def perform_update(self, serializer):
+        """
+        Update an address for the specified user profile
+        """
+        user_profile_id = self.kwargs.get('user_profile_id')
+        user_profile = get_object_or_404(UserProfile, id=user_profile_id)
+        
+        # Check if the current user has permission to modify this profile
+        if user_profile.user != self.request.user and not self.request.user.is_staff:
+            return Response(
+                {"detail": "You do not have permission to perform this action."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        """
+        Delete an address for the specified user profile
+        """
+        user_profile_id = self.kwargs.get('user_profile_id')
+        user_profile = get_object_or_404(UserProfile, id=user_profile_id)
+        
+        # Check if the current user has permission to modify this profile
+        if user_profile.user != self.request.user and not self.request.user.is_staff:
+            return Response(
+                {"detail": "You do not have permission to perform this action."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        instance.delete()

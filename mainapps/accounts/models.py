@@ -77,7 +77,7 @@ class User(AbstractUser, PermissionsMixin,models.Model):
         related_name='users',
         blank=True
     )
-    profile = models.OneToOneField('UserProfile',null=True,blank=True, on_delete=models.CASCADE, related_name='user')
+    profile = models.OneToOneField('UserProfile',null=True,blank=True, on_delete=models.SET_NULL, related_name='user')
     
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -175,7 +175,7 @@ class UserProfile(models.Model):
     
     # Basic information
     phone_number = models.CharField(max_length=20, blank=True, null=True)
-    address = models.ForeignKey('common.Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profile')
+    address = models.OneToOneField('common.Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profile')
     bio = models.TextField(blank=True, null=True)
     profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
