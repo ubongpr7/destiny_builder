@@ -287,6 +287,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://destinybuilders.africa",
 
 ]
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
+
 
 TINYMCE_DEFAULT_CONFIG = {
     'height': 360,
