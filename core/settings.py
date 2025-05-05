@@ -62,13 +62,13 @@ INSTALLED_APPS.extend(CORE_APPS)
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'middleware.ip_address_middleware.IPBlackListMiddleware',
     'middleware.time_zone.TimezoneMiddleware'
 ]
@@ -267,6 +267,7 @@ CORS_ALLOW_ALL_ORIGINS=True
 CORS_ORIGIN_ALLOW_ALL=True
 
 CORS_ALLOW_CREDENTIALS=True
+
 CORS_ALLOW_METHODS = (
     "DELETE",
     "GET",
@@ -287,7 +288,6 @@ CORS_ALLOWED_ORIGINS = [
     "https://destinybuilders.africa",
 
 ]
-CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
 
 
@@ -320,3 +320,6 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 # SECURE_HSTS_SECONDS = 3600
+FILE_UPLOAD_TIMEOUT = 3600
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2147483648  # 2GB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2147483648  # 2GB
