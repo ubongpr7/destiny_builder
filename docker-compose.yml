@@ -17,7 +17,8 @@ services:
       sh -c "
         python manage.py makemigrations &&
         python manage.py migrate &&
-        gunicorn --bind 0.0.0.0:8000 --timeout 600 --workers 3 --threads 3 --worker-tmp-dir /dev/shm --worker-class=gthread --keep-alive 65 --log-level debug core.wsgi
+        python manage.py runserver 0.0.0.0:8000
+
       "
     volumes:
       - .:/app
@@ -28,13 +29,6 @@ services:
     networks:
       - destiny_network
     restart: unless-stopped
-    # Add resource limits to ensure container has enough memory
-    deploy:
-      resources:
-        limits:
-          memory: 4G  # Adjust based on your server capacity
-        reservations:
-          memory: 2G  # Minimum memory reservation
 
   celery:
     image: ubongpr7/destiny:latest
@@ -55,3 +49,4 @@ volumes:
 
 networks:
   destiny_network:
+
