@@ -10,10 +10,10 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .serializers import AddressSerializer
+from .serializers import AddressSerializer, DisabilityTypeSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
-from mainapps.accounts.models import Industry, Expertise, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
+from mainapps.accounts.models import Disability, Industry, Expertise, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
 from .serializers import (
     IndustrySerializer, ExpertiseSerializer, MembershipSerializer, PartnershipTypeSerializer,
     PartnershipLevelSerializer, ProfileSerialIzer, ProfileSerialIzerAttachment, SkillSerializer
@@ -59,6 +59,11 @@ class SkillViewSet(BaseReferenceViewSet):
 class PartnershipTypeViewSet(BaseReferenceViewSet):
     queryset = PartnershipType.objects.all()
     serializer_class = PartnershipTypeSerializer
+    search_fields = ['name', 'description']
+
+class DisabilityViewSet(BaseReferenceViewSet):
+    queryset = Disability.objects.all()
+    serializer_class = DisabilityTypeSerializer
     search_fields = ['name', 'description']
 
 

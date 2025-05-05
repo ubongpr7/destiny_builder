@@ -9,6 +9,7 @@ router.register(r'partnership-levels', PartnershipLevelViewSet)
 router.register(r'skills', SkillViewSet)
 router.register(r'profile', ProfileViewSet)
 router.register(r'membership', MembershipViewSet)
+router.register(r'disabilities', DisabilityViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -19,6 +20,7 @@ urlpatterns = [
     path('profiles/<str:user_profile_id>/addresses/<int:pk>/', 
          AddressViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}),
          name='profile-addresses-detail'),
+         
 ]
 
 

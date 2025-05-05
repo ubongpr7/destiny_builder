@@ -1,4 +1,4 @@
-from mainapps.accounts.models import Membership, Industry, Expertise, PartnershipType, PartnershipLevel, Skill, UserProfile
+from mainapps.accounts.models import Disability, Membership, Industry, Expertise, PartnershipType, PartnershipLevel, Skill, UserProfile
 from rest_framework import serializers
 
 from mainapps.common.api.serializers import CitySerializer, CountrySerializer, RegionSerializer, SubRegionSerializer
@@ -31,6 +31,10 @@ class SkillSerializer(serializers.ModelSerializer):
 class PartnershipTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = PartnershipType
+        fields = ['id', 'name', 'description']
+class DisabilityTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Disability
         fields = ['id', 'name', 'description']
 
 
