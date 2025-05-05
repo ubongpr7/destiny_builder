@@ -176,8 +176,8 @@ STORAGES = {
 }
 
 EMAIL_BACKEND = 'django_smtp_ssl.SSLEmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 576  
+EMAIL_HOST = 'mail.destinybuilders.africa'
+EMAIL_PORT = 587  
 EMAIL_USE_SSL = True
 EMAIL_USE_TLS = False
 EMAIL_HOST_USER =os.getenv('EMAIL_HOST_USER')
