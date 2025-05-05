@@ -19,6 +19,7 @@ PREFER_NOT_TO_SAY="not_to_mention"
 SEX=(
     ("male",_("Male")),
     ("female",_("Female")),
+    (PREFER_NOT_TO_SAY,_("Prefer not to say")),
 )
 
 
@@ -52,6 +53,17 @@ class CustomUserManager(BaseUserManager):
             user = self.create_user(email, password, **extra_fields)
             return user
 
+class Disability(models.Model):
+    """Model to represent disabilities"""
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name_plural = "Disabilities"
+    
 class User(AbstractUser, PermissionsMixin,models.Model):
     email = models.EmailField(blank=False, null=True,unique=True)
     sex=models.CharField(
@@ -71,7 +83,13 @@ class User(AbstractUser, PermissionsMixin,models.Model):
         blank=True,
         null=True,
     )
-
+    disabled=models.BooleanField(default=False)
+    disability=models.ForeignKey(
+        'Disability',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='users')
     custom_permissions = models.ManyToManyField(
         CustomUserPermission,
         related_name='users',
