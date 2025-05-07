@@ -186,7 +186,7 @@ class AddressViewSet(viewsets.ModelViewSet):
                 {"detail": "You do not have permission to perform this action."},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
+        print(serializer.data)
         serializer.save()
     
     def perform_destroy(self, instance):
