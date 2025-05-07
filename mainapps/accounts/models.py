@@ -251,6 +251,7 @@ class UserProfile(models.Model):
     company_size = models.CharField(max_length=50, blank=True, null=True)
     company_website = models.URLField(blank=True, null=True)
     linkedin_profile = models.URLField(blank=True, null=True)
+    profile_link = models.URLField(blank=True, null=True)
     
     # Common fields
     created_at = models.DateTimeField(auto_now_add=True)
