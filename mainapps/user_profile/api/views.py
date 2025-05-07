@@ -145,7 +145,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = CAddressSerializer
     permission_classes = [permissions.IsAuthenticated]
-    lookup_field = 'id'
+    lookup_field = 'pk'
     
     def get_queryset(self):
         """
