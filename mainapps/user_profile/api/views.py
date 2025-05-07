@@ -10,7 +10,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .serializers import AddressSerializer, DisabilityTypeSerializer
+from .serializers import CAddressSerializer, DisabilityTypeSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
 from mainapps.accounts.models import Disability, Industry, Expertise, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
@@ -143,7 +143,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
 
 
 class AddressViewSet(viewsets.ModelViewSet):
-    serializer_class = AddressSerializer
+    serializer_class = CAddressSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):

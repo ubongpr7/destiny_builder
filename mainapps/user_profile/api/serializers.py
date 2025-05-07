@@ -71,7 +71,7 @@ class ProfileSerialIzerAttachment(serializers.ModelSerializer):
         instance.save()
         return instance
 
-class AddressSerializer(serializers.ModelSerializer):
+class CAddressSerializer(serializers.ModelSerializer):
     country_details = CountrySerializer(source='country', read_only=True)
     region_details = RegionSerializer(source='region', read_only=True)
     subregion_details = SubRegionSerializer(source='subregion', read_only=True)
