@@ -100,7 +100,6 @@ class User(AbstractUser, PermissionsMixin,models.Model):
     profile_link = models.URLField(blank=True, null=True)
     
     USERNAME_FIELD = "email"
-    # REQUIRED_FIELDS = []
     REQUIRED_FIELDS = ['first_name', 'last_name']
     objects = CustomUserManager()
     

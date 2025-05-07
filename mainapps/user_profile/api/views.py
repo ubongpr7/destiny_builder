@@ -145,13 +145,14 @@ class ProfileViewSet(viewsets.ModelViewSet):
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = CAddressSerializer
     permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
     
     def get_queryset(self):
         """
         Filter addresses by the user_profile_id parameter
         """
         user_profile_id = self.kwargs.get('user_profile_id')
-        return Address.objects.filter(user_profile_id=user_profile_id)
+        return Address.objects.filter(user_profile__id=user_profile_id)
     
     def perform_create(self, serializer):
         """

@@ -17,7 +17,7 @@ urlpatterns = [
     path('profiles/<str:user_profile_id>/addresses/', 
          AddressViewSet.as_view({'get': 'list', 'post': 'create'}),
          name='profile-addresses-list'),
-    path('profiles/<str:user_profile_id>/addresses/<int:pk>/', 
+    path('profiles/<str:user_profile_id>/addresses/<str:id>/', 
          AddressViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}),
          name='profile-addresses-detail'),
          
