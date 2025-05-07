@@ -96,6 +96,8 @@ class User(AbstractUser, PermissionsMixin,models.Model):
         blank=True
     )
     profile = models.OneToOneField('UserProfile',null=True,blank=True, on_delete=models.SET_NULL, related_name='user')
+    linkedin_profile = models.URLField(blank=True, null=True)
+    profile_link = models.URLField(blank=True, null=True)
     
     USERNAME_FIELD = "email"
     # REQUIRED_FIELDS = []
@@ -250,8 +252,6 @@ class UserProfile(models.Model):
     is_ceo = models.BooleanField(default=False)
     company_size = models.CharField(max_length=50, blank=True, null=True)
     company_website = models.URLField(blank=True, null=True)
-    linkedin_profile = models.URLField(blank=True, null=True)
-    profile_link = models.URLField(blank=True, null=True)
     
     # Common fields
     created_at = models.DateTimeField(auto_now_add=True)
