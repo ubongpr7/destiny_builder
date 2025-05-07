@@ -80,7 +80,6 @@ class ProfileViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # Extract expertise IDs if present in the request
         expertise_ids = None
         if 'expertise' in request.data:
             # Handle both JSON and form data formats
@@ -93,12 +92,10 @@ class ProfileViewSet(viewsets.ModelViewSet):
             if expertise_ids and isinstance(expertise_ids[0], str):
                 expertise_ids = [int(id) for id in expertise_ids]
         
-        # Check if this is a multipart request (file upload)
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Create a mutable copy of request.data
             mutable_data = request.data.copy()
             
-            # Remove expertise from data as we'll handle it separately
             if 'expertise' in mutable_data:
                 mutable_data.pop('expertise')
             
@@ -112,8 +109,6 @@ class ProfileViewSet(viewsets.ModelViewSet):
                 instance.kyc_submission_date = timezone.now()
                 instance.save()
         else:
-            # Handle regular JSON updates
-            # Create a mutable copy of request.data
             mutable_data = request.data.copy() if isinstance(request.data, dict) else dict(request.data)
             
             # Remove expertise from data as we'll handle it separately
@@ -137,6 +132,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
                     pass
         
         serializer = self.get_serializer(instance)
+        print(serializer.data)
         return Response(serializer.data)
 
 
