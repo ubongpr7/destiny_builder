@@ -8,6 +8,9 @@ from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from django.contrib.auth import get_user_model
 
 from django.contrib.auth.password_validation import validate_password
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -79,9 +82,26 @@ class UserCreateSerializer(BaseUserCreateSerializer):
         fields = ('id', 'email', 'first_name', 'last_name', 'password')
         
     def create(self, validated_data):
-        # Create the user using the parent class method
-        user = super().create(validated_data)
+        # Log the validated data
+        logger.info(f"Creating user with data: {validated_data}")
+        
+        # Explicitly extract first_name and last_name
+        first_name = validated_data.get('first_name', '')
+        last_name = validated_data.get('last_name', '')
+        
+        # Create the user with explicit parameters
+        user = User.objects.create_user(
+            email=validated_data['email'],
+            password=validated_data['password'],
+            first_name=first_name,
+            last_name=last_name
+        )
+        
+        # Log the created user
+        logger.info(f"Created user: {user.email} with first_name={user.first_name}, last_name={user.last_name}")
+        
         return user
+
 class MyUserSerializer(serializers.ModelSerializer):
     
     class Meta:
