@@ -53,6 +53,7 @@ class ProfileSerialIzer(serializers.ModelSerializer):
 
 class ProfileSerialIzerAttachment(serializers.ModelSerializer):
     class Meta:
+        depth=1
         model = UserProfile
         fields = '__all__'
         
