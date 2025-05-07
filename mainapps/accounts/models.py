@@ -98,7 +98,8 @@ class User(AbstractUser, PermissionsMixin,models.Model):
     profile = models.OneToOneField('UserProfile',null=True,blank=True, on_delete=models.SET_NULL, related_name='user')
     
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = []
+    # REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ['first_name', 'last_name']
     objects = CustomUserManager()
     
     @property
