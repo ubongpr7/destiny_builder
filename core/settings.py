@@ -204,7 +204,7 @@ from datetime import timedelta
 # DJOSER CONFIGURATION
 DJOSER = {
         'SERIALIZERS': {
-        'user_create': 'accounts.api.serializers.UserCreateSerializer',
+        'user_create': 'mainapps.accounts.api.serializers.UserCreateSerializer',
         },
     'PASSWORD_RESET_CONFIRM_URL': 'accounts/password_reset/{uid}/{token}',
     'USERNAME_RESET_CONFIRM_URL': 'username/reset/confirm/{uid}/{token}',
