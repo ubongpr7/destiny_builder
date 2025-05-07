@@ -25,7 +25,13 @@ from rest_framework import generics
 from .serializers import UserActivationSerializer
 from rest_framework.throttling import AnonRateThrottle
 User = get_user_model()
-
+from djoser.views import UserViewSet
+class CustomUserViewSet(UserViewSet):
+    def get_serializer_class(self):
+        if self.action == "create":
+            return  UserCreateSerializer
+        return super().get_serializer_class()
+    
 class UserActivationAPIView(generics.RetrieveAPIView):
     """
     Check if user account is active by user ID
