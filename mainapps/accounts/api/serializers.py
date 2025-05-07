@@ -4,6 +4,8 @@ from mainapps.accounts.models import User
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from mainapps.permit.models import CustomUserPermission
+from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
+from django.contrib.auth import get_user_model
 
 from django.contrib.auth.password_validation import validate_password
 
@@ -67,6 +69,19 @@ class UserActivationSerializer(serializers.ModelSerializer):
 class LogoutSerializer(serializers.Serializer):
     refresh=serializers.CharField()
 
+
+
+User = get_user_model()
+
+class UserCreateSerializer(BaseUserCreateSerializer):
+    class Meta(BaseUserCreateSerializer.Meta):
+        model = User
+        fields = ('id', 'email', 'first_name', 'last_name', 'password')
+        
+    def create(self, validated_data):
+        # Create the user using the parent class method
+        user = super().create(validated_data)
+        return user
 class MyUserSerializer(serializers.ModelSerializer):
     
     class Meta:
