@@ -10,7 +10,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .serializers import CAddressSerializer, DisabilityTypeSerializer
+from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DisabilityTypeSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
 from mainapps.accounts.models import Disability, Industry, Expertise, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
@@ -18,6 +18,9 @@ from .serializers import (
     IndustrySerializer, ExpertiseSerializer, MembershipSerializer, PartnershipTypeSerializer,
     PartnershipLevelSerializer, ProfileSerialIzer, ProfileSerialIzerAttachment, SkillSerializer
 )
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 class BaseReferenceViewSet(viewsets.ReadOnlyModelViewSet):
     """Base viewset for reference data with caching"""
@@ -136,6 +139,118 @@ class ProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+
+class UserProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving user profiles with combined user data
+    """
+    queryset = UserProfile.objects.select_related(
+        'user', 'industry', 'partnership_type', 'partnership_level', 
+        'assigned_region', 'address'
+    ).prefetch_related(
+        'expertise', 'user__disability'
+    )
+    serializer_class = CombinedUserProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Optionally restricts the returned profiles based on query parameters
+        """
+        queryset = super().get_queryset()
+        
+        # Filter by role if specified
+        role = self.request.query_params.get('role')
+        if role:
+            role_field = f'is_{role.lower()}'
+            if hasattr(UserProfile, role_field):
+                queryset = queryset.filter(**{role_field: True})
+        
+        # Filter by industry if specified
+        industry_id = self.request.query_params.get('industry')
+        if industry_id:
+            queryset = queryset.filter(industry_id=industry_id)
+        
+        # Filter by expertise if specified
+        expertise_id = self.request.query_params.get('expertise')
+        if expertise_id:
+            queryset = queryset.filter(expertise__id=expertise_id)
+        
+        # Filter by KYC status if specified
+        kyc_status = self.request.query_params.get('kyc_status')
+        if kyc_status == 'verified':
+            queryset = queryset.filter(is_kyc_verified=True)
+        elif kyc_status == 'pending':
+            queryset = queryset.filter(is_kyc_verified=False, kyc_submission_date__isnull=False)
+        elif kyc_status == 'rejected':
+            queryset = queryset.filter(is_kyc_verified=False, kyc_rejection_reason__isnull=False)
+        elif kyc_status == 'not_submitted':
+            queryset = queryset.filter(
+                is_kyc_verified=False, 
+                kyc_submission_date__isnull=True,
+                kyc_rejection_reason__isnull=True
+            )
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """
+        Return the profile of the currently authenticated user
+        """
+        user = request.user
+        if not hasattr(user, 'profile') or user.profile is None:
+            return Response(
+                {"detail": "Profile not found for this user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        profile = user.profile
+        serializer = self.get_serializer(profile)
+        return Response(serializer.data)
+
+
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving users with their profile data
+    """
+    queryset = User.objects.select_related('profile', 'disability').all()
+    serializer_class = CombinedReadUserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Optionally restricts the returned users based on query parameters
+        """
+        queryset = super().get_queryset()
+        
+        # Filter by verified status if specified
+        is_verified = self.request.query_params.get('is_verified')
+        if is_verified is not None:
+            is_verified = is_verified.lower() == 'true'
+            queryset = queryset.filter(is_verified=is_verified)
+        
+        # Filter by staff status if specified
+        is_staff = self.request.query_params.get('is_staff')
+        if is_staff is not None:
+            is_staff = is_staff.lower() == 'true'
+            queryset = queryset.filter(is_staff=is_staff)
+        
+        # Filter by worker status if specified
+        is_worker = self.request.query_params.get('is_worker')
+        if is_worker is not None:
+            is_worker = is_worker.lower() == 'true'
+            queryset = queryset.filter(is_worker=is_worker)
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """
+        Return the currently authenticated user
+        """
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
 
 
 class AddressViewSet(viewsets.ModelViewSet):
