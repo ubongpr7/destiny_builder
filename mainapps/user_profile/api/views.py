@@ -250,6 +250,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         Return the currently authenticated user
         """
         serializer = self.get_serializer(request.user)
+        print(serializer.data)
         return Response(serializer.data)
 
 
