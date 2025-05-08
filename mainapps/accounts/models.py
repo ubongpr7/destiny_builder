@@ -224,10 +224,6 @@ class UserProfile(models.Model):
     kyc_rejection_reason = models.TextField(blank=True, null=True)
     
     # Role Fields
-    is_project_manager = models.BooleanField(default=False)
-    is_donor = models.BooleanField(default=False)
-    is_volunteer = models.BooleanField(default=False)
-    is_partner = models.BooleanField(default=False)
     
     # Additional Fields for Organization Members
     organization = models.CharField(max_length=255, blank=True, null=True)
@@ -246,9 +242,20 @@ class UserProfile(models.Model):
     partnership_level = models.ForeignKey(PartnershipLevel, on_delete=models.SET_NULL, null=True, blank=True)
     partnership_start_date = models.DateField(blank=True, null=True)
     
-    # Fields for Executives and CEOs
+    # Fields for roles  
     is_executive = models.BooleanField(default=False)
     is_ceo = models.BooleanField(default=False)
+    is_project_manager = models.BooleanField(default=False)
+    is_donor = models.BooleanField(default=False)
+    is_volunteer = models.BooleanField(default=False)
+    is_partner = models.BooleanField(default=False)
+    is_DB_staff = models.BooleanField(default=False)
+    is_standard_member = models.BooleanField(default=False)
+    is_DB_executive = models.BooleanField(default=False)
+    is_DB_admin = models.BooleanField(default=False)
+    
+    
+    
     company_size = models.CharField(max_length=50, blank=True, null=True)
     company_website = models.URLField(blank=True, null=True)
     
