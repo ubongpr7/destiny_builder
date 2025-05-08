@@ -58,12 +58,11 @@ class ProfileSerialIzerAttachment(serializers.ModelSerializer):
         allow_null=True
     )
     class Meta:
-        depth=1
+        # depth=1
         model = UserProfile
         fields = '__all__'
         
     def update(self, instance, validated_data):
-        # Handle file fields explicitly
         file_fields = ['id_document_image_front', 'id_document_image_back', 'selfie_image', 'profile_image']
         
         for field in file_fields:
