@@ -81,7 +81,7 @@ class CombinedUserProfileSerializer(serializers.ModelSerializer):
     Serializer that combines User and UserProfile data into a single efficient response.
     """
     # User fields
-    id = serializers.IntegerField(source='user.id', read_only=True)
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
@@ -112,7 +112,7 @@ class CombinedUserProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = [
             # User fields
-            'id', 'email', 'first_name', 'last_name', 'username', 'full_name',
+            'id','user_id',  'email', 'first_name', 'last_name', 'username', 'full_name',
             'is_verified', 'is_staff', 'is_worker', 'user_date_of_birth',
             'disabled', 'linkedin_profile', 'profile_link', 'sex',
             

@@ -201,6 +201,32 @@ class PartnershipLevel(models.Model):
     def __str__(self):
         return self.name
 
+
+from datetime import datetime
+
+def profile_image_path(instance, filename):
+    """
+    Generate a path for profile images that includes date and time
+    Format: profile_images/YYYYMMDD_HHMMSS_username_filename
+    """
+    # Get the file extension
+    ext = filename.split('.')[-1]
+    
+    # Generate timestamp in YYYYMMDD_HHMMSS format
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Get username (or use 'unknown' if not available)
+    username = instance.user.username if hasattr(instance, 'user') and instance.user else 'unknown'
+    
+    # Create a safe filename
+    safe_username = username.replace('@', '_').replace('.', '_')
+    
+    # Construct the new filename with timestamp
+    new_filename = f"{timestamp}_{safe_username}.{ext}"
+    
+    # Return the complete path
+    return os.path.join('profile_images', new_filename)
+
 class UserProfile(models.Model):
     """Extended user profile with additional information"""
     membership_type = models.ForeignKey(Membership, on_delete=models.SET_NULL, null=True, blank=True)
@@ -209,7 +235,7 @@ class UserProfile(models.Model):
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.OneToOneField('common.Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profile')
     bio = models.TextField(blank=True, null=True)
-    profile_image = models.ImageField(upload_to='profile_images/', blank=True, null=True)
+    profile_image = models.ImageField(upload_to=profile_image_path, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     
     # KYC Verification Fields
