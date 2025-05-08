@@ -52,11 +52,7 @@ class ProfileSerialIzer(serializers.ModelSerializer):
 
 
 class ProfileSerialIzerAttachment(serializers.ModelSerializer):
-    industry = serializers.PrimaryKeyRelatedField(
-        queryset=UserProfile.objects.model._meta.get_field('industry').related_model.objects.all(),
-        required=False,
-        allow_null=True
-    )
+    
     class Meta:
         # depth=1
         model = UserProfile
