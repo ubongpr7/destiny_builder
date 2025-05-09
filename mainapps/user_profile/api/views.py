@@ -446,6 +446,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
+            print(f"Error sending KYC reminder email: {str(e)}")
             return Response(
                 {"error": f"Failed to send reminder: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
