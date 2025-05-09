@@ -570,7 +570,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             return Response({
                 "success": True,
                 "message": "Verification successful. You can now edit the user's profile.",
-                "profile": UserProfileSerializer(profile).data
+                "profile": CombinedUserProfileSerializer(profile).data
             })
             
         except Exception as e:
