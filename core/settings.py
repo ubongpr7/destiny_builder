@@ -12,7 +12,13 @@ SECRET_KEY = 'django-insecure-pvc)e7cia$y25l0lc^b@#j+5c628x8+b(^eirvpgk3$z6^t8wh
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    'dsetinybuilder.africa',
+    'www.dsetinybuilder.africa',
+    'localhost',
+    '127.0.0.1',
+    '13.51.147.202'
+]
 
 
 # Application definition
@@ -195,10 +201,10 @@ AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
 AWS_SES_TIMEOUT = 30  # seconds
 # AWS_SES_AUTO_THROTTLE = 0.5  # Optional: 50% of  daily SES quota
 
-# Email settings
-EMAIL_HOST_USER = "support@destinybuildersfafrica"  
+EMAIL_HOST_USER = "support@destinybuildersfafrica."  
 DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuildersfafrica>'
 
+SERVER_EMAIL = 'support@destinybuilders.africa' 
 
 STORAGES = {
         "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
@@ -346,7 +352,6 @@ CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 USE_L10N = True
 USE_THOUSAND_SEPARATOR = True
 
-ALLOWED_HOSTS = ['dev.destinybuilders.africa']
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
