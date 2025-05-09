@@ -180,18 +180,16 @@ EMAIL_BACKEND = 'django_smtp_ssl.SSLEmailBackend'
 # EMAIL_PORT = 465  
 # EMAIL_USE_SSL = True
 # EMAIL_USE_TLS = False
-# EMAIL_HOST_USER = "ubongpr7@gmail.com"
 # EMAIL_HOST_PASSWORD = "nmcmiwlgwdrwesef"
 # Email settings for AWS WorkMail
 # EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.mail.us-east-1.awsapps.com'  
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'support@destinybuildersfafrica.awsapps.com'  
-EMAIL_HOST_PASSWORD = 'dbef@2025'  
-DEFAULT_FROM_EMAIL = 'Destiny Builders Empowerment Foundation <support@destinybuildersfafrica.awsapps.com>'
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-    
+
+EMAIL_BACKEND = 'django_ses.SESBackend'
+AWS_SES_REGION_NAME = 'us-east-1' 
+AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
+
+EMAIL_HOST_USER = "support@destinybuildersfafrica"
+DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuildersfafrica>'    
 
 
 
