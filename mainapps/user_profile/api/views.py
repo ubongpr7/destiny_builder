@@ -495,6 +495,132 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(request.user)
         print(serializer.data)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def request_edit_code(self, request, pk=None):
+        """
+        Request a verification code to edit a user's profile
+        """
+        try:
+            profile = self.get_object()
+            user = profile.user
+            admin_user = request.user
+            
+            if not user or not user.email:
+                return Response(
+                    {"error": "User does not have a valid email address."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get or create verification code
+            verification_code, created = VerificationCode.objects.get_or_create(user=user)
+            
+            # If not created, regenerate the code
+            if not created:
+                verification_code.save()  # This will trigger the save method to generate a new code
+            
+            # Get admin profile for email
+            admin_profile = UserProfile.objects.filter(user=admin_user).first()
+            admin_name = f"{admin_user.first_name} {admin_user.last_name}".strip() or admin_user.username
+            admin_email = admin_user.email
+            admin_image = request.build_absolute_uri(admin_profile.profile_image.url) if admin_profile and admin_profile.profile_image else None
+            
+            # Prepare email content
+            subject = "Profile Edit Authorization Code - Destiny Builders Africa"
+            message = f"Hello {user.first_name or user.username},\n\nAn administrator has requested to edit your profile. Please share the verification code only if you are with the administrator."
+            to_email = [user.email]
+            
+            # Context for the email template
+            context = {
+                'user_name': user.first_name or user.username,
+                'verification_code': verification_code.code,
+                'admin_name': admin_name,
+                'admin_email': admin_email,
+                'admin_image': admin_image,
+                'current_year': timezone.now().year
+            }
+            
+            # Send the email
+            html_file = 'emails/edit_profile_code.html'
+            html_content = render_to_string(html_file, context)
+            text_content = strip_tags(html_content)
+            
+            msg = EmailMultiAlternatives(subject, text_content, settings.EMAIL_HOST_USER, to_email)
+            msg.attach_alternative(html_content, "text/html")
+            EmailThread(msg).start()
+            
+            return Response({
+                "success": True,
+                "message": f"Verification code sent to {user.email}.",
+                "user_id": user.id
+            })
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to send verification code: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def verify_edit_code(self, request, pk=None):
+        """
+        Verify the code to edit a user's profile
+        """
+        try:
+            profile = self.get_object()
+            user = profile.user
+            code = request.data.get('code')
+            
+            if not code:
+                return Response(
+                    {"error": "Verification code is required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                verification_code = VerificationCode.objects.get(user=user)
+            except VerificationCode.DoesNotExist:
+                return Response(
+                    {"error": "No verification code found for this user."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Update total attempts
+            verification_code.total_attempts += 1
+            verification_code.save()
+            
+            # Check if code matches
+            if verification_code.code != code:
+                return Response(
+                    {"error": "Invalid verification code."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if code is expired (15 minutes)
+            time_diff = timezone.now() - verification_code.time_requested
+            if time_diff.total_seconds() > 900:  # 15 minutes in seconds
+                return Response(
+                    {"error": "Verification code has expired. Please request a new code."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update successful attempts
+            verification_code.successful_attempts += 1
+            verification_code.save()
+            
+            # Return success with user profile data
+            return Response({
+                "success": True,
+                "message": "Verification successful. You can now edit the user's profile.",
+                "profile": UserProfileSerializer(profile).data
+            })
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to verify code: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 
 class AddressViewSet(viewsets.ModelViewSet):
