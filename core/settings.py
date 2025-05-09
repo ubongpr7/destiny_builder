@@ -15,6 +15,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'dsetinybuilder.africa',
     'www.dsetinybuilder.africa',
+    'dev.destinybuilders.africa',
     'localhost',
     '127.0.0.1',
     '13.51.147.202'
@@ -201,10 +202,10 @@ AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
 AWS_SES_TIMEOUT = 30  # seconds
 # AWS_SES_AUTO_THROTTLE = 0.5  # Optional: 50% of  daily SES quota
 
-EMAIL_HOST_USER = "support@destinybuildersfafrica."  
-DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuildersfafrica>'
+EMAIL_HOST_USER = "support@destinybuilders.africa"  
+DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuilders.africa>'
 
-SERVER_EMAIL = 'support@destinybuilders.africa' 
+SERVER_EMAIL = 'support@destinybuilders.africa'  # For error notifications
 
 STORAGES = {
         "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
