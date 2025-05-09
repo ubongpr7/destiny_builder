@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Your KYC Verification</title>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #eaeaea;
+        }
+        
+        .logo {
+            max-width: 180px;
+            height: auto;
+        }
+        
+        .content {
+            padding: 30px 20px;
+        }
+        
+        h1 {
+            color: #1a365d;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        
+        p {
+            margin-bottom: 16px;
+            font-size: 16px;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background-color: #1a365d;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .cta-button:hover {
+            background-color: #2c4c7c;
+        }
+        
+        .steps {
+            background-color: #f5f7fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        
+        .steps h2 {
+            color: #1a365d;
+            font-size: 18px;
+            margin-top: 0;
+        }
+        
+        .steps ol {
+            margin-left: 20px;
+            padding-left: 0;
+        }
+        
+        .steps li {
+            margin-bottom: 10px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+            border-top: 1px solid #eaeaea;
+        }
+        
+        .social-links {
+            margin: 15px 0;
+        }
+        
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            color: #1a365d;
+            text-decoration: none;
+        }
+        
+        @media only screen and (max-width: 600px) {
+            .container {
+                width: 100%;
+                border-radius: 0;
+            }
+            
+            h1 {
+                font-size: 22px;
+            }
+            
+            .content {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://www.destinybuilders.africa/logo.png" alt="Destiny Builders Africa Logo" class="logo">
+        </div>
+        
+        <div class="content">
+            <h1>Complete Your Profile Verification</h1>
+            
+            <p>Hello {{ user_name }},</p>
+            
+            <p>We noticed that your profile verification on Destiny Builders Africa is incomplete. To fully access all features and benefits of our platform, please complete your KYC (Know Your Customer) verification.</p>
+            
+            <p>A complete profile helps us build a trusted community and enables us to better serve your needs.</p>
+            
+            <div style="text-align: center;">
+                <a href="{{ profile_url }}" class="cta-button">Complete Your Profile Now</a>
+            </div>
+            
+            <div class="steps">
+                <h2>What You Need to Complete Your Verification:</h2>
+                <ol>
+                    <li>A valid government-issued ID (National ID, Passport, or Driver's License)</li>
+                    <li>A clear selfie photo</li>
+                    <li>Basic personal information</li>
+                </ol>
+                <p>The verification process typically takes less than 5 minutes to complete.</p>
+            </div>
+            
+            <p>If you have any questions or need assistance, please don't hesitate to contact our support team at <a href="mailto:support@destinybuilders.africa">support@destinybuilders.africa</a>.</p>
+            
+            <p>Thank you for being part of the Destiny Builders Africa community!</p>
+            
+            <p>Best regards,<br>The Destiny Builders Africa Team</p>
+        </div>
+        
+        <div class="footer">
+            <div class="social-links">
+                <a href="https://www.facebook.com/destinybuilders">Facebook</a> |
+                <a href="https://www.twitter.com/destinybuilders">Twitter</a> |
+                <a href="https://www.instagram.com/destinybuilders">Instagram</a> |
+                <a href="https://www.linkedin.com/company/destinybuilders">LinkedIn</a>
+            </div>
+            <p>&copy; {{ current_year }} Destiny Builders Africa. All rights reserved.</p>
+            <p>
+                <small>This email was sent to you because you are registered on Destiny Builders Africa. 
+                If you believe this is a mistake, please disregard this email.</small>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

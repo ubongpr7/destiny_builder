@@ -6,6 +6,10 @@ from django.db.models import Count, Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.conf import settings
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from .utils import EmailThread, send_html_email
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -391,6 +395,64 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             "updated_count": updated_count
         })
 
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def send_kyc_reminder(self, request, pk=None):
+        """
+        Send a reminder email to the user to complete their KYC verification
+        """
+        try:
+            profile = self.get_object()
+            user = profile.user
+            
+            if not user or not user.email:
+                return Response(
+                    {"error": "User does not have a valid email address."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user has already completed KYC
+            if profile.is_kyc_verified:
+                return Response(
+                    {"error": "This user has already been verified."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # Prepare email content
+            subject = "Complete Your KYC Verification - Destiny Builders Africa"
+            message = f"Hello {user.first_name or user.username},\n\nPlease complete your KYC verification to fully access all features of Destiny Builders Africa."
+            to_email = [user.email]
+            
+            # Context for the email template
+            context = {
+                'user_name': user.first_name or user.username,
+                'profile_url': 'https://www.destinybuilders.africa/profile/update',
+                'current_year': timezone.now().year
+            }
+            
+            # Send the email
+            html_file = 'emails/kyc_reminder.html'
+            html_content = render_to_string(html_file, context)
+            text_content = strip_tags(html_content)
+            
+            msg = EmailMultiAlternatives(subject, text_content, settings.EMAIL_HOST_USER, to_email)
+            msg.attach_alternative(html_content, "text/html")
+            EmailThread(msg).start()
+            
+            # Update the last reminder sent timestamp
+            profile.last_kyc_reminder_sent = timezone.now()
+            profile.save()
+            
+            return Response({
+                "success": True,
+                "message": f"KYC reminder email sent to {user.email}."
+            })
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to send reminder: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
