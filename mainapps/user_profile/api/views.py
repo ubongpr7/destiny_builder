@@ -573,6 +573,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
+            print(f"Error verifying code: {str(e)}")
             return Response(
                 {"error": f"Failed to verify code: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
