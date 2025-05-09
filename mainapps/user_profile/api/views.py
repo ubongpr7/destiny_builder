@@ -146,7 +146,7 @@ class IsAdminUser(permissions.BasePermission):
     Permission to only allow admin users to access the view.
     """
     def has_permission(self, request, view):
-        return request.user and request.user.is_staff
+        return request.user.profile.is_DB_admin and request.user.is_verified
 
 class UserProfileViewSet(viewsets.ModelViewSet):
     """
