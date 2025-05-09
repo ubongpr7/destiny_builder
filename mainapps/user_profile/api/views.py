@@ -9,7 +9,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from mainapps.email_system import EmailThread, send_html_email
+from mainapps.email_system.emails import EmailThread, send_html_email
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
