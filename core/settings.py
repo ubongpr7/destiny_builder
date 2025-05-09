@@ -165,25 +165,6 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 MEDIA_URL = "media/" 
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-    
-# AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-# AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-# AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
-# AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME')
-# AWS_S3_CUSTOM_DOMAIN = "%s.s3.amazonaws.com" % AWS_STORAGE_BUCKET_NAME
-# AWS_S3_FILES_OVERWRITE = False
-# AWS_S3_CONNECT_TIMEOUT = 10  
-# AWS_S3_TIMEOUT = 60 
-# AWS_S3_FILE_OVERWRITE=True
-
-# EMAIL_BACKEND = 'django_ses.SESBackend'
-# AWS_SES_REGION_NAME = 'us-east-1' 
-# AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
-
-# EMAIL_HOST_USER = "support@destinybuildersfafrica"
-# DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuildersfafrica>'    
-
-# AWS credentials used for both S3 and SES
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
@@ -196,30 +177,28 @@ AWS_S3_TIMEOUT = 60
 AWS_S3_FILE_OVERWRITE = True
 
 # SES Configuration
-EMAIL_BACKEND = 'django_ses.SESBackend'
+# EMAIL_BACKEND = 'django_ses.SESBackend'
 AWS_SES_REGION_NAME = 'us-east-1' 
 AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
 AWS_SES_TIMEOUT = 30  # seconds
 # AWS_SES_AUTO_THROTTLE = 0.5  # Optional: 50% of  daily SES quota
 
-EMAIL_HOST_USER = "support@destinybuilders.africa"  
-DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuilders.africa>'
+# EMAIL_HOST_USER = "support@destinybuilders.africa"  
+# DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuilders.africa>'
 
-SERVER_EMAIL = 'support@destinybuilders.africa'  # For error notifications
+SERVER_EMAIL = 'support@destinybuilders.africa'  
 
 STORAGES = {
         "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
         "staticfiles": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
 }
 
-# EMAIL_BACKEND = 'django_smtp_ssl.SSLEmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 465  
-# EMAIL_USE_SSL = True
-# EMAIL_USE_TLS = False
-# EMAIL_HOST_PASSWORD = "nmcmiwlgwdrwesef"
-# Email settings for AWS WorkMail
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = 'django_smtp_ssl.SSLEmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 465  
+EMAIL_USE_SSL = True
+EMAIL_USE_TLS = False
+EMAIL_HOST_PASSWORD = "nmcmiwlgwdrwesef"
 
 
 

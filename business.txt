@@ -1,0 +1,28 @@
+Subject: Amazon SES Production Access Request for Destiny Builders Africa NGO
+
+Dear AWS Support Team,
+
+I am requesting production access for Amazon SES to enable our non-profit organization, Destiny Builders Empowerment Foundation (www.destinybuilders.africa), to send essential communications to our members, volunteers, and community participants.
+
+## About Our Organization
+Destiny Builders Africa is a registered non-profit organization focused on providing resources, support, and guidance to individuals and communities seeking control over their personal, professional, and community development across Africa. Our platform serves as a hub for membership management, community engagement, and educational resources.
+
+## Email Sending Needs
+We need to send the following types of emails:
+1. Membership verification and onboarding communications
+2. KYC (Know Your Customer) verification notifications
+3. Community event announcements and updates
+4. Educational resources and newsletters
+5. Administrative notifications and account security alerts
+
+## Email Sending Practices
+We follow these best practices to ensure high-quality email communications:
+1. We only send emails to individuals who have explicitly registered on our platform
+2. All emails include clear unsubscribe options and our physical address
+3. We have implemented proper authentication with SPF and DKIM records
+4. We maintain a clean email list by promptly processing bounces and complaints
+5. Our content is relevant and valuable to recipients, focusing on community development
+
+## Sending Volume
+Our current membership base is approximately  members, and we anticipate sending:
+- Transactional emails: ~
