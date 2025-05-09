@@ -11,7 +11,7 @@ router.register(r'profile', ProfileViewSet)
 router.register(r'membership', MembershipViewSet)
 router.register(r'disabilities', DisabilityViewSet)
 router.register(r'users', UserViewSet)
-router.register(r'user-profiles', UserProfileReadViewSet)
+router.register(r'user-profiles', UserProfileReadViewSet,basename='user-profiles')
 
 
 
