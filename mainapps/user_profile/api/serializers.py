@@ -214,7 +214,7 @@ class CombinedUserProfileSerializer(serializers.ModelSerializer):
         """Return a summary of user roles"""
         roles = []
         role_fields = [
-            'is_executive', 'is_ceo', 'is_project_manager', 'is_donor',
+            'is_executive', 'is_ceo','kyc_status',  'is_project_manager', 'is_donor',
             'is_volunteer', 'is_partner', 'is_DB_staff', 'is_standard_member',
             'is_DB_executive', 'is_DB_admin', 'is_country_director', 'is_regional_head'
         ]

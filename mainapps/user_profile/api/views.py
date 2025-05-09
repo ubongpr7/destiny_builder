@@ -77,6 +77,7 @@ class PartnershipLevelViewSet(BaseReferenceViewSet):
     queryset = PartnershipLevel.objects.all()
     serializer_class = PartnershipLevelSerializer
     search_fields = ['name', 'description']
+    
 class ProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = ProfileSerialIzerAttachment
