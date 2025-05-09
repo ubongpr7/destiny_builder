@@ -139,8 +139,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-
-class UserProfileViewSet(viewsets.ReadOnlyModelViewSet):
+class UserProfileReadViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for retrieving user profiles with combined user data
     """
@@ -208,6 +207,87 @@ class UserProfileViewSet(viewsets.ReadOnlyModelViewSet):
         profile = user.profile
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def verify_kyc(self, request, pk=None):
+        """
+        Verify or reject a user's KYC submission
+        Only accessible by admin users
+        """
+        profile = self.get_object()
+        
+        # Check if KYC has been submitted
+        if not profile.kyc_submission_date:
+            return Response(
+                {"detail": "This user has not submitted KYC documents for verification."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Get verification action and reason from request data
+        action = request.data.get('action', '').lower()
+        reason = request.data.get('reason', '')
+        
+        if action not in ['approve', 'reject']:
+            return Response(
+                {"detail": "Invalid action. Use 'approve' or 'reject'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Handle verification
+        if action == 'approve':
+            profile.is_kyc_verified = True
+            profile.kyc_verification_date = timezone.now()
+            profile.kyc_rejection_reason = None
+            message = "KYC verification approved successfully."
+        else:  # action == 'reject'
+            if not reason:
+                return Response(
+                    {"detail": "Rejection reason is required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            profile.is_kyc_verified = False
+            profile.kyc_verification_date = None
+            profile.kyc_rejection_reason = reason
+            message = "KYC verification rejected."
+            
+        # Save the profile
+        profile.save()
+        
+        # Return the updated profile
+        serializer = self.get_serializer(profile)
+        return Response({
+            "message": message,
+            "profile": serializer.data
+        })
+    
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    def kyc_documents(self, request, pk=None):
+        """
+        Get KYC documents for a specific user profile
+        Only accessible by admin users
+        """
+        profile = self.get_object()
+        
+        # Check if KYC has been submitted
+        if not profile.kyc_submission_date:
+            return Response(
+                {"detail": "This user has not submitted KYC documents."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        # Return document URLs and KYC information
+        return Response({
+            "id_document_type": profile.id_document_type,
+            "id_document_number": profile.id_document_number,
+            "id_document_image_front": request.build_absolute_uri(profile.id_document_image_front.url) if profile.id_document_image_front else None,
+            "id_document_image_back": request.build_absolute_uri(profile.id_document_image_back.url) if profile.id_document_image_back else None,
+            "selfie_image": request.build_absolute_uri(profile.selfie_image.url) if profile.selfie_image else None,
+            "kyc_submission_date": profile.kyc_submission_date,
+            "is_kyc_verified": profile.is_kyc_verified,
+            "kyc_verification_date": profile.kyc_verification_date,
+            "kyc_rejection_reason": profile.kyc_rejection_reason,
+        })
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
