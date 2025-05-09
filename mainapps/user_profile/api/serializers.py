@@ -278,6 +278,31 @@ class CombinedReadUserSerializer(serializers.ModelSerializer):
             'profile_data'
         ]
 
+class KYCDocumentsSerializer(serializers.ModelSerializer):
+    user_full_name = serializers.SerializerMethodField()
+    user_email = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UserProfile
+        fields = [
+            'id', 'user_full_name', 'user_email',
+            'id_document_type', 'id_document_number',
+            'id_document_image_front', 'id_document_image_back',
+            'selfie_image', 'kyc_submission_date',
+            'kyc_status', 'kyc_verification_date',
+            'kyc_rejection_reason'
+        ]
+    
+    def get_user_full_name(self, obj):
+        if hasattr(obj, 'user') and obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}"
+        return ""
+    
+    def get_user_email(self, obj):
+        if hasattr(obj, 'user') and obj.user:
+            return obj.user.email
+        return ""
+
 class CAddressSerializer(serializers.ModelSerializer):
     country_details = CountrySerializer(source='country', read_only=True)
     region_details = RegionSerializer(source='region', read_only=True)

@@ -224,6 +224,21 @@ def profile_image_path(instance, filename):
 
 class UserProfile(models.Model):
     """Extended user profile with additional information"""
+    class KYCStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        APPROVED = 'approved', 'Approved'
+        REJECTED = 'rejected', 'Rejected'
+        FLAGGED = 'flagged', 'Flagged'
+        SCAMMER = 'scammer', 'Scammer'
+    
+    # Add kyc_status field
+    kyc_status = models.CharField(
+        max_length=20,
+        choices=KYCStatus.choices,
+        default=KYCStatus.PENDING,
+        help_text="Current KYC verification status"
+    )
+    
     membership_type = models.ForeignKey(Membership, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Basic information

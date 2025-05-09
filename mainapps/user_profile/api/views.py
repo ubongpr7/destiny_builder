@@ -9,6 +9,9 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
+from django.utils import timezone
+from django.db.models import Q
+
 from rest_framework.response import Response
 from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DisabilityTypeSerializer
 from django.shortcuts import get_object_or_404
@@ -138,134 +141,82 @@ class ProfileViewSet(viewsets.ModelViewSet):
         print(serializer.data)
         return Response(serializer.data)
 
+class IsAdminUser(permissions.BasePermission):
+    """
+    Permission to only allow admin users to access the view.
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_staff
 
-class UserProfileReadViewSet(viewsets.ReadOnlyModelViewSet):
+class UserProfileViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for retrieving user profiles with combined user data
+    API endpoint for user profiles
     """
-    queryset = UserProfile.objects.select_related(
-        'user', 'industry', 'partnership_type', 'partnership_level', 
-        'assigned_region', 'address'
-    ).prefetch_related(
-        'expertise', 'user__disability'
-    )
+    queryset = UserProfile.objects.all()
     serializer_class = CombinedUserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        """
-        Optionally restricts the returned profiles based on query parameters
-        """
-        queryset = super().get_queryset()
+        queryset = UserProfile.objects.all()
         
-        # Filter by role if specified
-        role = self.request.query_params.get('role')
-        if role:
-            role_field = f'is_{role.lower()}'
-            if hasattr(UserProfile, role_field):
-                queryset = queryset.filter(**{role_field: True})
-        
-        # Filter by industry if specified
-        industry_id = self.request.query_params.get('industry')
-        if industry_id:
-            queryset = queryset.filter(industry_id=industry_id)
-        
-        # Filter by expertise if specified
-        expertise_id = self.request.query_params.get('expertise')
-        if expertise_id:
-            queryset = queryset.filter(expertise__id=expertise_id)
-        
-        # Filter by KYC status if specified
-        kyc_status = self.request.query_params.get('kyc_status')
-        if kyc_status == 'verified':
-            queryset = queryset.filter(is_kyc_verified=True)
-        elif kyc_status == 'pending':
-            queryset = queryset.filter(is_kyc_verified=False, kyc_submission_date__isnull=False)
-        elif kyc_status == 'rejected':
-            queryset = queryset.filter(is_kyc_verified=False, kyc_rejection_reason__isnull=False)
-        elif kyc_status == 'not_submitted':
+        # Filter by KYC status if requested
+        kyc_status = self.request.query_params.get('kyc_status', None)
+        if kyc_status:
+            queryset = queryset.filter(kyc_status=kyc_status)
+            
+        # Search functionality
+        search = self.request.query_params.get('search', None)
+        if search:
             queryset = queryset.filter(
-                is_kyc_verified=False, 
-                kyc_submission_date__isnull=True,
-                kyc_rejection_reason__isnull=True
+                Q(user__first_name__icontains=search) | 
+                Q(user__last_name__icontains=search) | 
+                Q(user__email__icontains=search)
             )
-        
+            
         return queryset
     
     @action(detail=False, methods=['get'])
-    def me(self, request):
+    def kyc_stats(self, request):
         """
-        Return the profile of the currently authenticated user
+        Get statistics about KYC submissions
         """
-        user = request.user
-        if not hasattr(user, 'profile') or user.profile is None:
-            return Response(
-                {"detail": "Profile not found for this user."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        pending_count = UserProfile.objects.filter(kyc_status='pending').count()
+        approved_count = UserProfile.objects.filter(kyc_status='approved').count()
+        rejected_count = UserProfile.objects.filter(kyc_status='rejected').count()
+        flagged_count = UserProfile.objects.filter(kyc_status='flagged').count()
+        scammer_count = UserProfile.objects.filter(kyc_status='scammer').count()
         
-        profile = user.profile
-        serializer = self.get_serializer(profile)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
-    def verify_kyc(self, request, pk=None):
-        """
-        Verify or reject a user's KYC submission
-        Only accessible by admin users
-        """
-        profile = self.get_object()
-        
-        # Check if KYC has been submitted
-        if not profile.kyc_submission_date:
-            return Response(
-                {"detail": "This user has not submitted KYC documents for verification."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        # Get verification action and reason from request data
-        action = request.data.get('action', '').lower()
-        reason = request.data.get('reason', '')
-        
-        if action not in ['approve', 'reject']:
-            return Response(
-                {"detail": "Invalid action. Use 'approve' or 'reject'."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        # Handle verification
-        if action == 'approve':
-            profile.is_kyc_verified = True
-            profile.kyc_verification_date = timezone.now()
-            profile.kyc_rejection_reason = None
-            message = "KYC verification approved successfully."
-        else:  # action == 'reject'
-            if not reason:
-                return Response(
-                    {"detail": "Rejection reason is required."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-                
-            profile.is_kyc_verified = False
-            profile.kyc_verification_date = None
-            profile.kyc_rejection_reason = reason
-            message = "KYC verification rejected."
-            
-        # Save the profile
-        profile.save()
-        
-        # Return the updated profile
-        serializer = self.get_serializer(profile)
         return Response({
-            "message": message,
-            "profile": serializer.data
+            'pending': pending_count,
+            'approved': approved_count,
+            'rejected': rejected_count,
+            'flagged': flagged_count,
+            'scammer': scammer_count,
+            'total': pending_count + approved_count + rejected_count + flagged_count + scammer_count
         })
     
-    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    @action(detail=False, methods=['get'])
+    def kyc_all(self, request):
+        """
+        Get all KYC submissions grouped by status
+        """
+        pending = self.get_queryset().filter(kyc_status='pending')
+        approved = self.get_queryset().filter(kyc_status='approved')
+        rejected = self.get_queryset().filter(kyc_status='rejected')
+        flagged = self.get_queryset().filter(kyc_status='flagged')
+        scammer = self.get_queryset().filter(kyc_status='scammer')
+        
+        return Response({
+            'pending': CombinedUserProfileSerializer(pending, many=True).data,
+            'approved': CombinedUserProfileSerializer(approved, many=True).data,
+            'rejected': CombinedUserProfileSerializer(rejected, many=True).data,
+            'flagged': CombinedUserProfileSerializer(flagged, many=True).data,
+            'scammer': CombinedUserProfileSerializer(scammer, many=True).data,
+        })
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsAdminUser])
     def kyc_documents(self, request, pk=None):
         """
-        Get KYC documents for a specific user profile
-        Only accessible by admin users
+        Retrieve KYC documents for a specific profile
         """
         profile = self.get_object()
         
@@ -284,9 +235,159 @@ class UserProfileReadViewSet(viewsets.ReadOnlyModelViewSet):
             "id_document_image_back": request.build_absolute_uri(profile.id_document_image_back.url) if profile.id_document_image_back else None,
             "selfie_image": request.build_absolute_uri(profile.selfie_image.url) if profile.selfie_image else None,
             "kyc_submission_date": profile.kyc_submission_date,
-            "is_kyc_verified": profile.is_kyc_verified,
+            "kyc_status": profile.kyc_status,
             "kyc_verification_date": profile.kyc_verification_date,
             "kyc_rejection_reason": profile.kyc_rejection_reason,
+        })
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def verify_kyc(self, request, pk=None):
+        """
+        Update KYC status (approve, reject, flag, mark as scammer)
+        """
+        profile = self.get_object()
+        action = request.data.get('action')
+        
+        if not profile.kyc_submission_date:
+            return Response(
+                {"error": "This user has not submitted KYC documents for verification."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if action == 'approve':
+            profile.is_kyc_verified = True
+            profile.kyc_status = 'approved'
+            profile.kyc_verification_date = timezone.now()
+            profile.kyc_rejection_reason = None
+            profile.save()
+            
+            return Response({
+                "message": "KYC verification approved successfully.",
+                "profile": CombinedUserProfileSerializer(profile).data
+            })
+            
+        elif action == 'reject':
+            reason = request.data.get('reason')
+            if not reason:
+                return Response(
+                    {"error": "A reason must be provided for rejection."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            profile.is_kyc_verified = False
+            profile.kyc_status = 'rejected'
+            profile.kyc_verification_date = None
+            profile.kyc_rejection_reason = reason
+            profile.save()
+            
+            return Response({
+                "message": "KYC verification rejected.",
+                "profile": CombinedUserProfileSerializer(profile).data
+            })
+            
+        elif action == 'flag':
+            reason = request.data.get('reason')
+            if not reason:
+                return Response(
+                    {"error": "A reason must be provided for flagging."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            profile.is_kyc_verified = False
+            profile.kyc_status = 'flagged'
+            profile.kyc_verification_date = None
+            profile.kyc_rejection_reason = reason
+            profile.save()
+            
+            return Response({
+                "message": "User flagged for review.",
+                "profile": CombinedUserProfileSerializer(profile).data
+            })
+            
+        elif action == 'mark_scammer':
+            reason = request.data.get('reason')
+            if not reason:
+                return Response(
+                    {"error": "A reason must be provided when marking as scammer."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            profile.is_kyc_verified = False
+            profile.kyc_status = 'scammer'
+            profile.kyc_verification_date = None
+            profile.kyc_rejection_reason = reason
+            profile.save()
+            
+            return Response({
+                "message": "User marked as scammer.",
+                "profile": CombinedUserProfileSerializer(profile).data
+            })
+            
+        else:
+            return Response(
+                {"error": "Invalid action. Use 'approve', 'reject', 'flag', or 'mark_scammer'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
+    def bulk_verify(self, request):
+        """
+        Bulk update KYC status for multiple profiles
+        """
+        profile_ids = request.data.get('profile_ids', [])
+        action = request.data.get('action')
+        reason = request.data.get('reason', '')
+        
+        if not profile_ids:
+            return Response(
+                {"error": "No profile IDs provided."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if action not in ['approve', 'reject', 'flag', 'mark_scammer']:
+            return Response(
+                {"error": "Invalid action. Use 'approve', 'reject', 'flag', or 'mark_scammer'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if action in ['reject', 'flag', 'mark_scammer'] and not reason:
+            return Response(
+                {"error": f"A reason must be provided for {action} action."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Get profiles with submitted KYC
+        profiles = UserProfile.objects.filter(
+            id__in=profile_ids,
+            kyc_submission_date__isnull=False
+        )
+        
+        if not profiles:
+            return Response(
+                {"error": "No valid profiles found with KYC submissions."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        # Update profiles based on action
+        updated_count = 0
+        for profile in profiles:
+            if action == 'approve':
+                profile.is_kyc_verified = True
+                profile.kyc_status = 'approved'
+                profile.kyc_verification_date = timezone.now()
+                profile.kyc_rejection_reason = None
+            else:
+                profile.is_kyc_verified = False
+                profile.kyc_status = action.replace('mark_', '')
+                profile.kyc_verification_date = None
+                profile.kyc_rejection_reason = reason
+                
+            profile.save()
+            updated_count += 1
+            
+        return Response({
+            "message": f"Successfully updated {updated_count} profiles with '{action}' status.",
+            "updated_count": updated_count
         })
 
 
