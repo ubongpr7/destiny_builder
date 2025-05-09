@@ -439,9 +439,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             msg.attach_alternative(html_content, "text/html")
             EmailThread(msg).start()
             
-            # Update the last reminder sent timestamp
-            profile.last_kyc_reminder_sent = timezone.now()
-            profile.save()
             
             return Response({
                 "success": True,
