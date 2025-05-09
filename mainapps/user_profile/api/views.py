@@ -530,6 +530,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             code = request.data.get('code')
             
             if not code:
+                print("Code not provided")
                 return Response(
                     {"error": "Verification code is required."},
                     status=status.HTTP_400_BAD_REQUEST
@@ -545,7 +546,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             
             # Update total attempts
             verification_code.total_attempts += 1
-            verification_code.save()
             
             # Check if code matches
             if verification_code.code != code:
