@@ -452,49 +452,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 {"error": f"Failed to send reminder: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for retrieving users with their profile data
-    """
-    queryset = User.objects.select_related('profile', 'disability').all()
-    serializer_class = CombinedReadUserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        """
-        Optionally restricts the returned users based on query parameters
-        """
-        queryset = super().get_queryset()
-        
-        # Filter by verified status if specified
-        is_verified = self.request.query_params.get('is_verified')
-        if is_verified is not None:
-            is_verified = is_verified.lower() == 'true'
-            queryset = queryset.filter(is_verified=is_verified)
-        
-        # Filter by staff status if specified
-        is_staff = self.request.query_params.get('is_staff')
-        if is_staff is not None:
-            is_staff = is_staff.lower() == 'true'
-            queryset = queryset.filter(is_staff=is_staff)
-        
-        # Filter by worker status if specified
-        is_worker = self.request.query_params.get('is_worker')
-        if is_worker is not None:
-            is_worker = is_worker.lower() == 'true'
-            queryset = queryset.filter(is_worker=is_worker)
-        
-        return queryset
-    
-    @action(detail=False, methods=['get'])
-    def me(self, request):
-        """
-        Return the currently authenticated user
-        """
-        serializer = self.get_serializer(request.user)
-        print(serializer.data)
-        return Response(serializer.data)
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def request_edit_code(self, request, pk=None):
@@ -620,6 +577,49 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
                 {"error": f"Failed to verify code: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving users with their profile data
+    """
+    queryset = User.objects.select_related('profile', 'disability').all()
+    serializer_class = CombinedReadUserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Optionally restricts the returned users based on query parameters
+        """
+        queryset = super().get_queryset()
+        
+        # Filter by verified status if specified
+        is_verified = self.request.query_params.get('is_verified')
+        if is_verified is not None:
+            is_verified = is_verified.lower() == 'true'
+            queryset = queryset.filter(is_verified=is_verified)
+        
+        # Filter by staff status if specified
+        is_staff = self.request.query_params.get('is_staff')
+        if is_staff is not None:
+            is_staff = is_staff.lower() == 'true'
+            queryset = queryset.filter(is_staff=is_staff)
+        
+        # Filter by worker status if specified
+        is_worker = self.request.query_params.get('is_worker')
+        if is_worker is not None:
+            is_worker = is_worker.lower() == 'true'
+            queryset = queryset.filter(is_worker=is_worker)
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """
+        Return the currently authenticated user
+        """
+        serializer = self.get_serializer(request.user)
+        print(serializer.data)
+        return Response(serializer.data)
 
 
 
