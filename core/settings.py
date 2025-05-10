@@ -181,7 +181,6 @@ AWS_S3_FILE_OVERWRITE = True
 AWS_SES_REGION_NAME = 'us-east-1' 
 AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
 AWS_SES_TIMEOUT = 30  # seconds
-# AWS_SES_AUTO_THROTTLE = 0.5  # Optional: 50% of  daily SES quota
 
 # EMAIL_HOST_USER = "support@destinybuilders.africa"  
 # DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuilders.africa>'
