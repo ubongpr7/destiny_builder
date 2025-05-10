@@ -403,7 +403,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         Send a reminder email to the user to complete their KYC verification
         """
         try:
-            profile = self.get_obxject()
+            profile = self.get_object()
             user = profile.user
             
             if not user or not user.email:
