@@ -275,6 +275,7 @@ class CombinedReadUserSerializer(serializers.ModelSerializer):
             'id', 'email', 'first_name', 'last_name', 'username',
             'is_verified', 'is_staff', 'is_worker', 'date_of_birth',
             'disabled', 'linkedin_profile', 'profile_link', 'sex',
+            'disability',
             'profile_data'
         ]
 
