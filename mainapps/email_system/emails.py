@@ -10,7 +10,10 @@ class EmailThread(threading.Thread):
         self.email_message=email_message
         threading.Thread.__init__(self)
     def run(self):
+        print("Sending email...")
         self.email_message.send()
+        if self.email_message:
+            print("Email sent successfully")
         
 def send_html_email(subject, message,  to_email,html_file):
     html_content = render_to_string(html_file, {'subject': subject, 'message': message})
