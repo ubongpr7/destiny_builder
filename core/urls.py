@@ -41,7 +41,7 @@ urlpatterns = [
     # db sync
 
     path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
-    # path('inventory_api/', include("mainapps.inventory.api.urls",)),
+    path('project_api/', include("mainapps.project.api.urls",)),
     path('task_api/', include("mainapps.project_task.api.urls",)),
     path('common_api/', include("mainapps.common.api.urls")),
     path('profile_api/', include("mainapps.user_profile.api.urls")),
