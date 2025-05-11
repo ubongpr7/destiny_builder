@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from ..models import Project, ProjectCategory
+from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectUpdateMedia
 
 User = get_user_model()
 
@@ -85,9 +85,6 @@ class ProjectListSerializer(serializers.ModelSerializer):
     def get_category_name(self, obj):
         return obj.category.name if obj.category else None
 
-class ProjectStatusUpdateSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=Project.STATUS_CHOICES)
-    notes = serializers.CharField(required=False, allow_blank=True)
 
 class ProjectBudgetUpdateSerializer(serializers.Serializer):
     budget = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
@@ -103,3 +100,53 @@ class ProjectDateUpdateSerializer(serializers.Serializer):
     target_end_date = serializers.DateField(required=False)
     actual_end_date = serializers.DateField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
+
+class ProjectUpdateMediaSerializer(serializers.ModelSerializer):
+    """Serializer for ProjectUpdateMedia model"""
+    
+    class Meta:
+        model = ProjectUpdateMedia
+        fields = [
+            'id', 'media_type', 'file' 'caption', 'uploaded_at'
+        ]
+        read_only_fields = ['uploaded_at']
+    
+
+class DailyProjectUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for DailyProjectUpdate model"""
+    submitted_by_details = ProjectUserSerializer(source='submitted_by', read_only=True)
+    project_details = ProjectListSerializer(source='project', read_only=True)
+    media_files = ProjectUpdateMediaSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = DailyProjectUpdate
+        fields = [
+            'id', 'project', 'project_details', 'date', 
+            'submitted_by', 'submitted_by_details', 'summary',
+            'challenges', 'achievements', 'next_steps',
+            'funds_spent_today', 'created_at', 'updated_at',
+            'media_files'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'submitted_by']
+
+class DailyProjectUpdateListSerializer(serializers.ModelSerializer):
+    """Simplified serializer for list views of DailyProjectUpdate"""
+    project_title = serializers.CharField(source='project.title', read_only=True)
+    submitted_by_name = serializers.SerializerMethodField()
+    media_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DailyProjectUpdate
+        fields = [
+            'id', 'project', 'project_title', 'date', 
+            'submitted_by_name', 'summary', 'funds_spent_today',
+            'created_at', 'media_count'
+        ]
+    
+    def get_submitted_by_name(self, obj):
+        if obj.submitted_by.first_name and obj.submitted_by.last_name:
+            return f"{obj.submitted_by.first_name} {obj.submitted_by.last_name}"
+        return obj.submitted_by.username
+    
+    def get_media_count(self, obj):
+        return obj.media_files.count()
