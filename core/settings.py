@@ -59,6 +59,7 @@ CORE_APPS = [
     'mainapps.membership',
     'mainapps.permit',
     'mainapps.user_profile',
+    'mainapps.project_task',
 ]
 INSTALLED_APPS=[
 ]
