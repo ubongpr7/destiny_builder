@@ -670,10 +670,12 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
     def change_role(self, request, pk=None):
         """
         Change the role of a team member
+
         """
+
         team_member = self.get_object()
         new_role = request.data.get('role')
-        
+        print(new_role)
         if not new_role:
             return Response(
                 {"detail": "role is required"},
