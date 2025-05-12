@@ -177,16 +177,6 @@ AWS_S3_CONNECT_TIMEOUT = 10
 AWS_S3_TIMEOUT = 60 
 AWS_S3_FILE_OVERWRITE = True
 
-# SES Configuration
-# EMAIL_BACKEND = 'django_ses.SESBackend'
-AWS_SES_REGION_NAME = 'us-east-1' 
-AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
-AWS_SES_TIMEOUT = 30  # seconds
-
-# EMAIL_HOST_USER = "support@destinybuilders.africa"  
-# DEFAULT_FROM_EMAIL = 'Destiny Builders <support@destinybuilders.africa>'
-
-SERVER_EMAIL = 'support@destinybuilders.africa'  
 
 STORAGES = {
         "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
@@ -198,8 +188,9 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 465  
 EMAIL_USE_SSL = True
 EMAIL_USE_TLS = False
-EMAIL_HOST_USER = "ubongpr7@gmail.com"
-EMAIL_HOST_PASSWORD = "nmcmiwlgwdrwesef"
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD =os.getenv('EMAIL_HOST_PASSWORD')
+
 
 
 

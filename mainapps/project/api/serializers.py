@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
+from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectExpense, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
 from django.utils import timezone
 User = get_user_model()
 
@@ -326,3 +326,98 @@ class ProjectMilestoneCreateUpdateSerializer(serializers.ModelSerializer):
                 )
         
         return data
+
+
+
+
+
+
+class ProjectMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer for Project references"""
+    class Meta:
+        model = Project
+        fields = ['id', 'title', 'status']
+
+class ProjectUpdateMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer for DailyProjectUpdate references"""
+    class Meta:
+        model = DailyProjectUpdate
+        fields = ['id', 'date', 'summary']
+
+class ProjectExpenseSerializer(serializers.ModelSerializer):
+    """Serializer for ProjectExpense model with related data"""
+    incurred_by_details = ProjectUserSerializer(source='incurred_by', read_only=True)
+    approved_by_details = ProjectUserSerializer(source='approved_by', read_only=True)
+    project_details = ProjectMinimalSerializer(source='project', read_only=True)
+    update_details = ProjectUpdateMinimalSerializer(source='update', read_only=True)
+    receipt_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ProjectExpense
+        fields = [
+            'id', 'project', 'project_details', 'update', 'update_details',
+            'title', 'description', 'amount', 'date_incurred',
+            'incurred_by', 'incurred_by_details', 'receipt', 'receipt_url',
+            'category', 'status', 'approved_by', 'approved_by_details',
+            'approval_date', 'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'approved_by', 'approval_date']
+    
+    def get_receipt_url(self, obj):
+        if obj.receipt:
+            return self.context['request'].build_absolute_uri(obj.receipt.url)
+        return None
+
+class ProjectExpenseCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating and updating ProjectExpense"""
+    
+    class Meta:
+        model = ProjectExpense
+        fields = [
+            'project', 'update', 'title', 'description', 'amount',
+            'date_incurred', 'incurred_by', 'receipt', 'category',
+            'status', 'notes'
+        ]
+        read_only_fields = ['approved_by', 'approval_date']
+    
+    def validate(self, data):
+        """
+        Validate expense data
+        """
+        # Check that date_incurred is not in the future
+        if 'date_incurred' in data:
+            if data['date_incurred'] > timezone.now().date():
+                raise serializers.ValidationError(
+                    {"date_incurred": "Expense date cannot be in the future."}
+                )
+        
+        # Ensure amount is positive
+        if 'amount' in data and data['amount'] <= 0:
+            raise serializers.ValidationError(
+                {"amount": "Expense amount must be greater than zero."}
+            )
+        
+        # If update is provided, ensure it belongs to the same project
+        if 'update' in data and data['update'] and 'project' in data:
+            if data['update'].project.id != data['project'].id:
+                raise serializers.ValidationError(
+                    {"update": "The update must belong to the same project."}
+                )
+        
+        # Only allow status changes to 'pending' during creation/update by regular users
+        # Admin status changes are handled in separate endpoints
+        if not self.instance and 'status' in data and data['status'] != 'pending':
+            # Check if user has permission to change status (implement based on your permission model)
+            if not self.context['request'].user.is_staff:  # Example check, adjust as needed
+                data['status'] = 'pending'
+        
+        return data
+
+class ExpenseApprovalSerializer(serializers.Serializer):
+    """Serializer for approving or rejecting expenses"""
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+class ExpenseReimbursementSerializer(serializers.Serializer):
+    """Serializer for marking expenses as reimbursed"""
+    notes = serializers.CharField(required=False, allow_blank=True)
+    reimbursement_date = serializers.DateField(default=timezone.now().date())

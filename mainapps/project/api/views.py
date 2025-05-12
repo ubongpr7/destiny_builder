@@ -8,6 +8,7 @@ from django.db.models import Sum, Avg, Count, Q, F
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.decorators import api_view, permission_classes, action
 
 from mainapps.user_profile.api.views import BaseReferenceViewSet
 from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdateMedia
@@ -1018,3 +1019,351 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
             'upcoming_count': upcoming_count,
             'assignee_counts': assignee_counts
         })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_project_team_members(request):
+    """
+    Get all users who are team members of a specific project
+    """
+    project_id = request.query_params.get('project_id')
+    if not project_id:
+        return Response(
+            {"detail": "project_id is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    project = get_object_or_404(Project, id=project_id)
+    
+    # Get all team members for the project
+    team_members = ProjectTeamMember.objects.filter(project=project)
+    
+    # Extract the users from the team members
+    users = [team_member.user for team_member in team_members]
+    
+    serializer = ProjectUserSerializer(users, many=True)
+    return Response(serializer.data)
+
+
+class ProjectExpenseViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing project expenses
+    """
+    serializer_class = ProjectExpenseSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'description', 'category', 'status']
+    ordering_fields = ['date_incurred', 'amount', 'status', 'created_at']
+    
+    def get_queryset(self):
+        """
+        This view returns expenses based on query parameters
+        """
+        queryset = ProjectExpense.objects.all()
+        
+        # Filter by project if project_id is provided
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Filter by update if update_id is provided
+        update_id = self.request.query_params.get('update_id')
+        if update_id:
+            queryset = queryset.filter(update_id=update_id)
+            
+        # Filter by status if status is provided
+        status = self.request.query_params.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+            
+        # Filter by category if category is provided
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+            
+        # Filter by incurred_by if user_id is provided
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(incurred_by_id=user_id)
+            
+        # Filter by approved_by if approved_by_id is provided
+        approved_by_id = self.request.query_params.get('approved_by_id')
+        if approved_by_id:
+            queryset = queryset.filter(approved_by_id=approved_by_id)
+            
+        # Filter by date range
+        date_start = self.request.query_params.get('date_start')
+        date_end = self.request.query_params.get('date_end')
+        
+        if date_start:
+            queryset = queryset.filter(date_incurred__gte=date_start)
+        
+        if date_end:
+            queryset = queryset.filter(date_incurred__lte=date_end)
+            
+        # Filter by amount range
+        amount_min = self.request.query_params.get('amount_min')
+        amount_max = self.request.query_params.get('amount_max')
+        
+        if amount_min:
+            queryset = queryset.filter(amount__gte=amount_min)
+        
+        if amount_max:
+            queryset = queryset.filter(amount__lte=amount_max)
+            
+        return queryset
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions
+        """
+        if self.action in ['create', 'update', 'partial_update']:
+            return ProjectExpenseCreateUpdateSerializer
+        elif self.action == 'approve' or self.action == 'reject':
+            return ExpenseApprovalSerializer
+        elif self.action == 'reimburse':
+            return ExpenseReimbursementSerializer
+        return ProjectExpenseSerializer
+    
+    def perform_create(self, serializer):
+        """
+        Set incurred_by to current user if not provided
+        """
+        if 'incurred_by' not in serializer.validated_data:
+            serializer.save(incurred_by=self.request.user)
+        else:
+            serializer.save()
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """
+        Approve an expense
+        """
+        expense = self.get_object()
+        
+        # Check if expense is already approved or reimbursed
+        if expense.status in ['approved', 'reimbursed']:
+            return Response(
+                {"detail": f"Expense is already {expense.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Check if expense is rejected
+        if expense.status == 'rejected':
+            return Response(
+                {"detail": "Cannot approve a rejected expense."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Update expense
+        expense.status = 'approved'
+        expense.approved_by = request.user
+        expense.approval_date = timezone.now().date()
+        
+        # Add notes if provided
+        if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
+            if expense.notes:
+                expense.notes += f"\n\nApproval notes: {serializer.validated_data['notes']}"
+            else:
+                expense.notes = f"Approval notes: {serializer.validated_data['notes']}"
+                
+        expense.save()
+        
+        # Return updated expense
+        response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
+        return Response(response_serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """
+        Reject an expense
+        """
+        expense = self.get_object()
+        
+        # Check if expense is already approved or reimbursed
+        if expense.status in ['approved', 'reimbursed']:
+            return Response(
+                {"detail": f"Expense is already {expense.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Check if expense is already rejected
+        if expense.status == 'rejected':
+            return Response(
+                {"detail": "Expense is already rejected."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Update expense
+        expense.status = 'rejected'
+        expense.approved_by = request.user
+        expense.approval_date = timezone.now().date()
+        
+        # Add notes if provided
+        if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
+            if expense.notes:
+                expense.notes += f"\n\nRejection notes: {serializer.validated_data['notes']}"
+            else:
+                expense.notes = f"Rejection notes: {serializer.validated_data['notes']}"
+                
+        expense.save()
+        
+        # Return updated expense
+        response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
+        return Response(response_serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def reimburse(self, request, pk=None):
+        """
+        Mark an expense as reimbursed
+        """
+        expense = self.get_object()
+        
+        # Check if expense is approved
+        if expense.status != 'approved':
+            return Response(
+                {"detail": "Only approved expenses can be marked as reimbursed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Update expense
+        expense.status = 'reimbursed'
+        
+        # Add notes if provided
+        if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
+            if expense.notes:
+                expense.notes += f"\n\nReimbursement notes: {serializer.validated_data['notes']}"
+            else:
+                expense.notes = f"Reimbursement notes: {serializer.validated_data['notes']}"
+                
+        expense.save()
+        
+        # Return updated expense
+        response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
+        return Response(response_serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request):
+        """
+        Get all expenses for a specific project
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        expenses = ProjectExpense.objects.filter(project=project)
+        
+        # Apply additional filters
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            expenses = expenses.filter(status=status_filter)
+            
+        serializer = self.get_serializer(expenses, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_user(self, request):
+        """
+        Get all expenses incurred by a specific user
+        """
+        user_id = request.query_params.get('user_id')
+        if not user_id:
+            # Default to current user if no user_id provided
+            user = request.user
+        else:
+            user = get_object_or_404(User, id=user_id)
+            
+        expenses = ProjectExpense.objects.filter(incurred_by=user)
+        
+        # Apply additional filters
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            expenses = expenses.filter(status=status_filter)
+            
+        serializer = self.get_serializer(expenses, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def pending_approval(self, request):
+        """
+        Get all expenses pending approval
+        """
+        expenses = ProjectExpense.objects.filter(status='pending')
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            expenses = expenses.filter(project_id=project_id)
+            
+        serializer = self.get_serializer(expenses, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Get expense statistics
+        """
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        queryset = ProjectExpense.objects.all()
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Count expenses by status
+        status_counts = queryset.values('status').annotate(count=Count('id'), total=Sum('amount'))
+        
+        # Count expenses by category
+        category_counts = queryset.values('category').annotate(count=Count('id'), total=Sum('amount'))
+        
+        # Calculate total expenses
+        total_expenses = queryset.aggregate(
+            total=Sum('amount'),
+            pending=Sum('amount', filter=Q(status='pending')),
+            approved=Sum('amount', filter=Q(status='approved')),
+            rejected=Sum('amount', filter=Q(status='rejected')),
+            reimbursed=Sum('amount', filter=Q(status='reimbursed'))
+        )
+        
+        # Expenses by month
+        from django.db.models.functions import TruncMonth
+        expenses_by_month = queryset.annotate(
+            month=TruncMonth('date_incurred')
+        ).values('month').annotate(
+            count=Count('id'),
+            total=Sum('amount')
+        ).order_by('month')
+        
+        # Expenses by user
+        expenses_by_user = queryset.values(
+            'incurred_by__id',
+            'incurred_by__username',
+            'incurred_by__first_name',
+            'incurred_by__last_name'
+        ).annotate(
+            count=Count('id'),
+            total=Sum('amount')
+        )
+        
+        return Response({
+            'total_expenses': total_expenses,
+            'status_counts': status_counts,
+            'category_counts': category_counts,
+            'expenses_by_month': expenses_by_month,
+            'expenses_by_user': expenses_by_user
+        })
+
