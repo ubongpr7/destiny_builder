@@ -699,71 +699,60 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
 
 
 
-class ProjectExpenseViewSet(viewsets.ModelViewSet):
+class ProjectMilestoneViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing project expenses
+    ViewSet for managing project milestones
     """
-    serializer_class = ProjectExpenseSerializer
+    serializer_class = ProjectMilestoneSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['title', 'description', 'category', 'status']
-    ordering_fields = ['date_incurred', 'amount', 'status', 'created_at']
+    search_fields = ['title', 'description', 'status', 'priority']
+    ordering_fields = ['due_date', 'priority', 'status', 'created_at', 'completion_percentage']
     
     def get_queryset(self):
         """
-        This view returns expenses based on query parameters
+        This view returns milestones based on query parameters
         """
-        queryset = ProjectExpense.objects.all()
+        queryset = ProjectMilestone.objects.all()
         
         # Filter by project if project_id is provided
         project_id = self.request.query_params.get('project_id')
         if project_id:
             queryset = queryset.filter(project_id=project_id)
             
-        # Filter by update if update_id is provided
-        update_id = self.request.query_params.get('update_id')
-        if update_id:
-            queryset = queryset.filter(update_id=update_id)
-            
         # Filter by status if status is provided
         status = self.request.query_params.get('status')
         if status:
             queryset = queryset.filter(status=status)
             
-        # Filter by category if category is provided
-        category = self.request.query_params.get('category')
-        if category:
-            queryset = queryset.filter(category=category)
+        # Filter by priority if priority is provided
+        priority = self.request.query_params.get('priority')
+        if priority:
+            queryset = queryset.filter(priority=priority)
             
-        # Filter by incurred_by if user_id is provided
+        # Filter by assigned user if user_id is provided
         user_id = self.request.query_params.get('user_id')
         if user_id:
-            queryset = queryset.filter(incurred_by_id=user_id)
+            queryset = queryset.filter(assigned_to__id=user_id)
             
-        # Filter by approved_by if approved_by_id is provided
-        approved_by_id = self.request.query_params.get('approved_by_id')
-        if approved_by_id:
-            queryset = queryset.filter(approved_by_id=approved_by_id)
+        # Filter by due date range
+        due_date_start = self.request.query_params.get('due_date_start')
+        due_date_end = self.request.query_params.get('due_date_end')
+        
+        if due_date_start:
+            queryset = queryset.filter(due_date__gte=due_date_start)
+        
+        if due_date_end:
+            queryset = queryset.filter(due_date__lte=due_date_end)
             
-        # Filter by date range
-        date_start = self.request.query_params.get('date_start')
-        date_end = self.request.query_params.get('date_end')
-        
-        if date_start:
-            queryset = queryset.filter(date_incurred__gte=date_start)
-        
-        if date_end:
-            queryset = queryset.filter(date_incurred__lte=date_end)
-            
-        # Filter by amount range
-        amount_min = self.request.query_params.get('amount_min')
-        amount_max = self.request.query_params.get('amount_max')
-        
-        if amount_min:
-            queryset = queryset.filter(amount__gte=amount_min)
-        
-        if amount_max:
-            queryset = queryset.filter(amount__lte=amount_max)
+        # Filter overdue milestones
+        is_overdue = self.request.query_params.get('is_overdue')
+        if is_overdue and is_overdue.lower() == 'true':
+            today = timezone.now().date()
+            queryset = queryset.filter(
+                Q(due_date__lt=today) & 
+                ~Q(status='completed')
+            )
             
         return queryset
     
@@ -772,143 +761,130 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         Use different serializers for different actions
         """
         if self.action in ['create', 'update', 'partial_update']:
-            return ProjectExpenseCreateUpdateSerializer
-        elif self.action == 'approve' or self.action == 'reject':
-            return ExpenseApprovalSerializer
-        elif self.action == 'reimburse':
-            return ExpenseReimbursementSerializer
-        return ProjectExpenseSerializer
+            return ProjectMilestoneCreateUpdateSerializer
+        return ProjectMilestoneSerializer
     
     def perform_create(self, serializer):
         """
-        Set incurred_by to current user if not provided
+        Set created_by to current user when creating a milestone
         """
-        if 'incurred_by' not in serializer.validated_data:
-            serializer.save(incurred_by=self.request.user)
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """
+        Mark a milestone as completed
+        """
+        milestone = self.get_object()
+        completion_date = request.data.get('completion_date')
+        
+        if completion_date:
+            try:
+                from datetime import datetime
+                completion_date = datetime.strptime(completion_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         else:
-            serializer.save()
+            completion_date = timezone.now().date()
+            
+        milestone.complete_milestone(completion_date)
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
-    def approve(self, request, pk=None):
+    def update_status(self, request, pk=None):
         """
-        Approve an expense
+        Update the status of a milestone
         """
-        expense = self.get_object()
+        milestone = self.get_object()
+        new_status = request.data.get('status')
         
-        # Check if expense is already approved or reimbursed
-        if expense.status in ['approved', 'reimbursed']:
+        if not new_status:
             return Response(
-                {"detail": f"Expense is already {expense.status}."},
+                {"detail": "Status is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Check if expense is rejected
-        if expense.status == 'rejected':
+        # Validate that the status is one of the allowed choices
+        valid_statuses = [choice[0] for choice in ProjectMilestone.STATUS_CHOICES]
+        if new_status not in valid_statuses:
             return Response(
-                {"detail": "Cannot approve a rejected expense."},
+                {"detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        # If marking as completed, set completion date and percentage
+        if new_status == 'completed' and milestone.status != 'completed':
+            milestone.completion_date = timezone.now().date()
+            milestone.completion_percentage = 100
         
-        # Update expense
-        expense.status = 'approved'
-        expense.approved_by = request.user
-        expense.approval_date = timezone.now().date()
+        milestone.status = new_status
+        milestone.save()
         
-        # Add notes if provided
-        if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
-            if expense.notes:
-                expense.notes += f"\n\nApproval notes: {serializer.validated_data['notes']}"
-            else:
-                expense.notes = f"Approval notes: {serializer.validated_data['notes']}"
-                
-        expense.save()
-        
-        # Return updated expense
-        response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
-        return Response(response_serializer.data)
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
-    def reject(self, request, pk=None):
+    def update_percentage(self, request, pk=None):
         """
-        Reject an expense
+        Update the completion percentage of a milestone
         """
-        expense = self.get_object()
-        
-        # Check if expense is already approved or reimbursed
-        if expense.status in ['approved', 'reimbursed']:
+        milestone = self.get_object()
+        try:
+            percentage = int(request.data.get('completion_percentage', 0))
+        except ValueError:
             return Response(
-                {"detail": f"Expense is already {expense.status}."},
+                {"detail": "Completion percentage must be an integer"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Check if expense is already rejected
-        if expense.status == 'rejected':
+        if percentage < 0 or percentage > 100:
             return Response(
-                {"detail": "Expense is already rejected."},
+                {"detail": "Completion percentage must be between 0 and 100"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        # If setting to 100%, also mark as completed
+        if percentage == 100 and milestone.status != 'completed':
+            milestone.status = 'completed'
+            milestone.completion_date = timezone.now().date()
+            
+        milestone.completion_percentage = percentage
+        milestone.save()
         
-        # Update expense
-        expense.status = 'rejected'
-        expense.approved_by = request.user
-        expense.approval_date = timezone.now().date()
-        
-        # Add notes if provided
-        if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
-            if expense.notes:
-                expense.notes += f"\n\nRejection notes: {serializer.validated_data['notes']}"
-            else:
-                expense.notes = f"Rejection notes: {serializer.validated_data['notes']}"
-                
-        expense.save()
-        
-        # Return updated expense
-        response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
-        return Response(response_serializer.data)
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
-    def reimburse(self, request, pk=None):
+    def assign_users(self, request, pk=None):
         """
-        Mark an expense as reimbursed
+        Assign users to a milestone
         """
-        expense = self.get_object()
+        milestone = self.get_object()
+        user_ids = request.data.get('user_ids', [])
         
-        # Check if expense is approved
-        if expense.status != 'approved':
+        if not isinstance(user_ids, list):
             return Response(
-                {"detail": "Only approved expenses can be marked as reimbursed."},
+                {"detail": "user_ids must be a list of integers"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        # Get valid users
+        users = User.objects.filter(id__in=user_ids)
         
-        # Update expense
-        expense.status = 'reimbursed'
+        # Set the assigned users
+        milestone.assigned_to.set(users)
         
-        # Add notes if provided
-        if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
-            if expense.notes:
-                expense.notes += f"\n\nReimbursement notes: {serializer.validated_data['notes']}"
-            else:
-                expense.notes = f"Reimbursement notes: {serializer.validated_data['notes']}"
-                
-        expense.save()
-        
-        # Return updated expense
-        response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
-        return Response(response_serializer.data)
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def by_project(self, request):
         """
-        Get all expenses for a specific project
+        Get all milestones for a specific project
         """
         project_id = request.query_params.get('project_id')
         if not project_id:
@@ -918,20 +894,14 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             )
             
         project = get_object_or_404(Project, id=project_id)
-        expenses = ProjectExpense.objects.filter(project=project)
-        
-        # Apply additional filters
-        status_filter = request.query_params.get('status')
-        if status_filter:
-            expenses = expenses.filter(status=status_filter)
-            
-        serializer = self.get_serializer(expenses, many=True)
+        milestones = ProjectMilestone.objects.filter(project=project)
+        serializer = self.get_serializer(milestones, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def by_user(self, request):
         """
-        Get all expenses incurred by a specific user
+        Get all milestones assigned to a specific user
         """
         user_id = request.query_params.get('user_id')
         if not user_id:
@@ -940,84 +910,114 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         else:
             user = get_object_or_404(User, id=user_id)
             
-        expenses = ProjectExpense.objects.filter(incurred_by=user)
-        
-        # Apply additional filters
-        status_filter = request.query_params.get('status')
-        if status_filter:
-            expenses = expenses.filter(status=status_filter)
-            
-        serializer = self.get_serializer(expenses, many=True)
+        milestones = ProjectMilestone.objects.filter(assigned_to=user)
+        serializer = self.get_serializer(milestones, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
-    def pending_approval(self, request):
+    def upcoming(self, request):
         """
-        Get all expenses pending approval
+        Get upcoming milestones (due in the next 30 days)
         """
-        expenses = ProjectExpense.objects.filter(status='pending')
+        today = timezone.now().date()
+        thirty_days_later = today + timezone.timedelta(days=30)
+        
+        milestones = ProjectMilestone.objects.filter(
+            due_date__gte=today,
+            due_date__lte=thirty_days_later,
+            status__in=['pending', 'in_progress']
+        )
         
         # Filter by project if provided
         project_id = request.query_params.get('project_id')
         if project_id:
-            expenses = expenses.filter(project_id=project_id)
+            milestones = milestones.filter(project_id=project_id)
             
-        serializer = self.get_serializer(expenses, many=True)
+        # Filter by user if provided
+        user_id = request.query_params.get('user_id')
+        if user_id:
+            milestones = milestones.filter(assigned_to__id=user_id)
+            
+        serializer = self.get_serializer(milestones, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def overdue(self, request):
+        """
+        Get overdue milestones
+        """
+        today = timezone.now().date()
+        
+        milestones = ProjectMilestone.objects.filter(
+            due_date__lt=today,
+            status__in=['pending', 'in_progress', 'delayed']
+        )
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            milestones = milestones.filter(project_id=project_id)
+            
+        # Filter by user if provided
+        user_id = request.query_params.get('user_id')
+        if user_id:
+            milestones = milestones.filter(assigned_to__id=user_id)
+            
+        serializer = self.get_serializer(milestones, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """
-        Get expense statistics
+        Get milestone statistics
         """
         # Filter by project if provided
         project_id = request.query_params.get('project_id')
-        queryset = ProjectExpense.objects.all()
+        queryset = ProjectMilestone.objects.all()
         
         if project_id:
             queryset = queryset.filter(project_id=project_id)
             
-        # Count expenses by status
-        status_counts = queryset.values('status').annotate(count=Count('id'), total=Sum('amount'))
+        # Count milestones by status
+        status_counts = queryset.values('status').annotate(count=Count('id'))
         
-        # Count expenses by category
-        category_counts = queryset.values('category').annotate(count=Count('id'), total=Sum('amount'))
+        # Count milestones by priority
+        priority_counts = queryset.values('priority').annotate(count=Count('id'))
         
-        # Calculate total expenses
-        total_expenses = queryset.aggregate(
-            total=Sum('amount'),
-            pending=Sum('amount', filter=Q(status='pending')),
-            approved=Sum('amount', filter=Q(status='approved')),
-            rejected=Sum('amount', filter=Q(status='rejected')),
-            reimbursed=Sum('amount', filter=Q(status='reimbursed'))
-        )
+        # Calculate average completion percentage
+        avg_completion = queryset.aggregate(avg_completion=Avg('completion_percentage'))
         
-        # Expenses by month
-        from django.db.models.functions import TruncMonth
-        expenses_by_month = queryset.annotate(
-            month=TruncMonth('date_incurred')
-        ).values('month').annotate(
-            count=Count('id'),
-            total=Sum('amount')
-        ).order_by('month')
+        # Count overdue milestones
+        today = timezone.now().date()
+        overdue_count = queryset.filter(
+            due_date__lt=today,
+            status__in=['pending', 'in_progress', 'delayed']
+        ).count()
         
-        # Expenses by user
-        expenses_by_user = queryset.values(
-            'incurred_by__id',
-            'incurred_by__username',
-            'incurred_by__first_name',
-            'incurred_by__last_name'
-        ).annotate(
-            count=Count('id'),
-            total=Sum('amount')
-        )
+        # Count upcoming milestones (next 30 days)
+        thirty_days_later = today + timezone.timedelta(days=30)
+        upcoming_count = queryset.filter(
+            due_date__gte=today,
+            due_date__lte=thirty_days_later,
+            status__in=['pending', 'in_progress']
+        ).count()
+        
+        # Count milestones by assignee
+        assignee_counts = queryset.values(
+            'assigned_to__id', 
+            'assigned_to__username',
+            'assigned_to__first_name',
+            'assigned_to__last_name'
+        ).annotate(count=Count('id'))
         
         return Response({
-            'total_expenses': total_expenses,
+            'total_milestones': queryset.count(),
             'status_counts': status_counts,
-            'category_counts': category_counts,
-            'expenses_by_month': expenses_by_month,
-            'expenses_by_user': expenses_by_user
+            'priority_counts': priority_counts,
+            'avg_completion': avg_completion,
+            'overdue_count': overdue_count,
+            'upcoming_count': upcoming_count,
+            'assignee_counts': assignee_counts
         })
 
 
@@ -1366,4 +1366,3 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             'expenses_by_month': expenses_by_month,
             'expenses_by_user': expenses_by_user
         })
-
