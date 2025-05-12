@@ -1253,11 +1253,10 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         return Response(response_serializer.data)
     
     @action(detail=False, methods=['get'])
-    def by_project(self, request):
+    def by_project(self, request,project_id=None):
         """
         Get all expenses for a specific project
         """
-        project_id = request.query_params.get('project_id')
         if not project_id:
             return Response(
                 {"detail": "project_id is required"},
