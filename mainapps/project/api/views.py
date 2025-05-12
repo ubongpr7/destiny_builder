@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -100,9 +101,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
         """Set current user as creator if not specified"""
 
         serializer.save()
-        # instance= serializer.instance
-        # instance.create_by=self.request.user
-        # instance.save()
+        instance= serializer.instance
+        instance.create_by=self.request.user
+        instance.save()
     
     @action(detail=False, methods=['get'])
     def assigned(self, request):
@@ -532,3 +533,163 @@ class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(created_files, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+
+
+class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing project team members
+    """
+    serializer_class = ProjectTeamMemberSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'role']
+    ordering_fields = ['join_date', 'role', 'created_at']
+    
+    def get_queryset(self):
+        """
+        This view returns team members based on query parameters
+        """
+        queryset = ProjectTeamMember.objects.all()
+        
+        # Filter by project if project_id is provided
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Filter by user if user_id is provided
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+            
+        # Filter by role if role is provided
+        role = self.request.query_params.get('role')
+        if role:
+            queryset = queryset.filter(role=role)
+            
+        return queryset
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions
+        """
+        if self.action in ['create', 'update', 'partial_update']:
+            return ProjectTeamMemberCreateSerializer
+        return ProjectTeamMemberSerializer
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request):
+        """
+        Get all team members for a specific project
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        team_members = ProjectTeamMember.objects.filter(project=project)
+        serializer = self.get_serializer(team_members, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_user(self, request):
+        """
+        Get all project roles for a specific user
+        """
+        user_id = request.query_params.get('user_id')
+        if not user_id:
+            # Default to current user if no user_id provided
+            user = request.user
+        else:
+            user = get_object_or_404(User, id=user_id)
+            
+        team_roles = ProjectTeamMember.objects.filter(user=user)
+        serializer = self.get_serializer(team_roles, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_role(self, request):
+        """
+        Get all team members with a specific role
+        """
+        role = request.query_params.get('role')
+        if not role:
+            return Response(
+                {"detail": "role is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        team_members = ProjectTeamMember.objects.filter(role=role)
+        serializer = self.get_serializer(team_members, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def active_members(self, request):
+        """
+        Get all active team members (no end_date or end_date in future)
+        """
+        from django.utils import timezone
+        today = timezone.now().date()
+        
+        team_members = ProjectTeamMember.objects.filter(
+            Q(end_date__isnull=True) | Q(end_date__gt=today)
+        )
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            team_members = team_members.filter(project_id=project_id)
+            
+        serializer = self.get_serializer(team_members, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def extend_membership(self, request, pk=None):
+        """
+        Extend the end_date of a team member
+        """
+        team_member = self.get_object()
+        new_end_date = request.data.get('end_date')
+        
+        if not new_end_date:
+            return Response(
+                {"detail": "end_date is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        team_member.end_date = new_end_date
+        team_member.save()
+        
+        serializer = self.get_serializer(team_member)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def change_role(self, request, pk=None):
+        """
+        Change the role of a team member
+        """
+        team_member = self.get_object()
+        new_role = request.data.get('role')
+        
+        if not new_role:
+            return Response(
+                {"detail": "role is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Validate that the role is one of the allowed choices
+        valid_roles = [choice[0] for choice in ProjectTeamMember.ROLE_CHOICES]
+        if new_role not in valid_roles:
+            return Response(
+                {"detail": f"Invalid role. Must be one of: {', '.join(valid_roles)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        team_member.role = new_role
+        team_member.save()
+        
+        serializer = self.get_serializer(team_member)
+        return Response(serializer.data)

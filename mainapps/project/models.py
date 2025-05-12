@@ -69,6 +69,7 @@ class ProjectTeamMember(models.Model):
         ('member', 'Team Member'),
         ('advisor', 'Advisor'),
         ('volunteer', 'Volunteer'),
+        ('monitoring', 'Monitoring/Reporting Officer'),
     ]
     
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='team_members')

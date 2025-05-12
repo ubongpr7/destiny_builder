@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectUpdateMedia
+from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectTeamMember, ProjectUpdateMedia
 
 User = get_user_model()
 
@@ -150,3 +150,48 @@ class DailyProjectUpdateListSerializer(serializers.ModelSerializer):
     
     def get_media_count(self, obj):
         return obj.media_files.count()
+    
+
+class ProjectTeamMemberSerializer(serializers.ModelSerializer):
+    """Serializer for ProjectTeamMember model"""
+    user_details = ProjectUserSerializer(source='user', read_only=True)
+    
+    class Meta:
+        model = ProjectTeamMember
+        fields = [
+            'id', 'project', 'user', 'user_details', 'role', 
+            'responsibilities', 'join_date', 'end_date', 
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+class ProjectTeamMemberCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating ProjectTeamMember with validation"""
+    
+    class Meta:
+        model = ProjectTeamMember
+        fields = [
+            'project', 'user', 'role', 'responsibilities', 
+            'join_date', 'end_date'
+        ]
+    
+    def validate(self, data):
+        """
+        Check that the user is not already a team member for this project
+        """
+        project = data.get('project')
+        user = data.get('user')
+        
+        # Skip validation if updating an existing instance
+        if self.instance:
+            # If we're not changing the project or user, skip validation
+            if self.instance.project == project and self.instance.user == user:
+                return data
+        
+        # Check if this user is already a team member for this project
+        if ProjectTeamMember.objects.filter(project=project, user=user).exists():
+            raise serializers.ValidationError(
+                "This user is already a team member for this project."
+            )
+        
+        return data
