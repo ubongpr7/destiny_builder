@@ -98,8 +98,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Set current user as creator if not specified"""
-        
+
         serializer.save()
+        instance= serializer.instance
+        instance.create_by=self.request.user
+        instance.save()
     
     @action(detail=False, methods=['get'])
     def assigned(self, request):
@@ -111,9 +114,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def created(self, request):
         """Get projects created by the current user"""
-        # Assuming there's a created_by field or similar
-        # If not, you might need to adjust this based on your model
-        projects = Project.objects.filter(manager=request.user)
+        projects = Project.objects.filter(created_by=request.user)
         serializer = self.get_serializer(projects, many=True)
         return Response(serializer.data)
     
