@@ -695,3 +695,326 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(team_member)
         return Response(serializer.data)
+
+
+
+class ProjectMilestoneViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing project milestones
+    """
+    serializer_class = ProjectMilestoneSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'description', 'status', 'priority']
+    ordering_fields = ['due_date', 'priority', 'status', 'created_at', 'completion_percentage']
+    
+    def get_queryset(self):
+        """
+        This view returns milestones based on query parameters
+        """
+        queryset = ProjectMilestone.objects.all()
+        
+        # Filter by project if project_id is provided
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Filter by status if status is provided
+        status = self.request.query_params.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+            
+        # Filter by priority if priority is provided
+        priority = self.request.query_params.get('priority')
+        if priority:
+            queryset = queryset.filter(priority=priority)
+            
+        # Filter by assigned user if user_id is provided
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(assigned_to__id=user_id)
+            
+        # Filter by due date range
+        due_date_start = self.request.query_params.get('due_date_start')
+        due_date_end = self.request.query_params.get('due_date_end')
+        
+        if due_date_start:
+            queryset = queryset.filter(due_date__gte=due_date_start)
+        
+        if due_date_end:
+            queryset = queryset.filter(due_date__lte=due_date_end)
+            
+        # Filter overdue milestones
+        is_overdue = self.request.query_params.get('is_overdue')
+        if is_overdue and is_overdue.lower() == 'true':
+            today = timezone.now().date()
+            queryset = queryset.filter(
+                Q(due_date__lt=today) & 
+                ~Q(status='completed')
+            )
+            
+        return queryset
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions
+        """
+        if self.action in ['create', 'update', 'partial_update']:
+            return ProjectMilestoneCreateUpdateSerializer
+        return ProjectMilestoneSerializer
+    
+    def perform_create(self, serializer):
+        """
+        Set created_by to current user when creating a milestone
+        """
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """
+        Mark a milestone as completed
+        """
+        milestone = self.get_object()
+        completion_date = request.data.get('completion_date')
+        
+        if completion_date:
+            try:
+                from datetime import datetime
+                completion_date = datetime.strptime(completion_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            completion_date = timezone.now().date()
+            
+        milestone.complete_milestone(completion_date)
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def update_status(self, request, pk=None):
+        """
+        Update the status of a milestone
+        """
+        milestone = self.get_object()
+        new_status = request.data.get('status')
+        
+        if not new_status:
+            return Response(
+                {"detail": "Status is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Validate that the status is one of the allowed choices
+        valid_statuses = [choice[0] for choice in ProjectMilestone.STATUS_CHOICES]
+        if new_status not in valid_statuses:
+            return Response(
+                {"detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # If marking as completed, set completion date and percentage
+        if new_status == 'completed' and milestone.status != 'completed':
+            milestone.completion_date = timezone.now().date()
+            milestone.completion_percentage = 100
+        
+        milestone.status = new_status
+        milestone.save()
+        
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def update_percentage(self, request, pk=None):
+        """
+        Update the completion percentage of a milestone
+        """
+        milestone = self.get_object()
+        try:
+            percentage = int(request.data.get('completion_percentage', 0))
+        except ValueError:
+            return Response(
+                {"detail": "Completion percentage must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if percentage < 0 or percentage > 100:
+            return Response(
+                {"detail": "Completion percentage must be between 0 and 100"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # If setting to 100%, also mark as completed
+        if percentage == 100 and milestone.status != 'completed':
+            milestone.status = 'completed'
+            milestone.completion_date = timezone.now().date()
+            
+        milestone.completion_percentage = percentage
+        milestone.save()
+        
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def assign_users(self, request, pk=None):
+        """
+        Assign users to a milestone
+        """
+        milestone = self.get_object()
+        user_ids = request.data.get('user_ids', [])
+        
+        if not isinstance(user_ids, list):
+            return Response(
+                {"detail": "user_ids must be a list of integers"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Get valid users
+        users = User.objects.filter(id__in=user_ids)
+        
+        # Set the assigned users
+        milestone.assigned_to.set(users)
+        
+        serializer = self.get_serializer(milestone)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request):
+        """
+        Get all milestones for a specific project
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        milestones = ProjectMilestone.objects.filter(project=project)
+        serializer = self.get_serializer(milestones, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_user(self, request):
+        """
+        Get all milestones assigned to a specific user
+        """
+        user_id = request.query_params.get('user_id')
+        if not user_id:
+            # Default to current user if no user_id provided
+            user = request.user
+        else:
+            user = get_object_or_404(User, id=user_id)
+            
+        milestones = ProjectMilestone.objects.filter(assigned_to=user)
+        serializer = self.get_serializer(milestones, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def upcoming(self, request):
+        """
+        Get upcoming milestones (due in the next 30 days)
+        """
+        today = timezone.now().date()
+        thirty_days_later = today + timezone.timedelta(days=30)
+        
+        milestones = ProjectMilestone.objects.filter(
+            due_date__gte=today,
+            due_date__lte=thirty_days_later,
+            status__in=['pending', 'in_progress']
+        )
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            milestones = milestones.filter(project_id=project_id)
+            
+        # Filter by user if provided
+        user_id = request.query_params.get('user_id')
+        if user_id:
+            milestones = milestones.filter(assigned_to__id=user_id)
+            
+        serializer = self.get_serializer(milestones, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def overdue(self, request):
+        """
+        Get overdue milestones
+        """
+        today = timezone.now().date()
+        
+        milestones = ProjectMilestone.objects.filter(
+            due_date__lt=today,
+            status__in=['pending', 'in_progress', 'delayed']
+        )
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            milestones = milestones.filter(project_id=project_id)
+            
+        # Filter by user if provided
+        user_id = request.query_params.get('user_id')
+        if user_id:
+            milestones = milestones.filter(assigned_to__id=user_id)
+            
+        serializer = self.get_serializer(milestones, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Get milestone statistics
+        """
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        queryset = ProjectMilestone.objects.all()
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Count milestones by status
+        status_counts = queryset.values('status').annotate(count=Count('id'))
+        
+        # Count milestones by priority
+        priority_counts = queryset.values('priority').annotate(count=Count('id'))
+        
+        # Calculate average completion percentage
+        avg_completion = queryset.aggregate(avg_completion=Avg('completion_percentage'))
+        
+        # Count overdue milestones
+        today = timezone.now().date()
+        overdue_count = queryset.filter(
+            due_date__lt=today,
+            status__in=['pending', 'in_progress', 'delayed']
+        ).count()
+        
+        # Count upcoming milestones (next 30 days)
+        thirty_days_later = today + timezone.timedelta(days=30)
+        upcoming_count = queryset.filter(
+            due_date__gte=today,
+            due_date__lte=thirty_days_later,
+            status__in=['pending', 'in_progress']
+        ).count()
+        
+        # Count milestones by assignee
+        assignee_counts = queryset.values(
+            'assigned_to__id', 
+            'assigned_to__username',
+            'assigned_to__first_name',
+            'assigned_to__last_name'
+        ).annotate(count=Count('id'))
+        
+        return Response({
+            'total_milestones': queryset.count(),
+            'status_counts': status_counts,
+            'priority_counts': priority_counts,
+            'avg_completion': avg_completion,
+            'overdue_count': overdue_count,
+            'upcoming_count': upcoming_count,
+            'assignee_counts': assignee_counts
+        })

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectTeamMember, ProjectUpdateMedia
-
+from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
+from django.utils import timezone
 User = get_user_model()
 
 class ProjectUserSerializer(serializers.ModelSerializer):
@@ -193,5 +193,136 @@ class ProjectTeamMemberCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "This user is already a team member for this project."
             )
+        
+        return data
+
+
+
+
+
+
+class MilestoneDependencySerializer(serializers.ModelSerializer):
+    """Serializer for milestone dependencies"""
+    class Meta:
+        model = ProjectMilestone
+        fields = ['id', 'title', 'status', 'due_date']
+
+class ProjectMilestoneSerializer(serializers.ModelSerializer):
+    """Serializer for ProjectMilestone model with related data"""
+    assigned_to = ProjectUserSerializer(many=True, read_only=True)
+    dependencies = MilestoneDependencySerializer(many=True, read_only=True)
+    days_remaining = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    created_by_details = ProjectUserSerializer(source='created_by', read_only=True)
+    
+    class Meta:
+        model = ProjectMilestone
+        fields = [
+            'id', 'project', 'title', 'description', 'due_date',
+            'completion_date', 'status', 'priority', 'completion_percentage',
+            'assigned_to', 'dependencies', 'deliverables', 'notes',
+            'created_at', 'updated_at', 'created_by', 'created_by_details',
+            'days_remaining', 'is_overdue'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+    
+    def get_days_remaining(self, obj):
+        return obj.days_remaining()
+    
+    def get_is_overdue(self, obj):
+        return obj.is_overdue()
+
+class ProjectMilestoneCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating and updating ProjectMilestone"""
+    assigned_to_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True
+    )
+    dependency_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True
+    )
+    
+    class Meta:
+        model = ProjectMilestone
+        fields = [
+            'project', 'title', 'description', 'due_date',
+            'completion_date', 'status', 'priority', 'completion_percentage',
+            'assigned_to_ids', 'dependency_ids', 'deliverables', 'notes'
+        ]
+    
+    def create(self, validated_data):
+        assigned_to_ids = validated_data.pop('assigned_to_ids', [])
+        dependency_ids = validated_data.pop('dependency_ids', [])
+        
+        # Set the created_by field to the current user
+        validated_data['created_by'] = self.context['request'].user
+        
+        milestone = ProjectMilestone.objects.create(**validated_data)
+        
+        # Add assigned users
+        if assigned_to_ids:
+            milestone.assigned_to.set(User.objects.filter(id__in=assigned_to_ids))
+        
+        # Add dependencies
+        if dependency_ids:
+            milestone.dependencies.set(ProjectMilestone.objects.filter(id__in=dependency_ids))
+        
+        return milestone
+    
+    def update(self, instance, validated_data):
+        assigned_to_ids = validated_data.pop('assigned_to_ids', None)
+        dependency_ids = validated_data.pop('dependency_ids', None)
+        
+        # Update the instance with validated data
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        
+        # Update assigned users if provided
+        if assigned_to_ids is not None:
+            instance.assigned_to.set(User.objects.filter(id__in=assigned_to_ids))
+        
+        # Update dependencies if provided
+        if dependency_ids is not None:
+            instance.dependencies.set(ProjectMilestone.objects.filter(id__in=dependency_ids))
+        
+        return instance
+    
+    def validate(self, data):
+        """
+        Validate milestone data
+        """
+        # Check that due_date is not in the past for new milestones
+        if not self.instance and 'due_date' in data:
+            if data['due_date'] < timezone.now().date():
+                raise serializers.ValidationError(
+                    {"due_date": "Due date cannot be in the past."}
+                )
+        
+        # Check that completion_date is not in the future
+        if 'completion_date' in data and data['completion_date']:
+            if data['completion_date'] > timezone.now().date():
+                raise serializers.ValidationError(
+                    {"completion_date": "Completion date cannot be in the future."}
+                )
+        
+        # If status is completed, ensure completion_date is set
+        if data.get('status') == 'completed' and not data.get('completion_date'):
+            data['completion_date'] = timezone.now().date()
+        
+        # If status is completed, ensure completion_percentage is 100
+        if data.get('status') == 'completed':
+            data['completion_percentage'] = 100
+        
+        # Check for circular dependencies
+        if self.instance and 'dependency_ids' in data:
+            if self.instance.id in data['dependency_ids']:
+                raise serializers.ValidationError(
+                    {"dependency_ids": "A milestone cannot depend on itself."}
+                )
         
         return data

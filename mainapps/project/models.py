@@ -3,7 +3,11 @@ from django.utils.translation import gettext_lazy as _
 from mainapps.inventory.models import Asset
 from mptt.models import MPTTModel, TreeForeignKey
 from django.contrib.auth import get_user_model
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
 User=get_user_model()
+
+
 
 class ProjectCategory(MPTTModel):
     """Categories for projects"""
@@ -103,28 +107,79 @@ class ProjectAsset(models.Model):
     
     def __str__(self):
         return f"{self.project.title} - {self.asset.name}"
-
 class ProjectMilestone(models.Model):
-    """Milestones for projects"""
+    """Milestones for projects with enhanced tracking capabilities"""
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
         ('delayed', 'Delayed'),
+        ('cancelled', 'Cancelled'),
     ]
     
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='milestones')
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+    
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='milestones')
     title = models.CharField(max_length=200)
     description = models.TextField()
     due_date = models.DateField()
     completion_date = models.DateField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
+    completion_percentage = models.IntegerField(default=0, validators=[
+        MinValueValidator(0),
+        MaxValueValidator(100)
+    ])
+    assigned_to = models.ManyToManyField(User, related_name='assigned_milestones', blank=True)
+    dependencies = models.ManyToManyField('self', symmetrical=False, related_name='dependent_milestones', blank=True)
+    deliverables = models.TextField(blank=True, null=True, help_text="Expected deliverables for this milestone")
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_milestones')
        
+    class Meta:
+        ordering = ['due_date', 'priority']
+    
     def __str__(self):
         return f"{self.project.title} - {self.title}"
+    
+    def days_remaining(self):
+        """Calculate days remaining until due date"""
+        if self.status == 'completed':
+            return 0
+        
+        today = timezone.now().date()
+        if self.due_date < today:
+            return 0
+        return (self.due_date - today).days
+    
+    def is_overdue(self):
+        """Check if milestone is overdue"""
+        if self.status == 'completed' and self.completion_date:
+            return self.completion_date > self.due_date
+        
+        if self.status != 'completed':
+            return timezone.now().date() > self.due_date
+        
+        return False
+    
+    def complete_milestone(self, completion_date=None):
+        """Mark milestone as completed"""
+        self.status = 'completed'
+        self.completion_percentage = 100
+        self.completion_date = completion_date or timezone.now().date()
+        self.save()
+        
+        # Check if all project milestones are completed
+        if all(m.status == 'completed' for m in self.project.milestones.all()):
+            # Maybe trigger some project completion logic
+            pass
 
 class DailyProjectUpdate(models.Model):
     """Daily updates for project progress monitoring"""
