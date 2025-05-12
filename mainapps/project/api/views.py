@@ -100,9 +100,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
         """Set current user as creator if not specified"""
 
         serializer.save()
-        instance= serializer.instance
-        instance.create_by=self.request.user
-        instance.save()
+        # instance= serializer.instance
+        # instance.create_by=self.request.user
+        # instance.save()
     
     @action(detail=False, methods=['get'])
     def assigned(self, request):
