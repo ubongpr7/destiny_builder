@@ -1128,7 +1128,13 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             count=Count('id'),
             total=Sum('amount')
         )
-        
+        print({
+            'total_expenses': total_expenses,
+            'status_counts': status_counts,
+            'category_counts': category_counts,
+            'expenses_by_month': expenses_by_month,
+            'expenses_by_user': expenses_by_user
+        })        
         return Response({
             'total_expenses': total_expenses,
             'status_counts': status_counts,
