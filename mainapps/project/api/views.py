@@ -1128,13 +1128,13 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             count=Count('id'),
             total=Sum('amount')
         )
-        print({
-            'total_expenses': total_expenses,
-            'status_counts': status_counts,
-            'category_counts': category_counts,
-            'expenses_by_month': expenses_by_month,
-            'expenses_by_user': expenses_by_user
-        })        
+        # print({
+        #     'total_expenses': total_expenses,
+        #     'status_counts': status_counts,
+        #     'category_counts': category_counts,
+        #     'expenses_by_month': expenses_by_month,
+        #     'expenses_by_user': expenses_by_user
+        # })        
         return Response({
             'total_expenses': total_expenses,
             'status_counts': status_counts,
@@ -1339,7 +1339,15 @@ class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
         ).values('date_only').annotate(
             count=Count('id')
         ).order_by('date_only')
-        
+        print(
+            {
+            'total_updates': total_updates,
+            'updates_by_project': updates_by_project,
+            'total_funds_spent': total_funds_spent,
+            'updates_by_user': updates_by_user,
+            'updates_by_date': updates_by_date
+        }
+        )
         return Response({
             'total_updates': total_updates,
             'updates_by_project': updates_by_project,
