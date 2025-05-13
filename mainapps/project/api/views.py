@@ -9,6 +9,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import api_view, permission_classes, action
+from django.db.models.functions import TruncDate
 
 from mainapps.user_profile.api.views import BaseReferenceViewSet
 from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdateMedia
@@ -1304,80 +1305,40 @@ class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(updates, many=True)
         return Response(serializer.data)
     
-    # @action(detail=False, methods=['get'])
-    # def statistics(self, request):
-    #     """
-    #     Get update statistics
-    #     """
-    #     # Filter by project if provided
-    #     project_id = request.query_params.get('project_id')
-    #     queryset = DailyProjectUpdate.objects.all()
-        
-    #     if project_id:
-    #         queryset = queryset.filter(project_id=project_id)
-            
-    #     # Count total updates
-    #     total_updates = queryset.count()
-        
-    #     # Count updates by project
-    #     updates_by_project = queryset.values('project__title').annotate(count=Count('id'))
-        
-    #     # Calculate total funds spent
-    #     total_funds_spent = queryset.aggregate(total=Sum('funds_spent_today'))
-        
-    #     # Count updates by user
-    #     updates_by_user = queryset.values(
-    #         'submitted_by__username',
-    #         'submitted_by__first_name',
-    #         'submitted_by__last_name'
-    #     ).annotate(count=Count('id'))
-        
-    #     # Count updates by date
-    #     from django.db.models.functions import TruncDate
-    #     updates_by_date = queryset.annotate(
-    #         date_only=TruncDate('date')
-    #     ).values('date_only').annotate(
-    #         count=Count('id')
-    #     ).order_by('date_only')
-    #     print(
-    #         {
-    #         'total_updates': total_updates,
-    #         'updates_by_project': updates_by_project,
-    #         'total_funds_spent': total_funds_spent,
-    #         'updates_by_user': updates_by_user,
-    #         'updates_by_date': updates_by_date
-    #     }
-    #     )
-    #     return Response({
-    #         'total_updates': total_updates,
-    #         'updates_by_project': updates_by_project,
-    #         'total_funds_spent': total_funds_spent,
-    #         'updates_by_user': updates_by_user,
-    #         'updates_by_date': updates_by_date
-    #     })
-
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """
-        Get update statistics
+        Get update statistics including current week's updates
         """
+        from django.utils import timezone
+        from datetime import timedelta
+
         project_id = request.query_params.get('project_id')
         queryset = DailyProjectUpdate.objects.all()
         
         if project_id:
             queryset = queryset.filter(project_id=project_id)
             
+        # Calculate current week range (Monday to Sunday)
+        today = timezone.now().date()
+        start_of_week = today - timedelta(days=today.weekday())  # Monday
+        end_of_week = start_of_week + timedelta(days=6)         # Sunday
+
+        # Get updates count for current week
+        updates_this_week = queryset.filter(
+            created_at__date__range=[start_of_week, end_of_week]
+        ).count()
+
+        # Existing statistics calculations
         total_updates = queryset.count()
         
-        # Convert QuerySets to lists of dictionaries
         updates_by_project = list(
             queryset.values('project__title').annotate(count=Count('id'))
         )
-        
-        # Convert Decimal to float for JSON serialization
+
         total_funds_spent = queryset.aggregate(total=Sum('funds_spent_today'))
         total_funds_value = float(total_funds_spent['total']) if total_funds_spent['total'] else 0.0
-        
+
         updates_by_user = list(
             queryset.values(
                 'submitted_by__username',
@@ -1385,30 +1346,21 @@ class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
                 'submitted_by__last_name'
             ).annotate(count=Count('id'))
         )
-        
-        # Date handling (DRF automatically serializes dates to ISO strings)
-        from django.db.models.functions import TruncDate
+
         updates_by_date = list(
             queryset.annotate(date_only=TruncDate('date'))
             .values('date_only')
             .annotate(count=Count('id'))
             .order_by('date_only')
         )
-        print(
-            {
-            'total_updates': total_updates,
-            'updates_by_project': updates_by_project,
-            'total_funds_spent': total_funds_value,  # Send as float instead of dict
-            'updates_by_user': updates_by_user,
-            'updates_by_date': updates_by_date
-        }
-        )
+
         return Response({
             'total_updates': total_updates,
+            'updates_this_week': updates_this_week,
             'updates_by_project': updates_by_project,
-            'total_funds_spent': total_funds_value,  # Send as float instead of dict
+            'total_funds_spent': total_funds_value,
             'updates_by_user': updates_by_user,
-            'updates_by_date': updates_by_date
+            'updates_by_date': updates_by_date,
         })
 
 class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
