@@ -240,7 +240,32 @@ class CombinedUserProfileSerializer(serializers.ModelSerializer):
         return roles
     
     
+class ProfileRoleSerializer(serializers.ModelSerializer):
+    is_superuser = serializers.SerializerMethodField()
+    user_id = serializers.IntegerField(source='user.id')
 
+    class Meta:
+        model = UserProfile
+        fields = [
+            'user_id',
+            'is_superuser',
+            'is_executive',
+            'is_ceo',
+            'is_project_manager',
+            'is_donor',
+            'is_volunteer',
+            'is_partner',
+            'is_DB_staff',
+            'is_standard_member',
+            'is_DB_executive',
+            'is_DB_admin',
+            'is_kyc_verified',
+            'kyc_status',
+        ]
+        read_only_fields = fields  # All fields are read-only through this endpoint
+
+    def get_is_superuser(self, obj):
+        return obj.user.is_superuser
 
 class CombinedReadUserSerializer(serializers.ModelSerializer):
     """

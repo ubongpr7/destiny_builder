@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.db.models import Q
 
 from rest_framework.response import Response
-from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DisabilityTypeSerializer
+from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DisabilityTypeSerializer, ProfileRoleSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
 from mainapps.accounts.models import Disability, Industry, Expertise,VerificationCode, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
@@ -27,7 +27,7 @@ from .serializers import (
     PartnershipLevelSerializer, ProfileSerialIzer, ProfileSerialIzerAttachment, SkillSerializer
 )
 from django.contrib.auth import get_user_model
-
+from rest_framework import generics
 User = get_user_model()
 
 class BaseReferenceViewSet(viewsets.ReadOnlyModelViewSet):
@@ -43,6 +43,16 @@ class BaseReferenceViewSet(viewsets.ReadOnlyModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
 
+class UserProfileRoleView(generics.RetrieveAPIView):
+    serializer_class = ProfileRoleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+
+        profile=self.request.user.profile
+        if not profile:
+            return Response({"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+        return profile
 
 class IndustryViewSet(BaseReferenceViewSet):
     queryset = Industry.objects.all()

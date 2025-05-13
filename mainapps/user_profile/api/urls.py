@@ -17,7 +17,7 @@ router.register(r'user-profiles', UserProfileViewSet,basename='user-profiles')
 
 urlpatterns = [
     path('', include(router.urls)),
-    # Manual nested routes for addresses
+    path('profile-roles/', UserProfileRoleView.as_view(), name='profile-role'),
     path('profiles/<str:user_profile_id>/addresses/', 
          AddressViewSet.as_view({'get': 'list', 'post': 'create'}),
          name='profile-addresses-list'),
