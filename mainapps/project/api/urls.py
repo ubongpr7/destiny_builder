@@ -11,11 +11,12 @@ router = DefaultRouter()
 # Register viewsets with the router
 router.register(r'projects', ProjectViewSet)
 router.register(r'project-categories', ProjectCategoryViewSet)
-router.register(r'updates', DailyProjectUpdateViewSet)
-router.register(r'media', ProjectUpdateMediaViewSet)
+
 router.register(r'team-members', ProjectTeamMemberViewSet, basename='team-members')
 router.register(r'milestones', ProjectMilestoneViewSet, basename='milestones')
 router.register(r'expenses', ProjectExpenseViewSet, basename='expenses')
+router.register(r'updates', DailyProjectUpdateViewSet, basename='update')
+router.register(r'media', ProjectUpdateMediaViewSet, basename='media')
 
 urlpatterns = [
     path('', include(router.urls)),

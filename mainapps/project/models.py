@@ -107,6 +107,7 @@ class ProjectAsset(models.Model):
     
     def __str__(self):
         return f"{self.project.title} - {self.asset.name}"
+
 class ProjectMilestone(models.Model):
     """Milestones for projects with enhanced tracking capabilities"""
     STATUS_CHOICES = [

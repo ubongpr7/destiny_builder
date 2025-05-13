@@ -306,236 +306,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         })
 
 
-class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for DailyProjectUpdate model
-    """
-    queryset = DailyProjectUpdate.objects.all()
-    serializer_class = DailyProjectUpdateSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['project', 'date', 'submitted_by']
-    search_fields = ['summary', 'challenges', 'achievements', 'next_steps']
-    ordering_fields = ['date', 'created_at', 'funds_spent_today']
-    
-    def get_serializer_class(self):
-        """Return appropriate serializer based on action"""
-        if self.action == 'list':
-            return DailyProjectUpdateListSerializer
-        return DailyProjectUpdateSerializer
-    
-    def get_queryset(self):
-        """Customize queryset based on query parameters"""
-        queryset = DailyProjectUpdate.objects.all()
-        
-        # Filter by date range
-        start_date = self.request.query_params.get('start_date')
-        end_date = self.request.query_params.get('end_date')
-        
-        if start_date:
-            queryset = queryset.filter(date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(date__lte=end_date)
-            
-        # Filter by project
-        project_id = self.request.query_params.get('project_id')
-        if project_id:
-            queryset = queryset.filter(project_id=project_id)
-        
-        return queryset
-    
-    def perform_create(self, serializer):
-        """Set current user as submitter"""
-        serializer.save(submitted_by=self.request.user)
-    
-    @action(detail=False)
-    def my_updates(self, request):
-        """Get updates submitted by the current user"""
-        updates = DailyProjectUpdate.objects.filter(submitted_by=request.user)
-        page = self.paginate_queryset(updates)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(updates, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False)
-    def recent(self, request):
-        """Get recent updates across all projects"""
-        updates = DailyProjectUpdate.objects.all().order_by('-date')[:10]
-        serializer = self.get_serializer(updates, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False)
-    def by_project(self, request):
-        """Get updates grouped by project"""
-        from django.db.models import Max
-        
-        # Get the latest update for each project
-        latest_updates = DailyProjectUpdate.objects.values('project').annotate(
-            latest_date=Max('date')
-        ).order_by('project')
-        
-        results = []
-        for item in latest_updates:
-            project_id = item['project']
-            latest_date = item['latest_date']
-            
-            # Get the update for this project and date
-            update = DailyProjectUpdate.objects.filter(
-                project_id=project_id, 
-                date=latest_date
-            ).first()
-            
-            if update:
-                serializer = self.get_serializer(update)
-                results.append(serializer.data)
-        
-        return Response(results)
-    
-    @action(detail=False)
-    def summary(self, request):
-        """Get summary statistics for updates"""
-        # Get total updates count
-        total_updates = DailyProjectUpdate.objects.count()
-        
-        # Get updates by project
-        updates_by_project = DailyProjectUpdate.objects.values('project__title').annotate(
-            count=Count('id')
-        ).order_by('-count')
-        
-        # Get total funds spent through updates
-        total_funds_spent = DailyProjectUpdate.objects.aggregate(
-            total=Sum('funds_spent_today')
-        )['total'] or 0
-        
-        # Get updates by user
-        updates_by_user = DailyProjectUpdate.objects.values(
-            'submitted_by__username', 
-            'submitted_by__first_name', 
-            'submitted_by__last_name'
-        ).annotate(
-            count=Count('id')
-        ).order_by('-count')
-        
-        # Get updates by date (last 30 days)
-        today = timezone.now().date()
-        thirty_days_ago = today - timedelta(days=30)
-        
-        updates_by_date = DailyProjectUpdate.objects.filter(
-            date__gte=thirty_days_ago
-        ).values('date').annotate(
-            count=Count('id')
-        ).order_by('date')
-        
-        return Response({
-            'total_updates': total_updates,
-            'updates_by_project': updates_by_project,
-            'total_funds_spent': total_funds_spent,
-            'updates_by_user': updates_by_user,
-            'updates_by_date': updates_by_date
-        })
-
-
-class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for ProjectUpdateMedia model
-    """
-    queryset = ProjectUpdateMedia.objects.all()
-    serializer_class = ProjectUpdateMediaSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['update', 'media_type']
-    
-    def perform_create(self, serializer):
-        """Save the media file"""
-        serializer.save()
-    
-    @action(detail=False)
-    def by_update(self, request):
-        """Get media files grouped by update"""
-        update_id = request.query_params.get('update_id')
-        if not update_id:
-            return Response(
-                {"error": "update_id parameter is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        media_files = ProjectUpdateMedia.objects.filter(update_id=update_id)
-        serializer = self.get_serializer(media_files, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False)
-    def by_project(self, request):
-        """Get media files for a specific project"""
-        project_id = request.query_params.get('project_id')
-        if not project_id:
-            return Response(
-                {"error": "project_id parameter is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        media_files = ProjectUpdateMedia.objects.filter(update__project_id=project_id)
-        serializer = self.get_serializer(media_files, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False)
-    def by_type(self, request):
-        """Get media files by type"""
-        media_type = request.query_params.get('media_type')
-        if not media_type:
-            return Response(
-                {"error": "media_type parameter is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        media_files = ProjectUpdateMedia.objects.filter(media_type=media_type)
-        serializer = self.get_serializer(media_files, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['post'])
-    def bulk_upload(self, request):
-        """Upload multiple media files at once"""
-        update_id = request.data.get('update_id')
-        if not update_id:
-            return Response(
-                {"error": "update_id is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            update = DailyProjectUpdate.objects.get(pk=update_id)
-        except DailyProjectUpdate.DoesNotExist:
-            return Response(
-                {"error": "Update not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        files = request.FILES.getlist('files')
-        if not files:
-            return Response(
-                {"error": "No files provided"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        media_type = request.data.get('media_type', 'image')
-        caption = request.data.get('caption', '')
-        
-        created_files = []
-        for file in files:
-            media = ProjectUpdateMedia.objects.create(
-                update=update,
-                media_type=media_type,
-                file=file,
-                caption=caption
-            )
-            created_files.append(media)
-        
-        serializer = self.get_serializer(created_files, many=True)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
-
 
 class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
     """
@@ -1366,3 +1136,358 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             'expenses_by_month': expenses_by_month,
             'expenses_by_user': expenses_by_user
         })
+
+
+
+
+class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing daily project updates
+    """
+    serializer_class = DailyProjectUpdateSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['summary', 'challenges', 'achievements', 'next_steps']
+    ordering_fields = ['date', 'funds_spent_today', 'created_at']
+    
+    def get_queryset(self):
+        """
+        This view returns updates based on query parameters
+        """
+        queryset = DailyProjectUpdate.objects.all()
+        
+        # Filter by project if project_id is provided
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Filter by submitted_by if user_id is provided
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(submitted_by_id=user_id)
+            
+        # Filter by date range
+        date_start = self.request.query_params.get('date_start')
+        date_end = self.request.query_params.get('date_end')
+        
+        if date_start:
+            queryset = queryset.filter(date__gte=date_start)
+        
+        if date_end:
+            queryset = queryset.filter(date__lte=date_end)
+            
+        # Filter by funds spent range
+        funds_min = self.request.query_params.get('funds_min')
+        funds_max = self.request.query_params.get('funds_max')
+        
+        if funds_min:
+            queryset = queryset.filter(funds_spent_today__gte=funds_min)
+        
+        if funds_max:
+            queryset = queryset.filter(funds_spent_today__lte=funds_max)
+            
+        # Filter by has_media
+        has_media = self.request.query_params.get('has_media')
+        if has_media and has_media.lower() == 'true':
+            queryset = queryset.filter(media_files__isnull=False).distinct()
+            
+        return queryset
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions
+        """
+        if self.action in ['create', 'update', 'partial_update']:
+            return DailyProjectUpdateCreateUpdateSerializer
+        return DailyProjectUpdateSerializer
+    
+    def perform_create(self, serializer):
+        """
+        Set submitted_by to current user if not provided
+        """
+        if 'submitted_by' not in serializer.validated_data:
+            serializer.save(submitted_by=self.request.user)
+        else:
+            serializer.save()
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request, project_id=None):
+        """
+        Get all updates for a specific project
+        """
+        # If project_id is not provided in the URL, check query params
+        if project_id is None:
+            project_id = request.query_params.get('project_id')
+            
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        updates = DailyProjectUpdate.objects.filter(project=project)
+        
+        # Apply additional filters
+        date_start = request.query_params.get('date_start')
+        date_end = request.query_params.get('date_end')
+        
+        if date_start:
+            updates = updates.filter(date__gte=date_start)
+        
+        if date_end:
+            updates = updates.filter(date__lte=date_end)
+        
+        serializer = self.get_serializer(updates, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_user(self, request):
+        """
+        Get all updates submitted by a specific user
+        """
+        user_id = request.query_params.get('user_id')
+        if not user_id:
+            # Default to current user if no user_id provided
+            user = request.user
+        else:
+            user = get_object_or_404(User, id=user_id)
+            
+        updates = DailyProjectUpdate.objects.filter(submitted_by=user)
+        
+        # Apply additional filters
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            updates = updates.filter(project_id=project_id)
+            
+        serializer = self.get_serializer(updates, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """
+        Get recent updates (last 7 days)
+        """
+        today = timezone.now().date()
+        seven_days_ago = today - timezone.timedelta(days=7)
+        
+        updates = DailyProjectUpdate.objects.filter(date__gte=seven_days_ago)
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            updates = updates.filter(project_id=project_id)
+            
+        serializer = self.get_serializer(updates, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def today(self, request):
+        """
+        Get today's updates
+        """
+        today = timezone.now().date()
+        
+        updates = DailyProjectUpdate.objects.filter(date=today)
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            updates = updates.filter(project_id=project_id)
+            
+        serializer = self.get_serializer(updates, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Get update statistics
+        """
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        queryset = DailyProjectUpdate.objects.all()
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        # Count total updates
+        total_updates = queryset.count()
+        
+        # Count updates by project
+        updates_by_project = queryset.values('project__title').annotate(count=Count('id'))
+        
+        # Calculate total funds spent
+        total_funds_spent = queryset.aggregate(total=Sum('funds_spent_today'))
+        
+        # Count updates by user
+        updates_by_user = queryset.values(
+            'submitted_by__username',
+            'submitted_by__first_name',
+            'submitted_by__last_name'
+        ).annotate(count=Count('id'))
+        
+        # Count updates by date
+        from django.db.models.functions import TruncDate
+        updates_by_date = queryset.annotate(
+            date_only=TruncDate('date')
+        ).values('date_only').annotate(
+            count=Count('id')
+        ).order_by('date_only')
+        
+        return Response({
+            'total_updates': total_updates,
+            'updates_by_project': updates_by_project,
+            'total_funds_spent': total_funds_spent,
+            'updates_by_user': updates_by_user,
+            'updates_by_date': updates_by_date
+        })
+
+class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing project update media files
+    """
+    serializer_class = ProjectUpdateMediaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['caption', 'media_type']
+    ordering_fields = ['uploaded_at']
+    
+    def get_queryset(self):
+        """
+        This view returns media files based on query parameters
+        """
+        queryset = ProjectUpdateMedia.objects.all()
+        
+        # Filter by update if update_id is provided
+        update_id = self.request.query_params.get('update_id')
+        if update_id:
+            queryset = queryset.filter(update_id=update_id)
+            
+        # Filter by project if project_id is provided
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(update__project_id=project_id)
+            
+        # Filter by media_type if provided
+        media_type = self.request.query_params.get('media_type')
+        if media_type:
+            queryset = queryset.filter(media_type=media_type)
+            
+        return queryset
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions
+        """
+        if self.action in ['create', 'update', 'partial_update']:
+            return ProjectUpdateMediaCreateSerializer
+        return ProjectUpdateMediaSerializer
+    
+    @action(detail=False, methods=['get'])
+    def by_update(self, request, update_id=None):
+        """
+        Get all media files for a specific update
+        """
+        # If update_id is not provided in the URL, check query params
+        if update_id is None:
+            update_id = request.query_params.get('update_id')
+            
+        if not update_id:
+            return Response(
+                {"detail": "update_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        update = get_object_or_404(DailyProjectUpdate, id=update_id)
+        media_files = ProjectUpdateMedia.objects.filter(update=update)
+        
+        # Apply additional filters
+        media_type = request.query_params.get('media_type')
+        if media_type:
+            media_files = media_files.filter(media_type=media_type)
+            
+        serializer = self.get_serializer(media_files, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request):
+        """
+        Get all media files for a specific project
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        media_files = ProjectUpdateMedia.objects.filter(update__project=project)
+        
+        # Apply additional filters
+        media_type = request.query_params.get('media_type')
+        if media_type:
+            media_files = media_files.filter(media_type=media_type)
+            
+        serializer = self.get_serializer(media_files, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def images(self, request):
+        """
+        Get all image media files
+        """
+        media_files = ProjectUpdateMedia.objects.filter(media_type='image')
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            media_files = media_files.filter(update__project_id=project_id)
+            
+        # Filter by update if provided
+        update_id = request.query_params.get('update_id')
+        if update_id:
+            media_files = media_files.filter(update_id=update_id)
+            
+        serializer = self.get_serializer(media_files, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def videos(self, request):
+        """
+        Get all video media files
+        """
+        media_files = ProjectUpdateMedia.objects.filter(media_type='video')
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            media_files = media_files.filter(update__project_id=project_id)
+            
+        # Filter by update if provided
+        update_id = request.query_params.get('update_id')
+        if update_id:
+            media_files = media_files.filter(update_id=update_id)
+            
+        serializer = self.get_serializer(media_files, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def documents(self, request):
+        """
+        Get all document media files
+        """
+        media_files = ProjectUpdateMedia.objects.filter(media_type='document')
+        
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            media_files = media_files.filter(update__project_id=project_id)
+            
+        # Filter by update if provided
+        update_id = request.query_params.get('update_id')
+        if update_id:
+            media_files = media_files.filter(update_id=update_id)
+            
+        serializer = self.get_serializer(media_files, many=True)
+        return Response(serializer.data)

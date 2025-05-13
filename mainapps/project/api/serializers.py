@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from ..models import DailyProjectUpdate, Project, ProjectCategory, ProjectExpense, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
+
+from mainapps.inventory.models import Asset
+from ..models import DailyProjectUpdate, Project, ProjectAsset, ProjectCategory, ProjectExpense, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
 from django.utils import timezone
 User = get_user_model()
 
@@ -106,56 +108,7 @@ class ProjectDateUpdateSerializer(serializers.Serializer):
     actual_end_date = serializers.DateField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
 
-class ProjectUpdateMediaSerializer(serializers.ModelSerializer):
-    """Serializer for ProjectUpdateMedia model"""
-    
-    class Meta:
-        model = ProjectUpdateMedia
-        fields = [
-            'id', 'media_type', 'file' 'caption', 'uploaded_at'
-        ]
-        read_only_fields = ['uploaded_at']
-    
 
-class DailyProjectUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for DailyProjectUpdate model"""
-    submitted_by_details = ProjectUserSerializer(source='submitted_by', read_only=True)
-    project_details = ProjectListSerializer(source='project', read_only=True)
-    media_files = ProjectUpdateMediaSerializer(many=True, read_only=True)
-    
-    class Meta:
-        model = DailyProjectUpdate
-        fields = [
-            'id', 'project', 'project_details', 'date', 
-            'submitted_by', 'submitted_by_details', 'summary',
-            'challenges', 'achievements', 'next_steps',
-            'funds_spent_today', 'created_at', 'updated_at',
-            'media_files'
-        ]
-        read_only_fields = ['created_at', 'updated_at', 'submitted_by']
-
-class DailyProjectUpdateListSerializer(serializers.ModelSerializer):
-    """Simplified serializer for list views of DailyProjectUpdate"""
-    project_title = serializers.CharField(source='project.title', read_only=True)
-    submitted_by_name = serializers.SerializerMethodField()
-    media_count = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = DailyProjectUpdate
-        fields = [
-            'id', 'project', 'project_title', 'date', 
-            'submitted_by_name', 'summary', 'funds_spent_today',
-            'created_at', 'media_count'
-        ]
-    
-    def get_submitted_by_name(self, obj):
-        if obj.submitted_by.first_name and obj.submitted_by.last_name:
-            return f"{obj.submitted_by.first_name} {obj.submitted_by.last_name}"
-        return obj.submitted_by.username
-    
-    def get_media_count(self, obj):
-        return obj.media_files.count()
-    
 
 class ProjectTeamMemberSerializer(serializers.ModelSerializer):
     """Serializer for ProjectTeamMember model"""
@@ -420,3 +373,193 @@ class ExpenseReimbursementSerializer(serializers.Serializer):
     """Serializer for marking expenses as reimbursed"""
     notes = serializers.CharField(required=False, allow_blank=True)
     reimbursement_date = serializers.DateField(default=timezone.now().date())
+
+
+
+
+class AssetSerializer(serializers.ModelSerializer):
+    """Serializer for Asset model"""
+    class Meta:
+        model = Asset
+        fields = ['id', 'name', 'asset_type', 'model', 'serial_number']
+
+class ProjectAssetSerializer(serializers.ModelSerializer):
+    """Serializer for ProjectAsset model with related data"""
+    assigned_by_details = ProjectUserSerializer(source='assigned_by', read_only=True)
+    project_details = ProjectMinimalSerializer(source='project', read_only=True)
+    asset = AssetSerializer(read_only=True)
+    
+    class Meta:
+        model = ProjectAsset
+        fields = [
+            'id', 'project', 'project_details', 'asset',
+            'assigned_date', 'assigned_by', 'assigned_by_details',
+            'return_date', 'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+    
+class ProjectAssetCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating and updating ProjectAsset"""
+    
+    class Meta:
+        model = ProjectAsset
+        fields = [
+            'project', 'asset', 'assigned_by', 'assigned_date',
+            'return_date', 'notes'
+        ]
+    
+    def validate(self, data):
+        """
+        Validate asset assignment data
+        """
+        # Check that assigned_date is not in the future
+        if 'assigned_date' in data:
+            if data['assigned_date'] > timezone.now().date():
+                raise serializers.ValidationError(
+                    {"assigned_date": "Assignment date cannot be in the future."}
+                )
+        
+        # Check that return_date is not before assigned_date
+        if 'return_date' in data and data['return_date'] and 'assigned_date' in data:
+            if data['return_date'] < data['assigned_date']:
+                raise serializers.ValidationError(
+                    {"return_date": "Return date cannot be before assignment date."}
+                )
+        
+        # Check that the asset is not already assigned to another project
+        if self.instance is None:  # Only check on create
+            asset = data.get('asset')
+            active_assignments = ProjectAsset.objects.filter(
+                asset=asset,
+                return_date__isnull=True
+            )
+            if active_assignments.exists():
+                raise serializers.ValidationError(
+                    {"asset": "This asset is already assigned to another project."}
+                )
+        
+        return data
+
+class AssetReturnSerializer(serializers.Serializer):
+    """Serializer for returning assets"""
+    return_date = serializers.DateField(default=timezone.now().date())
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+
+class ProjectUpdateMediaSerializer(serializers.ModelSerializer):
+    """Serializer for ProjectUpdateMedia model"""
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ProjectUpdateMedia
+        fields = [
+            'id', 'update', 'media_type', 'file', 'file_url',
+            'caption', 'uploaded_at'
+        ]
+        read_only_fields = ['uploaded_at']
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            return self.context['request'].build_absolute_uri(obj.file.url)
+        return None
+
+class DailyProjectUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for DailyProjectUpdate model with related data"""
+    submitted_by_details = ProjectUserSerializer(source='submitted_by', read_only=True)
+    project_details = ProjectMinimalSerializer(source='project', read_only=True)
+    media_files = ProjectUpdateMediaSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = DailyProjectUpdate
+        fields = [
+            'id', 'project', 'project_details', 'date', 
+            'submitted_by', 'submitted_by_details', 'summary',
+            'challenges', 'achievements', 'next_steps',
+            'funds_spent_today', 'created_at', 'updated_at',
+            'media_files'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+    
+class DailyProjectUpdateCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating and updating DailyProjectUpdate"""
+    
+    class Meta:
+        model = DailyProjectUpdate
+        fields = [
+            'project', 'date', 'submitted_by', 'summary',
+            'challenges', 'achievements', 'next_steps',
+            'funds_spent_today'
+        ]
+    
+    def validate(self, data):
+        """
+        Validate update data
+        """
+        # Check that date is not in the future
+        if 'date' in data:
+            if data['date'] > timezone.now().date():
+                raise serializers.ValidationError(
+                    {"date": "Update date cannot be in the future."}
+                )
+        
+        # Ensure funds_spent_today is non-negative
+        if 'funds_spent_today' in data and data['funds_spent_today'] < 0:
+            raise serializers.ValidationError(
+                {"funds_spent_today": "Funds spent must be non-negative."}
+            )
+        
+        # Check for duplicate update for the same project and date
+        project = data.get('project')
+        date = data.get('date')
+        
+        if project and date:
+            # Skip validation if updating an existing instance with the same project and date
+            if self.instance and self.instance.project == project and self.instance.date == date:
+                return data
+                
+            if DailyProjectUpdate.objects.filter(project=project, date=date).exists():
+                raise serializers.ValidationError(
+                    {"date": "An update for this project on this date already exists."}
+                )
+        
+        return data
+
+class ProjectUpdateMediaCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating ProjectUpdateMedia"""
+    
+    class Meta:
+        model = ProjectUpdateMedia
+        fields = [
+            'update', 'media_type', 'file', 'caption'
+        ]
+    
+    def validate(self, data):
+        """
+        Validate media data
+        """
+        # Validate file type based on media_type
+        media_type = data.get('media_type')
+        file = data.get('file')
+        
+        if media_type and file:
+            file_extension = file.name.split('.')[-1].lower()
+            
+            if media_type == 'image' and file_extension not in ['jpg', 'jpeg', 'png', 'gif']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid image format. Supported formats: jpg, jpeg, png, gif."}
+                )
+            elif media_type == 'video' and file_extension not in ['mp4', 'mov', 'avi', 'wmv']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid video format. Supported formats: mp4, mov, avi, wmv."}
+                )
+            elif media_type == 'document' and file_extension not in ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid document format. Supported formats: pdf, doc, docx, xls, xlsx, ppt, pptx, txt."}
+                )
+            elif media_type == 'audio' and file_extension not in ['mp3', 'wav', 'ogg']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid audio format. Supported formats: mp3, wav, ogg."}
+                )
+        
+        return data
