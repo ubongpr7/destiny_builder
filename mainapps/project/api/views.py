@@ -1042,6 +1042,7 @@ def get_project_team_members(request):
     # Extract the users from the team members
     users = [team_member.user for team_member in team_members]
     
+    
     serializer = ProjectUserSerializer(users, many=True)
     return Response(serializer.data)
 
@@ -1131,7 +1132,7 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         Set incurred_by to current user if not provided
         """
         if 'incurred_by' not in serializer.validated_data:
-            serializer.save(incurred_by=self.request.user)
+            serializer.save(incurred_by=self.request.user, created_by=self.request.user)
         else:
             serializer.save()
     

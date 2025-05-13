@@ -5,9 +5,14 @@ from django.utils import timezone
 User = get_user_model()
 
 class ProjectUserSerializer(serializers.ModelSerializer):
+    profile_image = serializers.SerializerMethodField()
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'email']
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'profile_image']
+        read_only_fields = ['profile_image']
+    def get_profile_image(self, obj):
+        if obj.profile:
+            return obj.profile.profile_image.url if obj.profile.profile_image else None
 
 class ProjectCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -384,31 +389,25 @@ class ProjectExpenseCreateUpdateSerializer(serializers.ModelSerializer):
         """
         Validate expense data
         """
-        # Check that date_incurred is not in the future
         if 'date_incurred' in data:
             if data['date_incurred'] > timezone.now().date():
                 raise serializers.ValidationError(
                     {"date_incurred": "Expense date cannot be in the future."}
                 )
         
-        # Ensure amount is positive
         if 'amount' in data and data['amount'] <= 0:
             raise serializers.ValidationError(
                 {"amount": "Expense amount must be greater than zero."}
             )
         
-        # If update is provided, ensure it belongs to the same project
         if 'update' in data and data['update'] and 'project' in data:
             if data['update'].project.id != data['project'].id:
                 raise serializers.ValidationError(
                     {"update": "The update must belong to the same project."}
                 )
         
-        # Only allow status changes to 'pending' during creation/update by regular users
-        # Admin status changes are handled in separate endpoints
         if not self.instance and 'status' in data and data['status'] != 'pending':
-            # Check if user has permission to change status (implement based on your permission model)
-            if not self.context['request'].user.is_staff:  # Example check, adjust as needed
+            if not self.context['request'].user.is_staff: 
                 data['status'] = 'pending'
         
         return data
