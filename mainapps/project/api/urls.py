@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    ProjectExpenseViewSet, ProjectViewSet, ProjectCategoryViewSet, 
+    CEOUserViewSet, ProjectExpenseViewSet, ProjectViewSet, ProjectCategoryViewSet, 
     DailyProjectUpdateViewSet, ProjectUpdateMediaViewSet,
     ProjectTeamMemberViewSet,ProjectMilestoneViewSet, get_project_team_members
 )
@@ -9,6 +9,7 @@ from .views import (
 router = DefaultRouter()
 
 # Register viewsets with the router
+router.register(r'ceos', CEOUserViewSet)
 router.register(r'projects', ProjectViewSet)
 router.register(r'project-categories', ProjectCategoryViewSet)
 

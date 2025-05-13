@@ -6,6 +6,8 @@ from ..models import DailyProjectUpdate, Project, ProjectAsset, ProjectCategory,
 from django.utils import timezone
 User = get_user_model()
 
+
+
 class ProjectUserSerializer(serializers.ModelSerializer):
     profile_image = serializers.SerializerMethodField()
     class Meta:

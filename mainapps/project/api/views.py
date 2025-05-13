@@ -10,12 +10,44 @@ from datetime import timedelta
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import api_view, permission_classes, action
 from django.db.models.functions import TruncDate
-
+from rest_framework.viewsets import ReadOnlyModelViewSet
 from mainapps.user_profile.api.views import BaseReferenceViewSet
 from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdateMedia
 from .serializers import *
 
 
+User = get_user_model()
+
+class CEOUserViewSet(ReadOnlyModelViewSet):
+    """
+    Read-only ViewSet for CEO users with approved KYC
+    """
+    serializer_class = ProjectUserSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['username', 'email', 'first_name', 'last_name']
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+
+    def get_queryset(self):
+        """
+        This view returns a list of users who are CEOs with approved KYC status
+        """
+        # Filter users by profile attributes
+        queryset = User.objects.filter(
+            profile__is_ceo=True,
+            profile__kyc_status='approved'
+        )
+        
+        username = self.request.query_params.get('username')
+        if username:
+            queryset = queryset.filter(username__icontains=username)
+            
+        email = self.request.query_params.get('email')
+        if email:
+            queryset = queryset.filter(email__icontains=email)
+            
+        return queryset
+    
 class ProjectCategoryViewSet(BaseReferenceViewSet):
     """
     ViewSet for ProjectCategory model
