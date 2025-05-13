@@ -106,7 +106,6 @@ class CombinedUserProfileSerializer(serializers.ModelSerializer):
     
     # Computed fields
     role_summary = serializers.SerializerMethodField()
-    kyc_status = serializers.SerializerMethodField()
     
     class Meta:
         model = UserProfile
@@ -240,26 +239,6 @@ class CombinedUserProfileSerializer(serializers.ModelSerializer):
         
         return roles
     
-    def get_kyc_status(self, obj):
-        """Return KYC verification status with details"""
-        if obj.is_kyc_verified:
-            return {
-                'status': 'verified',
-                'verified_date': obj.kyc_verification_date
-            }
-        elif obj.kyc_submission_date:
-            return {
-                'status': 'pending',
-                'submitted_date': obj.kyc_submission_date
-            }
-        elif obj.kyc_rejection_reason:
-            return {
-                'status': 'rejected',
-                'reason': obj.kyc_rejection_reason
-            }
-        return {
-            'status': 'not_submitted'
-        }
     
 
 
