@@ -9,7 +9,7 @@ from .views import (
 router = DefaultRouter()
 
 # Register viewsets with the router
-router.register(r'ceos', CEOUserViewSet)
+router.register(r'ceos', CEOUserViewSet,basename='ceo')
 router.register(r'projects', ProjectViewSet)
 router.register(r'project-categories', ProjectCategoryViewSet)
 
