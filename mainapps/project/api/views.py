@@ -34,6 +34,8 @@ class BaseUserViewSet(ReadOnlyModelViewSet):
 
         if self.profile_filters:
             queryset = queryset.filter(profile__isnull=False, profile__kyc_status='approved', **self.profile_filters)
+        else:
+            queryset = queryset.filter(profile__isnull=False, profile__kyc_status='approved')
 
         username = self.request.query_params.get('username')
         if username:
@@ -50,6 +52,12 @@ class BaseUserViewSet(ReadOnlyModelViewSet):
 class CEOUserViewSet(BaseUserViewSet):
     serializer_class = ProjectUserSerializer
     profile_filters = {'is_ceo': True}
+
+    
+
+class AllUserViewSet(BaseUserViewSet):
+    serializer_class = ProjectUserSerializer
+    # profile_filters = {'is_ceo': True}
 
     
 class ProjectCategoryViewSet(BaseReferenceViewSet):
