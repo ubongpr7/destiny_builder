@@ -25,13 +25,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     manager_details = ProjectUserSerializer(source='manager', read_only=True)
     officials_details = ProjectUserSerializer(source='officials', many=True, read_only=True)
     category_details = ProjectCategorySerializer(source='category', read_only=True)
-    
-    # For write operations
+    team_members = serializers.SerializerMethodField()
     manager = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
     officials = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), many=True, required=False)
     category = serializers.PrimaryKeyRelatedField(queryset=ProjectCategory.objects.all(), allow_null=True)
     
-    # Calculated fields
     budget_utilization = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
     is_overbudget = serializers.SerializerMethodField()
@@ -44,9 +42,15 @@ class ProjectSerializer(serializers.ModelSerializer):
             'start_date', 'target_end_date', 'actual_end_date',
             'budget', 'funds_allocated', 'funds_spent', 'budget_utilization', 'is_overbudget',
             'status', 'location', 'beneficiaries', 'success_criteria', 'risks', 'notes',
-            'created_at', 'updated_at', 'days_remaining'
+            'created_at', 'updated_at', 'days_remaining', 'team_members'
         ]
         read_only_fields = ['created_at', 'updated_at']
+    def get_team_members(self, obj):
+        """Get team members for the project"""
+        team_members = ProjectTeamMember.objects.filter(project=obj)
+        users= User.objects.filter(id__in=[member.user.id for member in team_members])
+        # Serialize the user details
+        return ProjectUserSerializer(users, many=True).data
     
     def get_budget_utilization(self, obj):
         """Calculate percentage of budget spent"""
