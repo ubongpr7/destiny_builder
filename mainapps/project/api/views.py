@@ -51,7 +51,7 @@ class BaseUserViewSet(ReadOnlyModelViewSet):
 
 class CEOUserViewSet(BaseUserViewSet):
     serializer_class = ProjectUserSerializer
-    profile_filters = {'is_ceo': True}
+    profile_filters = {'profile__is_ceo': True}
 
     
 
