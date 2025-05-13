@@ -17,36 +17,40 @@ from .serializers import *
 
 
 User = get_user_model()
-
-class CEOUserViewSet(ReadOnlyModelViewSet):
+class BaseUserViewSet(ReadOnlyModelViewSet):
     """
-    Read-only ViewSet for CEO users with approved KYC
+    Base Read-only ViewSet for users with dynamic profile filters
     """
-    serializer_class = ProjectUserSerializer
+    serializer_class = None  # Must be set in child class
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['username', 'email', 'first_name', 'last_name']
     search_fields = ['username', 'email', 'first_name', 'last_name']
 
+    profile_filters = {}
+
     def get_queryset(self):
-        """
-        This view returns a list of users who are CEOs with approved KYC status
-        """
-        # Filter users by profile attributes
-        queryset = User.objects.filter(
-            profile__is_ceo=True,
-            profile__kyc_status='approved'
-        )
-        
+        queryset = User.objects.all()
+
+        if self.profile_filters:
+            queryset = queryset.filter(profile__isnull=False, profile__kyc_status='approved', **self.profile_filters)
+
         username = self.request.query_params.get('username')
         if username:
             queryset = queryset.filter(username__icontains=username)
-            
+        
         email = self.request.query_params.get('email')
         if email:
             queryset = queryset.filter(email__icontains=email)
-            
+
         return queryset
+
+
+
+class CEOUserViewSet(BaseUserViewSet):
+    serializer_class = ProjectUserSerializer
+    profile_filters = {'is_ceo': True}
+
     
 class ProjectCategoryViewSet(BaseReferenceViewSet):
     """
