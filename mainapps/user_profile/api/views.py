@@ -154,7 +154,6 @@ class ProfileViewSet(viewsets.ModelViewSet):
                     pass
         
         serializer = self.get_serializer(instance)
-        print(serializer.data)
         return Response(serializer.data)
 
 class IsAdminUser(permissions.BasePermission):
@@ -457,7 +456,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
-            print(f"Error sending KYC reminder email: {str(e)}")
             return Response(
                 {"error": f"Failed to send reminder: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -540,7 +538,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             code = request.data.get('code')
             
             if not code:
-                print("Code not provided")
                 return Response(
                     {"error": "Verification code is required."},
                     status=status.HTTP_400_BAD_REQUEST
@@ -584,7 +581,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
-            print(f"Error verifying code: {str(e)}")
             return Response(
                 {"error": f"Failed to verify code: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -630,7 +626,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         Return the currently authenticated user
         """
         serializer = self.get_serializer(request.user)
-        print(serializer.data)
         return Response(serializer.data)
 
 
@@ -680,7 +675,6 @@ class AddressViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         serializer.save()
-        print(serializer.data)
     
     def perform_destroy(self, instance):
         """
