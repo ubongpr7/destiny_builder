@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AllUserViewSet, CEOUserViewSet, ProjectExpenseViewSet, ProjectViewSet, ProjectCategoryViewSet, 
     DailyProjectUpdateViewSet, ProjectUpdateMediaViewSet,
-    ProjectTeamMemberViewSet,ProjectMilestoneViewSet, get_project_team_members
+    ProjectTeamMemberViewSet,ProjectMilestoneViewSet, UserRelatedProjectsViewSet, get_project_team_members
 )
 
 router = DefaultRouter()
@@ -19,7 +19,8 @@ router.register(r'milestones', ProjectMilestoneViewSet, basename='milestones')
 router.register(r'expenses', ProjectExpenseViewSet, basename='expenses')
 router.register(r'updates', DailyProjectUpdateViewSet, basename='update')
 router.register(r'media', ProjectUpdateMediaViewSet, basename='media')
-
+router.register(r'user-projects', UserRelatedProjectsViewSet, basename='user-projects')
+# 
 urlpatterns = [
     path('', include(router.urls)),
     path('projects/<int:project_id>/team/', 

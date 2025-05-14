@@ -1550,3 +1550,47 @@ class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
             
         serializer = self.get_serializer(media_files, many=True)
         return Response(serializer.data)
+
+
+
+class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving projects related to the authenticated user.
+    """
+    serializer_class = UserProjectRoleSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'priority']
+    search_fields = ['title', 'description']
+    ordering_fields = ['created_at', 'updated_at', 'target_end_date', 'budget']
+    ordering = ['-updated_at']
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Get all projects where the user has any relationship
+        queryset = Project.objects.filter(
+            Q(manager=user) |  # User is manager
+            Q(officials=user) |  # User is an official
+            Q(created_by=user) |  # User created the project
+            Q(projectteammember__user=user)  # User is a team member
+        ).distinct()
+        
+        # Additional custom filtering
+        role_filter = self.request.query_params.get('role')
+        if role_filter:
+            if role_filter == 'manager':
+                queryset = queryset.filter(manager=user)
+            elif role_filter == 'official':
+                queryset = queryset.filter(officials=user)
+            elif role_filter == 'creator':
+                queryset = queryset.filter(created_by=user)
+            elif role_filter == 'team_member':
+                queryset = queryset.filter(projectteammember__user=user)
+        
+        return queryset
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context

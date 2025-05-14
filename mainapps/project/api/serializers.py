@@ -569,3 +569,51 @@ class ProjectUpdateMediaCreateSerializer(serializers.ModelSerializer):
                 )
         
         return data
+
+
+class UserProjectRoleSerializer(serializers.ModelSerializer):
+    user_role = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Project
+        fields = [
+            'id', 'title', 'description', 'status', 'priority', 
+            'budget', 'funds_spent', 'start_date', 'target_end_date', 
+            'actual_end_date', 'created_at', 'updated_at', 'is_overbudget',
+            'days_remaining', 'completion_percentage', 'user_role'
+        ]
+    
+    def get_user_role(self, obj):
+        """
+        Determine the user's role in this project.
+        Possible roles: 'manager', 'official', 'creator', 'team_member'
+        If user has multiple roles, returns the highest privilege role.
+        """
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+            
+        user = request.user
+        roles = []
+        
+        # Check if user is the manager
+        if obj.manager == user:
+            roles.append('manager')
+            
+        # Check if user is an official
+        if obj.officials.filter(id=user.id).exists():
+            roles.append('official')
+            
+        # Check if user is the creator
+        if obj.created_by == user:
+            roles.append('creator')
+            
+        # Check if user is a team member
+        team_member = obj.projectteammember_set.filter(user=user).first()
+        if team_member:
+            roles.append('team_member')
+        
+        role_priority = {'manager': 0, 'official': 1, 'creator': 2, 'team_member': 3}
+        roles.sort(key=lambda x: role_priority.get(x, 999))
+        
+        return roles[0] if roles else None
