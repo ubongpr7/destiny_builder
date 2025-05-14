@@ -577,7 +577,7 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
-            'id', 'title', 'description', 'status', 'priority', 
+            'id', 'title', 'description', 'status', 
             'budget', 'funds_spent', 'start_date', 'target_end_date', 
             'actual_end_date', 'created_at', 'updated_at', 'is_overbudget',
             'days_remaining', 'completion_percentage', 'user_role'
