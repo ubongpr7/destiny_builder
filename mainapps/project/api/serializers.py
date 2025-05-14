@@ -585,7 +585,7 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
             'days_remaining', 'completion_percentage', 'user_role'
         ]
     def get_days_remaining(self, obj):
-        return obj.days_remaining()
+        return timezone.now().date() - obj.target_end_date if obj.target_end_date else None
     def get_completion_percentage(self, obj):
         """Calculate the completion percentage of the project"""
         if obj.status == 'completed':
