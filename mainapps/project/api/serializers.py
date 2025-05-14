@@ -191,22 +191,8 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'created_by']
     
     def get_days_remaining(self, obj):
-        """Calculate days remaining until target end date"""
-        from django.utils import timezone
-        import datetime
-        
-        if obj.status == 'completed' or obj.status == 'cancelled':
-            return 0
-            
-        today = timezone.now().date()
-        if obj.target_end_date < today:
-            return -1 * (today - obj.target_end_date).days  # Negative days if overdue
-        return (obj.target_end_date - today).days
+        return obj.days_remaining()
     
-    def get_is_overbudget(self, obj):
-        """Check if project is over budget"""
-        return obj.funds_spent > obj.budget
-
     def get_is_overdue(self, obj):
         return obj.is_overdue()
 
@@ -599,7 +585,22 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
             'days_remaining', 'completion_percentage', 'user_role'
         ]
     def get_days_remaining(self, obj):
-        return  obj.target_end_date-timezone.now().date() if obj.target_end_date else None
+        """Calculate days remaining until target end date"""
+        from django.utils import timezone
+        import datetime
+        
+        if obj.status == 'completed' or obj.status == 'cancelled':
+            return 0
+            
+        today = timezone.now().date()
+        if obj.target_end_date < today:
+            return -1 * (today - obj.target_end_date).days  # Negative days if overdue
+        return (obj.target_end_date - today).days
+    
+    def get_is_overbudget(self, obj):
+        """Check if project is over budget"""
+        return obj.funds_spent > obj.budget
+
     def get_completion_percentage(self, obj):
         """Calculate the completion percentage of the project"""
         if obj.status == 'completed':
