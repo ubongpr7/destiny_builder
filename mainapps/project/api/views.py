@@ -1147,7 +1147,7 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         
         # Calculate total expenses
         total_expenses = queryset.aggregate(
-            total=Sum('amount'),
+            total=Sum('amount', filter=~Q(status='rejected')),  # Exclude rejected from total
             pending=Sum('amount', filter=Q(status='pending')),
             approved=Sum('amount', filter=Q(status__in=['approved', 'reimbursed'])),
             rejected=Sum('amount', filter=Q(status='rejected')),
