@@ -835,6 +835,48 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
             'assignee_counts': assignee_counts
         })
 
+    @action(detail=False, methods=['get'], url_path='user-milestones')
+    def user_milestones(self, request):
+        """
+        Get all milestones for projects that the user is related to
+        """
+        user = request.user
+        
+        # Get all projects where the user has any relationship
+        user_projects = Project.objects.filter(
+            Q(manager=user) |  # User is manager
+            Q(officials=user) |  # User is an official
+            Q(created_by=user) |  # User created the project
+            Q(team_members__user=user)  # User is a team member
+        ).distinct()
+        
+        # Get all milestones for these projects
+        milestones = ProjectMilestone.objects.filter(
+            project__in=user_projects
+        ).select_related(
+            'project', 'created_by'
+        ).prefetch_related(
+            'assigned_to', 'dependencies'
+        )
+        
+        # Apply additional filters if provided
+        status = request.query_params.get('status')
+        if status:
+            milestones = milestones.filter(status=status)
+            
+        priority = request.query_params.get('priority')
+        if priority:
+            milestones = milestones.filter(priority=priority)
+            
+        overdue = request.query_params.get('overdue')
+        if overdue and overdue.lower() == 'true':
+            milestones = milestones.filter(due_date__lt=timezone.now().date(), status__in=['not_started', 'in_progress', 'delayed'])
+            
+        # Order by due date by default
+        milestones = milestones.order_by('due_date')
+        
+        serializer = ProjectMilestoneSerializer(milestones, many=True, context={'request': request})
+        return Response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1628,3 +1670,6 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+
+
+
