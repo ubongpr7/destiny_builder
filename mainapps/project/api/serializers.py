@@ -23,6 +23,14 @@ class ProjectCategorySerializer(serializers.ModelSerializer):
         model = ProjectCategory
         fields = ['id', 'name', 'description']
 
+
+class ProjectMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer for Project references"""
+    class Meta:
+        model = Project
+        fields = ['id', 'title', 'status']
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     manager_details = ProjectUserSerializer(source='manager', read_only=True)
     officials_details = ProjectUserSerializer(source='officials', many=True, read_only=True)
@@ -178,7 +186,7 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
     days_remaining = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
     created_by_details = ProjectUserSerializer(source='created_by', read_only=True)
-    
+    project_details = ProjectMinimalSerializer(source='project', read_only=True)
     class Meta:
         model = ProjectMilestone
         fields = [
@@ -186,7 +194,7 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
             'completion_date', 'status', 'priority', 'completion_percentage',
             'assigned_to', 'dependencies', 'deliverables', 'notes',
             'created_at', 'updated_at', 'created_by', 'created_by_details',
-            'days_remaining', 'is_overdue'
+            'days_remaining', 'is_overdue', 'project_details'
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by']
     
@@ -295,12 +303,6 @@ class ProjectMilestoneCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 
-
-class ProjectMinimalSerializer(serializers.ModelSerializer):
-    """Minimal serializer for Project references"""
-    class Meta:
-        model = Project
-        fields = ['id', 'title', 'status']
 
 class ProjectUpdateMinimalSerializer(serializers.ModelSerializer):
     """Minimal serializer for DailyProjectUpdate references"""
