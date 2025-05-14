@@ -575,6 +575,7 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
     user_role = serializers.SerializerMethodField()
     is_overbudget = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
+    completion_percentage = serializers.SerializerMethodField()
     class Meta:
         model = Project
         fields = [
@@ -585,7 +586,12 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
         ]
     def get_days_remaining(self, obj):
         return obj.days_remaining()
-    
+    def get_completion_percentage(self, obj):
+        """Calculate the completion percentage of the project"""
+        if obj.status == 'completed':
+            return 100
+        else:
+            return 0
     def get_is_overbudget(self, obj):
         """Check if project is over budget"""
         return obj.funds_spent > obj.budget
