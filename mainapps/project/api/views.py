@@ -1149,7 +1149,7 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         total_expenses = queryset.aggregate(
             total=Sum('amount'),
             pending=Sum('amount', filter=Q(status='pending')),
-            approved=Sum('amount', filter=Q(status='approved')),
+            approved=Sum('amount', filter=Q(status__in=['approved', 'reimbursed'])),
             rejected=Sum('amount', filter=Q(status='rejected')),
             reimbursed=Sum('amount', filter=Q(status='reimbursed'))
         )
@@ -1173,13 +1173,7 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             count=Count('id'),
             total=Sum('amount')
         )
-        # print({
-        #     'total_expenses': total_expenses,
-        #     'status_counts': status_counts,
-        #     'category_counts': category_counts,
-        #     'expenses_by_month': expenses_by_month,
-        #     'expenses_by_user': expenses_by_user
-        # })        
+           
         return Response({
             'total_expenses': total_expenses,
             'status_counts': status_counts,
