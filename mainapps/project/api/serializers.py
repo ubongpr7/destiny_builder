@@ -573,7 +573,8 @@ class ProjectUpdateMediaCreateSerializer(serializers.ModelSerializer):
 
 class UserProjectRoleSerializer(serializers.ModelSerializer):
     user_role = serializers.SerializerMethodField()
-    
+    is_overbudget = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
     class Meta:
         model = Project
         fields = [
@@ -582,7 +583,12 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
             'actual_end_date', 'created_at', 'updated_at', 'is_overbudget',
             'days_remaining', 'completion_percentage', 'user_role'
         ]
+    def get_days_remaining(self, obj):
+        return obj.days_remaining()
     
+    def get_is_overbudget(self, obj):
+        """Check if project is over budget"""
+        return obj.funds_spent > obj.budget
     def get_user_role(self, obj):
         """
         Determine the user's role in this project.
