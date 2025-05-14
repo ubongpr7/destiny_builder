@@ -1559,7 +1559,7 @@ def project_model_info(request):
     """
     from django.apps import apps
     
-    project_model = apps.get_model('api', 'Project')
+    project_model = apps.get_model('project', 'Project')
     fields = [f.name for f in project_model._meta.get_fields()]
     
     # Get relationship information
