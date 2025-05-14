@@ -1552,6 +1552,36 @@ class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@api_view(['GET'])
+def project_model_info(request):
+    """
+    Debug endpoint to get information about the Project model structure
+    """
+    from django.apps import apps
+    
+    project_model = apps.get_model('api', 'Project')
+    fields = [f.name for f in project_model._meta.get_fields()]
+    
+    # Get relationship information
+    relationships = {}
+    for field in project_model._meta.get_fields():
+        if field.is_relation:
+            related_name = field.related_name or f"{field.model.__name__.lower()}_set"
+            relationships[field.name] = {
+                'related_model': field.related_model.__name__ if hasattr(field, 'related_model') else None,
+                'related_name': related_name,
+                'many_to_many': field.many_to_many,
+                'one_to_many': field.one_to_many,
+                'many_to_one': field.many_to_one,
+                'one_to_one': field.one_to_one,
+            }
+    
+    return Response({
+        'model_name': project_model.__name__,
+        'app_label': project_model._meta.app_label,
+        'fields': fields,
+        'relationships': relationships
+    })
 
 class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -1569,11 +1599,12 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         user = self.request.user
         
         # Get all projects where the user has any relationship
+        # Using the correct field names based on the error message
         queryset = Project.objects.filter(
             Q(manager=user) |  # User is manager
             Q(officials=user) |  # User is an official
             Q(created_by=user) |  # User created the project
-            Q(projectteammember__user=user)  # User is a team member
+            Q(team_members__user=user)  # User is a team member - FIXED
         ).distinct()
         
         # Additional custom filtering
@@ -1586,7 +1617,7 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
             elif role_filter == 'creator':
                 queryset = queryset.filter(created_by=user)
             elif role_filter == 'team_member':
-                queryset = queryset.filter(projectteammember__user=user)
+                queryset = queryset.filter(team_members__user=user)
         
         return queryset
     
@@ -1594,3 +1625,4 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+

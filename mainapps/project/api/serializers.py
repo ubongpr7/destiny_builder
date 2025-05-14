@@ -608,11 +608,14 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
         if obj.created_by == user:
             roles.append('creator')
             
-        # Check if user is a team member
-        team_member = obj.projectteammember_set.filter(user=user).first()
+        # Check if user is a team member - FIXED
+        team_member = obj.team_members.filter(user=user).first()
         if team_member:
             roles.append('team_member')
+            # We could also return their specific role from ProjectTeamMember if needed
+            # roles.append(f'team_member_{team_member.role}')
         
+        # Return the highest privilege role (manager > official > creator > team_member)
         role_priority = {'manager': 0, 'official': 1, 'creator': 2, 'team_member': 3}
         roles.sort(key=lambda x: role_priority.get(x, 999))
         
