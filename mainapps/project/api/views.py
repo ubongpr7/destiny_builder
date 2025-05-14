@@ -1590,7 +1590,11 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UserProjectRoleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'priority']
+    
+    # Update filter fields to match actual model fields
+    # Remove 'priority' which doesn't exist in the model
+    filterset_fields = ['status', 'category']  # Using fields that exist in the Project model
+    
     search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'updated_at', 'target_end_date', 'budget']
     ordering = ['-updated_at']
@@ -1599,12 +1603,11 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         user = self.request.user
         
         # Get all projects where the user has any relationship
-        # Using the correct field names based on the error message
         queryset = Project.objects.filter(
             Q(manager=user) |  # User is manager
             Q(officials=user) |  # User is an official
             Q(created_by=user) |  # User created the project
-            Q(team_members__user=user)  # User is a team member - FIXED
+            Q(team_members__user=user)  # User is a team member
         ).distinct()
         
         # Additional custom filtering
@@ -1625,4 +1628,3 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
-
