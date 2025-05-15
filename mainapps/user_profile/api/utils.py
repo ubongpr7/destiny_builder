@@ -73,7 +73,7 @@ def generate_certificate_pdf(profile):
         'role': get_highest_role_display(profile),
     }
     
-    html = render_to_string('acconts/kyc_certificate.html', context)
+    html = render_to_string('accounts/kyc_certificate.html', context)
     pdf_file = HTML(string=html).write_pdf()
     return pdf_file
 
