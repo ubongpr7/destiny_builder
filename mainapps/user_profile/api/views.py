@@ -197,8 +197,8 @@ class UserProfilePreviewViewSet(viewsets.ReadOnlyModelViewSet):
             profile = get_object_or_404(
                 UserProfile, 
                 reference=reference,
-                is_kyc_verified=True,
-                kyc_status='approved'
+                # is_kyc_verified=True,
+                # kyc_status='approved'
             )
             print(profile)
             serializer = self.get_serializer(profile)
