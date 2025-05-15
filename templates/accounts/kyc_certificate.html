@@ -1,4 +1,3 @@
-<!-- kyc_certificate.html -->
 {% load static %}
 <!DOCTYPE html>
 <html>
@@ -11,121 +10,230 @@
             margin: 0;
         }
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', 'Helvetica', sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background: #ffffff;
             height: 100vh;
+            color: #333;
         }
-        .container {
-            display: flex;
-            height: 100%;
+        .certificate-container {
             position: relative;
-            border: 15px solid #f0f0f0;
+            width: 100%;
+            height: 100%;
+            border: 20px solid #f0f0f0;
+            box-sizing: border-box;
+            background: linear-gradient(to bottom right, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.9) 100%);
+            padding: 40px;
+        }
+        .certificate-border {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border: 2px solid #ddd;
+            z-index: 0;
+        }
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 100px;
+            color: rgba(0,0,0,0.03);
+            z-index: -1;
+            white-space: nowrap;
         }
         .header {
-            position: absolute;
-            top: 20px;
-            left: 0;
-            right: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 30px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
         }
-        .logo {
-            width: 120px;
-        }
-        .platform-info {
+        .organization-info {
+            flex: 1;
             text-align: center;
         }
-        .platform-title {
-            font-size: 16px;
-            margin: 0;
-            color: #2c3e50;
+        .organization-name {
+            font-size: 24px;
             font-weight: bold;
+            color: #2c3e50;
+            margin: 0 0 5px 0;
+            letter-spacing: 1px;
         }
-        .platform-subtitle {
-            font-size: 12px;
-            color: #666;
-            margin: 4px 0;
-        }
-        .content-wrapper {
-            display: flex;
-            width: 100%;
-            padding: 80px 30px 30px;
-        }
-        .left-column {
-            width: 40%;
-            padding-right: 30px;
-        }
-        .avatar {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            border: 3px solid #16a085;
-            object-fit: cover;
-            margin-bottom: 20px;
-        }
-        .user-info {
+        .organization-tagline {
             font-size: 14px;
+            color: #555;
+            margin: 0 0 5px 0;
         }
-        .reference {
+        .organization-website {
             font-size: 12px;
-            color: #2980b9;
-            margin: 10px 0;
+            color: #16a085;
+            margin: 0;
         }
-        .right-column {
-            width: 60%;
+        .logo-left {
+            width: 120px;
+            height: auto;
+            margin-right: 20px;
+        }
+        .logo-right {
+            width: 120px;
+            height: auto;
+            margin-left: 20px;
+        }
+        .content {
+            display: flex;
+            margin-top: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .profile-section {
+            width: 30%;
+            padding-right: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .profile-image-container {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 4px solid #16a085;
+            overflow: hidden;
+            margin-bottom: 20px;
+            background: #f9f9f9;
+        }
+        .profile-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .profile-name {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 10px 0;
             text-align: center;
+        }
+        .reference-number {
+            font-size: 14px;
+            color: #2980b9;
+            margin: 5px 0;
+            text-align: center;
+        }
+        .verification-date {
+            font-size: 14px;
+            color: #555;
+            margin: 5px 0;
+            text-align: center;
+        }
+        .certificate-section {
+            width: 70%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
         .certificate-title {
-            font-size: 18px;
-            margin: 20px 0;
-            color: #2c3e50;
+            font-size: 28px;
+            font-weight: bold;
+            color: #16a085;
+            text-align: center;
+            margin: 0 0 30px 0;
+            letter-spacing: 2px;
+            border-bottom: 2px solid #16a085;
+            padding-bottom: 10px;
         }
         .certificate-text {
-            font-size: 12px;
-            line-height: 1.4;
-            margin: 20px 0;
+            font-size: 16px;
+            line-height: 1.6;
+            text-align: center;
+            margin: 0 0 30px 0;
+        }
+        .verification-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
         }
         .qr-code {
-            width: 150px;
-            margin: 20px auto;
+            width: 120px;
+            height: 120px;
+            margin-bottom: 10px;
+        }
+        .verification-url {
+            font-size: 12px;
+            color: #2980b9;
+            text-align: center;
+            margin: 5px 0;
         }
         .footer {
             position: absolute;
-            bottom: 20px;
+            bottom: 30px;
             left: 0;
             right: 0;
             text-align: center;
-            font-size: 10px;
-            color: #666;
+            font-size: 12px;
+            color: #777;
+            padding: 0 40px;
+            z-index: 1;
+        }
+        .signature-section {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 40px;
+        }
+        .signature {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-right: 60px;
+        }
+        .signature-line {
+            width: 200px;
+            border-top: 1px solid #333;
+            margin-bottom: 5px;
+        }
+        .signature-name {
+            font-weight: bold;
+            font-size: 14px;
+            margin: 0;
+        }
+        .signature-title {
+            font-size: 12px;
+            color: #555;
+            margin: 0;
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="certificate-container">
+        <div class="certificate-border"></div>
+        <div class="watermark">DESTINY BUILDERS</div>
+        
         <div class="header">
-            <div class="platform-info">
-                <h1 class="platform-title">DESTINY BUILDERS EMPOWERMENT FOUNDATION</h1>
-                <p class="platform-subtitle">Building African Destinies, Transforming Lives</p>
-                <p class="platform-subtitle">www.destinybuilders.africa</p>
+            <img src="{% static 'assets/images/logo.jpg' %}" class="logo-left" alt="Logo">
+            <div class="organization-info">
+                <h1 class="organization-name">DESTINY BUILDERS EMPOWERMENT FOUNDATION</h1>
+                <p class="organization-tagline">Building African Destinies, Transforming Lives</p>
+                <p class="organization-website">www.destinybuilders.africa</p>
             </div>
-            <img src="{% static 'assets/images/logo.jpg' %}" class="logo" alt="Logo">
+            <img src="{% static 'assets/images/logo.jpg' %}" class="logo-right" alt="Logo">
         </div>
-
-        <div class="content-wrapper">
-            <div class="left-column">
-                <img src="{{ profile.profile_image.url }}" class="avatar" alt="Profile">
-                <div class="user-info">
-                    <h2>{{ profile.user.get_full_name }}</h2>
-                    <p class="reference">Reference: {{ reference }}</p>
-                    <p>Verified: {{ verification_date|date:"F d, Y" }}</p>
+        
+        <div class="content">
+            <div class="profile-section">
+                <div class="profile-image-container">
+                    <img src="{{ profile.profile_image.url }}" class="profile-image" alt="Profile">
                 </div>
+                <h2 class="profile-name">{{ profile.user.get_full_name }}</h2>
+                <p class="reference-number"><strong>Reference:</strong> {{ reference }}</p>
+                <p class="verification-date"><strong>Verified:</strong> {{ verification_date|date:"F d, Y" }}</p>
             </div>
-
-            <div class="right-column">
+            
+            <div class="certificate-section">
                 <h2 class="certificate-title">CERTIFICATE OF KYC VERIFICATION</h2>
                 <p class="certificate-text">
                     This certifies that the above named individual has successfully completed 
@@ -135,12 +243,22 @@
                 
                 <div class="verification-section">
                     <img src="data:image/png;base64,{{ qr_base64 }}" class="qr-code" alt="QR Code">
-                    <p class="certificate-text">Scan QR code or visit:<br>
-                    {{ verification_url }}</p>
+                    <p class="verification-url">
+                        <strong>Scan QR code or visit:</strong><br>
+                        {{ verification_url }}
+                    </p>
+                </div>
+                
+                <div class="signature-section">
+                    <div class="signature">
+                        <div class="signature-line"></div>
+                        <p class="signature-name">Chief Executive Officer</p>
+                        <p class="signature-title">Destiny Builders Empowerment Foundation</p>
+                    </div>
                 </div>
             </div>
         </div>
-
+        
         <div class="footer">
             <p>Digitally signed and secured - Generated on {{ current_date|date:"F d, Y" }}</p>
         </div>
