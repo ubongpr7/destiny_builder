@@ -200,7 +200,7 @@ class UserProfilePreviewViewSet(viewsets.ReadOnlyModelViewSet):
                 is_kyc_verified=True,
                 kyc_status='approved'
             )
-            
+            print(profile)
             serializer = self.get_serializer(profile)
             return Response(serializer.data)
             
