@@ -25,6 +25,7 @@
             box-sizing: border-box;
             background: linear-gradient(to bottom right, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.9) 100%);
             padding: 40px;
+            overflow: hidden; /* Ensure watermark doesn't cause scrollbars */
         }
         .certificate-border {
             position: absolute;
@@ -40,10 +41,25 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 100px;
-            color: rgba(0,0,0,0.03);
+            font-size: 80px;
+            font-weight: bold;
+            color: rgba(200, 200, 200, 0.2); /* Very light gray */
             z-index: -1;
             white-space: nowrap;
+            letter-spacing: 2px;
+            width: 100%;
+            text-align: center;
+        }
+        /* Add a second watermark for a more professional look */
+        .watermark-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            opacity: 0.05; /* Very light */
+            z-index: -2;
         }
         .header {
             display: flex;
@@ -213,7 +229,8 @@
 <body>
     <div class="certificate-container">
         <div class="certificate-border"></div>
-        <div class="watermark">DESTINY BUILDERS</div>
+        <div class="watermark">DESTINY BUILDERS EMPOWERMENT FOUNDATION</div>
+        <img src="{% static 'assets/images/logo.jpg' %}" class="watermark-logo" alt="Watermark Logo">
         
         <div class="header">
             <img src="{% static 'assets/images/logo.jpg' %}" class="logo-left" alt="Logo">
@@ -241,7 +258,7 @@
                 <p class="certificate-text">
                     This certifies that the above named individual has successfully completed 
                     the Know Your Customer (KYC) verification process and has been approved 
-                    as a verified member( {{ role }}) of Destiny Builders Empowerment Foundation.
+                    as a verified member ({{ role }}) of Destiny Builders Empowerment Foundation.
                 </p>
                 
                 <div class="verification-section">
