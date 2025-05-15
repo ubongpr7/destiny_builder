@@ -1,4 +1,5 @@
 # users/utils.py
+from django.conf import settings
 from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
@@ -80,8 +81,8 @@ def generate_certificate_pdf(profile):
 def send_certificate_email(profile, pdf_content):
     email = EmailMessage(
         subject='Your KYC Verification Certificate',
-        body=f'Dear {profile.user.get_full_name()},\n\nAttached is your verification certificate.',
-        from_email='noreply@example.com',
+        body=f'Dear {profile.user.get_full_name},\n\nAttached is your verification certificate.',
+        from_email=settings.DEFAULT_FROM_EMAIL,
         to=[profile.user.email]
     )
     email.attach(f'certificate_{profile.reference}.pdf', pdf_content, 'application/pdf')
