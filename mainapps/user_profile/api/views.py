@@ -31,15 +31,15 @@ from .serializers import (
 )
 from django.contrib.auth import get_user_model
 from rest_framework import generics
-User = get_user_model()
-
-
-
-# users/views.py
 import qrcode
 from django.http import HttpResponse
 from django.views import View
 from io import BytesIO
+
+User = get_user_model()
+
+
+
 
 class VerificationQRCodeView(View):
     def get(self, request, reference):
@@ -289,6 +289,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     def verify_kyc(self, request, pk=None):
         profile = self.get_object()
         action_type = request.data.get('action')
+        print(profile)
 
         if not profile.kyc_submission_date:
             return Response({"error": "No KYC submission"}, status=400)
@@ -314,6 +315,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                         "profile": self.get_serializer(profile).data
                     })
             except Exception as e:
+                print(f"Error during KYC approval: {str(e)}")
                 return Response({"error": str(e)}, status=400)
 
             
