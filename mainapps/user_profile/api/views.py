@@ -31,35 +31,10 @@ from .serializers import (
 )
 from django.contrib.auth import get_user_model
 from rest_framework import generics
-import qrcode
-from django.http import HttpResponse
-from django.views import View
-from io import BytesIO
 
 User = get_user_model()
 
 
-
-
-class VerificationQRCodeView(View):
-    def get(self, request, reference):
-        verification_url = f"https://www.destinybuilders.africa/verify/{reference}"
-        
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(verification_url)
-        qr.make(fit=True)
-        
-        img = qr.make_image(fill_color="black", back_color="white")
-        
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        return HttpResponse(buffer.getvalue(), content_type="image/png")
-    
 class BaseReferenceViewSet(viewsets.ReadOnlyModelViewSet):
     """Base viewset for reference data with caching"""
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -305,7 +280,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                     profile.kyc_rejection_reason = None
                     profile.save()
 
-                    pdf = generate_certificate_pdf(profile)
+                    pdf = generate_certificate_pdf(profile,request)
                     send_certificate_email(profile, pdf)
 
                     return Response({
@@ -410,7 +385,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                     profile.kyc_rejection_reason = None
                     profile.save()
 
-                    pdf = generate_certificate_pdf(profile)
+                    pdf = generate_certificate_pdf(profile,request)
                     send_certificate_email(profile, pdf)
                     updated.append(profile.id)
             except Exception as e:

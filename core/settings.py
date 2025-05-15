@@ -21,7 +21,7 @@ ALLOWED_HOSTS = [
     '13.51.147.202'
     
 ]
-
+SITE_URL = 'https://www.destinybuilders.africa/'
 
 # Application definition
 DJ_DEFAULT_INSTALLED_APPS=[

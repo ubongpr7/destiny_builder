@@ -26,7 +26,6 @@ urlpatterns = [
          name='profile-addresses-detail'),
 
 
-path('verify/qr/<str:reference>/', VerificationQRCodeView.as_view(), name='verification-qr'),
          
 ]
 

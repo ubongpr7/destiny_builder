@@ -1,4 +1,5 @@
 # users/utils.py
+import base64
 from django.conf import settings
 from django.db import transaction
 from django.urls import reverse
@@ -8,7 +9,7 @@ from weasyprint import HTML
 from io import BytesIO
 from django.core.mail import EmailMessage
 from mainapps.accounts.models import ReferenceCounter
-
+import qrcode
 class ReferenceGenerator:
     ROLE_HIERARCHY = [
         ('is_DB_executive', 'DBEX'),
@@ -33,7 +34,7 @@ class ReferenceGenerator:
     @staticmethod
     def get_location_codes(address):
         country_code = address.country.code2 if address.country else 'XX'
-        region_code = (address.region.geoname_code[:3] if address.region else 'XX').upper()
+        region_code = (address.region.name[:3] if address.region else 'XX').upper()
         return country_code, region_code
 
     @classmethod
@@ -61,22 +62,35 @@ class ReferenceGenerator:
         
         return f"DBEF-{role_code}-{country_code}-{region_code}-{counter.last_number:09d}"
 
-def generate_certificate_pdf(profile):
+
+
+def generate_certificate_pdf(profile, request=None):
     verification_url = f"https://www.destinybuilders.africa/verify/{profile.reference}"
     
+    # Generate QR code
+    qr = qrcode.make(verification_url)
+    qr_buffer = BytesIO()
+    qr.save(qr_buffer)
+    qr_base64 = base64.b64encode(qr_buffer.getvalue()).decode()
+
     context = {
         'profile': profile,
         'reference': profile.reference,
         'verification_date': profile.kyc_verification_date or timezone.now(),
         'current_date': timezone.now(),
-         'verification_url': verification_url,
-        'verification_qr_url': reverse('verification-qr', args=[profile.reference]),
+        'verification_url': verification_url,
+        'qr_base64': qr_base64,
         'role': get_highest_role_display(profile),
     }
     
     html = render_to_string('accounts/kyc_certificate.html', context)
-    pdf_file = HTML(string=html).write_pdf()
+    
+    # Handle base URL
+    base_url = request.build_absolute_uri('/') if request else settings.SITE_URL
+    pdf_file = HTML(string=html, base_url=base_url).write_pdf()
+    
     return pdf_file
+
 
 def send_certificate_email(profile, pdf_content):
     email = EmailMessage(

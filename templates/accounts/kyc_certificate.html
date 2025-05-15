@@ -1,223 +1,148 @@
+<!-- kyc_certificate.html -->
 {% load static %}
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>KYC Verification Certificate</title>
+    <title>KYC Certificate</title>
     <style>
-        body {
-            font-family: 'Arial', sans-serif;
+        @page {
+            size: landscape;
             margin: 0;
-            padding: 0;
-            background-color: #ffffff;
-            min-height: 100vh;
         }
-
-        /* Certificate Container */
-        .certificate-container {
-            width: 21cm;
-            height: 29.7cm;
-            margin: 0 auto;
-            padding: 40px 60px;
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #ffffff;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            height: 100%;
             position: relative;
-            background: #fff;
-            border: 15px solid #f5f5f5;
+            border: 15px solid #f0f0f0;
         }
-
-        /* Header Section */
-        .certificate-header {
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
+            padding: 0 30px;
         }
-
+        .logo {
+            width: 120px;
+        }
         .platform-info {
-            flex: 1;
+            text-align: center;
         }
-
         .platform-title {
-            font-size: 22px;
+            font-size: 16px;
+            margin: 0;
             color: #2c3e50;
             font-weight: bold;
-            margin: 0;
-            text-transform: uppercase;
         }
-
         .platform-subtitle {
-            font-size: 14px;
-            color: #7f8c8d;
-            margin: 5px 0;
-        }
-
-        .platform-url {
             font-size: 12px;
-            color: #2980b9;
-            text-decoration: none;
+            color: #666;
+            margin: 4px 0;
         }
-
-        .logo-container {
-            width: 120px;
-        }
-
-        .logo {
-            width: 100%;
-            height: auto;
-        }
-
-        /* Profile Section */
-        .profile-section {
+        .content-wrapper {
             display: flex;
-            align-items: center;
-            margin: 25px 0;
-            gap: 30px;
+            width: 100%;
+            padding: 80px 30px 30px;
         }
-
+        .left-column {
+            width: 40%;
+            padding-right: 30px;
+        }
         .avatar {
-            width: 120px;
-            height: 120px;
+            width: 150px;
+            height: 150px;
             border-radius: 50%;
             border: 3px solid #16a085;
             object-fit: cover;
+            margin-bottom: 20px;
         }
-
-        .user-details {
-            flex: 1;
+        .user-info {
+            font-size: 14px;
         }
-
-        /* Main Content */
-        .certificate-body {
-            text-align: center;
-            margin: 30px 0;
-        }
-
-        .verification-section {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 40px;
-            margin: 40px 0;
-            padding: 25px;
-            background: #f8f9fa;
-            border-radius: 12px;
-        }
-
-        .qr-code {
-            width: 180px;
-            height: 180px;
-            border: 1px solid #ddd;
-            padding: 8px;
-            background: white;
-            border-radius: 8px;
-        }
-
-        /* Typography */
-        .certificate-title {
-            font-size: 28px;
-            color: #2c3e50;
-            margin: 20px 0;
-            text-transform: uppercase;
-        }
-
-        .user-name {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin: 15px 0;
-            text-transform: uppercase;
-        }
-
-        .reference-number {
-            font-size: 18px;
+        .reference {
+            font-size: 12px;
             color: #2980b9;
-            font-weight: bold;
-            margin: 15px 0;
+            margin: 10px 0;
         }
-
-        /* Footer */
-        .certificate-footer {
+        .right-column {
+            width: 60%;
+            text-align: center;
+        }
+        .certificate-title {
+            font-size: 18px;
+            margin: 20px 0;
+            color: #2c3e50;
+        }
+        .certificate-text {
+            font-size: 12px;
+            line-height: 1.4;
+            margin: 20px 0;
+        }
+        .qr-code {
+            width: 150px;
+            margin: 20px auto;
+        }
+        .footer {
             position: absolute;
-            bottom: 40px;
+            bottom: 20px;
             left: 0;
             right: 0;
             text-align: center;
-            font-size: 12px;
-            color: #7f8c8d;
-        }
-
-        .watermark {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 80px;
-            color: rgba(0,0,0,0.03);
-            z-index: 0;
-            white-space: nowrap;
-        }
-
-        /* Responsive Adjustments */
-        @media print {
-            .certificate-container {
-                border: none;
-                padding: 30px;
-            }
+            font-size: 10px;
+            color: #666;
         }
     </style>
 </head>
 <body>
-    <div class="certificate-container">
-        <div class="watermark">DESTINY BUILDERS</div>
-
-        <!-- Header Section -->
-        <div class="certificate-header">
+    <div class="container">
+        <div class="header">
             <div class="platform-info">
-                <h1 class="platform-title">Destiny Builders Empowerment Foundation</h1>
+                <h1 class="platform-title">DESTINY BUILDERS EMPOWERMENT FOUNDATION</h1>
                 <p class="platform-subtitle">Building African Destinies, Transforming Lives</p>
-                <a href="https://www.destinybuilders.africa" class="platform-url">www.destinybuilders.africa</a>
+                <p class="platform-subtitle">www.destinybuilders.africa</p>
             </div>
-            <div class="logo-container">
-                <img src="{% static 'assets/images/logo.jpg' %}" alt="Platform Logo" class="logo">
-            </div>
+            <img src="{% static 'assets/images/logo.jpg' %}" class="logo" alt="Logo">
         </div>
 
-        <!-- Profile Section -->
-        <div class="profile-section">
-            <img src="{{ profile.profile_image.url }}" alt="User Avatar" class="avatar">
-            <div class="user-details">
-                <h2 class="user-name">{{ profile.user.first_name }} {{ profile.user.last_name }}</h2>
-                <div class="reference-number">Reference: {{ reference }}</div>
-                <div class="verification-date">Verified: {{ verification_date|date:"F d, Y" }}</div>
+        <div class="content-wrapper">
+            <div class="left-column">
+                <img src="{{ profile.profile_image.url }}" class="avatar" alt="Profile">
+                <div class="user-info">
+                    <h2>{{ profile.user.get_full_name }}</h2>
+                    <p class="reference">Reference: {{ reference }}</p>
+                    <p>Verified: {{ verification_date|date:"F d, Y" }}</p>
+                </div>
             </div>
-        </div>
 
-        <!-- Certificate Body -->
-        <div class="certificate-body">
-            <h2 class="certificate-title">Certificate of KYC Verification</h2>
-            
-            <p class="certificate-text">
-                This certifies that the above named individual has successfully completed 
-                the Know Your Customer (KYC) verification process and has been approved 
-                as a verified member of Destiny Builders Empowerment Foundation.
-            </p>
-
-            <div class="verification-section">
-                <img src="{{ verification_qr_url }}" alt="Verification QR Code" class="qr-code">
-                <div class="verification-instructions">
-                    <p>Scan QR code or visit:</p>
-                    <p class="verification-url">
-                        https://www.destinybuilders.africa/verify/{{ reference }}
-                    </p>
+            <div class="right-column">
+                <h2 class="certificate-title">CERTIFICATE OF KYC VERIFICATION</h2>
+                <p class="certificate-text">
+                    This certifies that the above named individual has successfully completed 
+                    the Know Your Customer (KYC) verification process and has been approved 
+                    as a verified member of Destiny Builders Empowerment Foundation.
+                </p>
+                
+                <div class="verification-section">
+                    <img src="data:image/png;base64,{{ qr_base64 }}" class="qr-code" alt="QR Code">
+                    <p class="certificate-text">Scan QR code or visit:<br>
+                    {{ verification_url }}</p>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
-        <div class="certificate-footer">
-            <p>This digitally secured certificate can be verified online at any time</p>
-            <p>Generated on {{ current_date|date:"F d, Y" }}</p>
+        <div class="footer">
+            <p>Digitally signed and secured - Generated on {{ current_date|date:"F d, Y" }}</p>
         </div>
     </div>
 </body>
