@@ -24,6 +24,9 @@ urlpatterns = [
     path('profiles/<str:user_profile_id>/addresses/<str:pk>/', 
          AddressViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}),
          name='profile-addresses-detail'),
+
+
+path('verify/qr/<str:reference>/', VerificationQRCodeView.as_view(), name='verification-qr'),
          
 ]
 

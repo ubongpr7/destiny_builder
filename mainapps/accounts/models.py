@@ -230,8 +230,7 @@ class UserProfile(models.Model):
         REJECTED = 'rejected', 'Rejected'
         FLAGGED = 'flagged', 'Flagged'
         SCAMMER = 'scammer', 'Scammer'
-    
-    # Add kyc_status field
+    reference=models.CharField(max_length=255, unique=True, blank=True, null=True)
     kyc_status = models.CharField(
         max_length=20,
         choices=KYCStatus.choices,
@@ -278,7 +277,6 @@ class UserProfile(models.Model):
     partnership_level = models.ForeignKey(PartnershipLevel, on_delete=models.SET_NULL, null=True, blank=True)
     partnership_start_date = models.DateField(blank=True, null=True)
     
-    # Fields for roles  
     is_executive = models.BooleanField(default=False)
     is_ceo = models.BooleanField(default=False)
     is_project_manager = models.BooleanField(default=False)
@@ -325,3 +323,16 @@ class UserSkill(models.Model):
         return f"{self.user.username} - {self.skill.name}"
     
 
+class ReferenceCounter(models.Model):
+    role_code = models.CharField(max_length=4)
+    country_code = models.CharField(max_length=2)
+    region_code = models.CharField(max_length=3)
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('role_code', 'country_code', 'region_code')
+        verbose_name = 'Reference Counter'
+        verbose_name_plural = 'Reference Counters'
+
+    def __str__(self):
+        return f"{self.role_code}-{self.country_code}-{self.region_code}"

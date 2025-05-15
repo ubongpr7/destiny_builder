@@ -1,4 +1,5 @@
 
+import threading
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -11,13 +12,15 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from mainapps.email_system.emails import EmailThread, send_html_email
 from django.core.mail import EmailMultiAlternatives
-
+from django.db import transaction
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from django.utils import timezone
 from django.db.models import Q
 
 from rest_framework.response import Response
+
+from mainapps.user_profile.api.utils import ReferenceGenerator, generate_certificate_pdf, send_certificate_email
 from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DisabilityTypeSerializer, ProfileRoleSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
@@ -30,6 +33,33 @@ from django.contrib.auth import get_user_model
 from rest_framework import generics
 User = get_user_model()
 
+
+
+# users/views.py
+import qrcode
+from django.http import HttpResponse
+from django.views import View
+from io import BytesIO
+
+class VerificationQRCodeView(View):
+    def get(self, request, reference):
+        verification_url = f"https://www.destinybuilders.africa/verify/{reference}"
+        
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(verification_url)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        return HttpResponse(buffer.getvalue(), content_type="image/png")
+    
 class BaseReferenceViewSet(viewsets.ReadOnlyModelViewSet):
     """Base viewset for reference data with caching"""
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -53,7 +83,7 @@ class UserProfileRoleView(generics.RetrieveAPIView):
         if not profile:
             return Response({"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
         return profile
-
+    
 class IndustryViewSet(BaseReferenceViewSet):
     queryset = Industry.objects.all()
     serializer_class = IndustrySerializer
@@ -257,29 +287,35 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def verify_kyc(self, request, pk=None):
-        """
-        Update KYC status (approve, reject, flag, mark as scammer)
-        """
         profile = self.get_object()
-        action = request.data.get('action')
-        
+        action_type = request.data.get('action')
+
         if not profile.kyc_submission_date:
-            return Response(
-                {"error": "This user has not submitted KYC documents for verification."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if action == 'approve':
-            profile.is_kyc_verified = True
-            profile.kyc_status = 'approved'
-            profile.kyc_verification_date = timezone.now()
-            profile.kyc_rejection_reason = None
-            profile.save()
-            
-            return Response({
-                "message": "KYC verification approved successfully.",
-                "profile": CombinedUserProfileSerializer(profile).data
-            })
+            return Response({"error": "No KYC submission"}, status=400)
+
+        if action_type == 'approve':
+            try:
+                with transaction.atomic():
+                    if not profile.reference:
+                        profile.reference = ReferenceGenerator.generate_reference(profile)
+                    
+                    profile.is_kyc_verified = True
+                    profile.kyc_status = 'approved'
+                    profile.kyc_verification_date = timezone.now()
+                    profile.kyc_rejection_reason = None
+                    profile.save()
+
+                    pdf = generate_certificate_pdf(profile)
+                    send_certificate_email(profile, pdf)
+
+                    return Response({
+                        "message": "KYC approved",
+                        "reference": profile.reference,
+                        "profile": self.get_serializer(profile).data
+                    })
+            except Exception as e:
+                return Response({"error": str(e)}, status=400)
+
             
         elif action == 'reject':
             reason = request.data.get('reason')
@@ -343,69 +379,50 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 {"error": "Invalid action. Use 'approve', 'reject', 'flag', or 'mark_scammer'."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    
+        
     @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
     def bulk_verify(self, request):
-        """
-        Bulk update KYC status for multiple profiles
-        """
         profile_ids = request.data.get('profile_ids', [])
-        action = request.data.get('action')
-        reason = request.data.get('reason', '')
-        
-        if not profile_ids:
-            return Response(
-                {"error": "No profile IDs provided."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        if action not in ['approve', 'reject', 'flag', 'mark_scammer']:
-            return Response(
-                {"error": "Invalid action. Use 'approve', 'reject', 'flag', or 'mark_scammer'."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        if action in ['reject', 'flag', 'mark_scammer'] and not reason:
-            return Response(
-                {"error": f"A reason must be provided for {action} action."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        # Get profiles with submitted KYC
+        action_type = request.data.get('action')
+
+        if action_type != 'approve':
+            # Handle other actions
+            return super().bulk_verify(request)
+
         profiles = UserProfile.objects.filter(
             id__in=profile_ids,
             kyc_submission_date__isnull=False
         )
-        
-        if not profiles:
-            return Response(
-                {"error": "No valid profiles found with KYC submissions."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-            
-        # Update profiles based on action
-        updated_count = 0
+
+        updated = []
+        errors = []
+
         for profile in profiles:
-            if action == 'approve':
-                profile.is_kyc_verified = True
-                profile.kyc_status = 'approved'
-                profile.kyc_verification_date = timezone.now()
-                profile.kyc_rejection_reason = None
-            else:
-                profile.is_kyc_verified = False
-                profile.kyc_status = action.replace('mark_', '')
-                profile.kyc_verification_date = None
-                profile.kyc_rejection_reason = reason
-                
-            profile.save()
-            updated_count += 1
-            
+            try:
+                with transaction.atomic():
+                    if not profile.reference:
+                        profile.reference = ReferenceGenerator.generate_reference(profile)
+                    
+                    profile.is_kyc_verified = True
+                    profile.kyc_status = 'approved'
+                    profile.kyc_verification_date = timezone.now()
+                    profile.kyc_rejection_reason = None
+                    profile.save()
+
+                    pdf = generate_certificate_pdf(profile)
+                    send_certificate_email(profile, pdf)
+                    updated.append(profile.id)
+            except Exception as e:
+                errors.append({
+                    'profile_id': profile.id,
+                    'error': str(e)
+                })
+
         return Response({
-            "message": f"Successfully updated {updated_count} profiles with '{action}' status.",
-            "updated_count": updated_count
+            'updated_count': len(updated),
+            'errors': errors,
+            'message': f'Processed {len(updated)} profiles with {len(errors)} errors'
         })
-
-
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def send_kyc_reminder(self, request, pk=None):
         """

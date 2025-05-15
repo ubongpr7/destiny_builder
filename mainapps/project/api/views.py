@@ -1633,9 +1633,7 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
-    # Update filter fields to match actual model fields
-    # Remove 'priority' which doesn't exist in the model
-    filterset_fields = ['status', 'category']  # Using fields that exist in the Project model
+    filterset_fields = ['status', 'category'] 
     
     search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'updated_at', 'target_end_date', 'budget']
