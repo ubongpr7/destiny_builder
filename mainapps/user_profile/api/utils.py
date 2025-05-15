@@ -65,7 +65,7 @@ class ReferenceGenerator:
 
 
 def generate_certificate_pdf(profile, request=None):
-    verification_url = f"https://www.destinybuilders.africa/verify/profile/{profile.reference}"
+    verification_url = f"https://www.destinybuilders.africa/profile/{profile.reference}"
     
     # Generate QR code
     qr = qrcode.make(verification_url)
