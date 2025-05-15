@@ -168,6 +168,15 @@ class IsAdminUser(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.profile.is_DB_admin and request.user.is_verified
 
+class UserProfilePreviewViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint for user profiles
+    """
+    queryset = UserProfile.objects.all()
+    serializer_class = CombinedUserProfileSerializer
+    lookup_field = 'reference'
+    
+
 class UserProfileViewSet(viewsets.ModelViewSet):
     """
     API endpoint for user profiles
