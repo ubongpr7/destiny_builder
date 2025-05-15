@@ -170,11 +170,55 @@ class IsAdminUser(permissions.BasePermission):
 
 class UserProfilePreviewViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    API endpoint for user profiles
+    API endpoint for looking up user profiles by reference number
     """
-    queryset = UserProfile.objects.all()
-    serializer_class = CombinedUserProfileSerializer
+    queryset = UserProfile.objects.filter(is_kyc_verified=True, kyc_status='approved')
+    serializer_class = CombinedUserProfileSerializer 
+    permission_classes = [permissions.IsAuthenticated] 
     lookup_field = 'reference'
+    
+    def get_serializer_class(self):
+        """
+        Return different serializers based on the request
+        """
+        # Use a more limited serializer for public access
+        # if self.request.user and self.request.user.is_authenticated and self.request.user.is_staff:
+        #     return CombinedUserProfileSerializer
+        return CombinedUserProfileSerializer
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a user profile by reference number
+        """
+        reference = kwargs.get('reference')
+        
+        try:
+            # Only return verified profiles
+            profile = get_object_or_404(
+                UserProfile, 
+                reference=reference,
+                is_kyc_verified=True,
+                kyc_status='approved'
+            )
+            
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response(
+                {"error": "Invalid reference number or profile not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    def list(self, request, *args, **kwargs):
+        """
+        Override list method to prevent listing all profiles
+        """
+        return Response(
+            {"error": "Please provide a reference number to look up a specific profile."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     
 
 class UserProfileViewSet(viewsets.ModelViewSet):
