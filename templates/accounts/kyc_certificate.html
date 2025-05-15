@@ -36,56 +36,30 @@
             border: 2px solid #ddd;
             z-index: 0;
         }
-        /* Repeating watermark pattern */
-        .watermark-pattern {
+        .watermark {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 75px;
+            font-weight: bold;
+            color: rgba(200, 200, 200, 0.2); /* Very light gray */
             z-index: -1;
-            background-image: repeating-linear-gradient(
-                -45deg,
-                transparent,
-                transparent 100px,
-                rgba(0, 0, 0, 0.02) 100px,
-                rgba(0, 0, 0, 0.02) 200px
-            );
-        }
-        .watermark-text {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: -1;
-            background-image: repeating-linear-gradient(
-                -45deg,
-                transparent 0px,
-                transparent 100px,
-                rgba(0, 0, 0, 0) 100px,
-                rgba(0, 0, 0, 0) 200px
-            );
-            overflow: hidden;
-        }
-        .watermark-text::before {
-            content: "DESTINY BUILDERS";
-            position: absolute;
-            top: -50px;
-            left: -50px;
-            right: -50px;
-            bottom: -50px;
-            z-index: -1;
-            color: rgba(200, 200, 200, 0.3);
-            font-size: 16px;
-            line-height: 80px;
-            letter-spacing: 1px;
             white-space: nowrap;
-            transform: rotate(-45deg);
+            letter-spacing: 2px;
+            width: 100%;
             text-align: center;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-around;
+        }
+        /* Add a second watermark for a more professional look */
+        .watermark-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            opacity: 0.05; /* Very light */
+            z-index: -2;
         }
         .header {
             display: flex;
@@ -255,8 +229,8 @@
 <body>
     <div class="certificate-container">
         <div class="certificate-border"></div>
-        <div class="watermark-pattern"></div>
-        <div class="watermark-text"></div>
+        <div class="watermark">DESTINY BUILDERS</div>
+        <img src="{% static 'assets/images/logo.jpg' %}" class="watermark-logo" alt="Watermark Logo">
         
         <div class="header">
             <img src="{% static 'assets/images/logo.jpg' %}" class="logo-left" alt="Logo">
