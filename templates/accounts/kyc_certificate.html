@@ -232,6 +232,7 @@
                 </div>
                 <h2 class="profile-name">{{ profile.user.get_full_name }}</h2>
                 <p class="reference-number"><strong>Reference:</strong> {{ reference }}</p>
+                <p class="verification-date"><strong>Main Role:</strong> {{ role }}</p>
                 <p class="verification-date"><strong>Verified:</strong> {{ verification_date|date:"F d, Y" }}</p>
             </div>
             
@@ -240,7 +241,7 @@
                 <p class="certificate-text">
                     This certifies that the above named individual has successfully completed 
                     the Know Your Customer (KYC) verification process and has been approved 
-                    as a verified member of Destiny Builders Empowerment Foundation.
+                    as a verified member( {{ role }}) of Destiny Builders Empowerment Foundation.
                 </p>
                 
                 <div class="verification-section">
