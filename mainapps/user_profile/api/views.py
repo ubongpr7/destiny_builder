@@ -272,7 +272,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
             
-        # Return document URLs and KYC information
         return Response({
             "id_document_type": profile.id_document_type,
             "id_document_number": profile.id_document_number,
@@ -290,7 +289,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         profile = self.get_object()
         action_type = request.data.get('action')
         print(profile)
-
+        print(profile.kyc_submission_date)
         if not profile.kyc_submission_date:
             return Response({"error": "No KYC submission"}, status=400)
 
