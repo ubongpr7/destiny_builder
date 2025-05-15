@@ -82,7 +82,7 @@
         .logo-right {
             width: 120px;
             height: auto;
-            margin-left: 20px;
+            margin-right: 20px;
         }
         .content {
             display: flex;
@@ -134,10 +134,11 @@
             width: 70%;
             display: flex;
             flex-direction: column;
+            margin-right: 40px;
             justify-content: space-between;
         }
         .certificate-title {
-            font-size: 28px;
+            font-size: 25px;
             font-weight: bold;
             color: #16a085;
             text-align: center;
@@ -145,6 +146,7 @@
             letter-spacing: 2px;
             border-bottom: 2px solid #16a085;
             padding-bottom: 10px;
+
         }
         .certificate-text {
             font-size: 16px;
@@ -244,8 +246,7 @@
                 <div class="verification-section">
                     <img src="data:image/png;base64,{{ qr_base64 }}" class="qr-code" alt="QR Code">
                     <p class="verification-url">
-                        <strong>Scan QR code or visit:</strong><br>
-                        {{ verification_url }}
+                        <strong>Scan QR code to verify</strong>
                     </p>
                 </div>
                 
