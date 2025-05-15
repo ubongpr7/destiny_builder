@@ -32,7 +32,7 @@ class ReferenceGenerator:
     @staticmethod
     def get_location_codes(address):
         country_code = address.country.code2 if address.country else 'XX'
-        region_code = (address.region.code[:3] if address.region else 'XX').upper()
+        region_code = (address.region.geoname_code[:3] if address.region else 'XX').upper()
         return country_code, region_code
 
     @classmethod

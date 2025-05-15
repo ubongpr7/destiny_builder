@@ -54,6 +54,7 @@ class Command(BaseCommand):
                 name = row[1]
                 geoname_id = row[3]
                 
+                
                 self.stdout.write(f"Processing: {composite_code} - {name}", ending='\r')
 
                 country_code, region_code, subregion_code = composite_code.split('.')
