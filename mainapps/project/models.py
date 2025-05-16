@@ -34,6 +34,8 @@ class Project(models.Model):
     
     STATUS_CHOICES = [
         ('planning', 'Planning'),
+        ('submitted', 'Submitted'),
+        ('approved', 'Planning'),
         ('active', 'Active'),
         ('on_hold', 'On Hold'),
         ('completed', 'Completed'),
