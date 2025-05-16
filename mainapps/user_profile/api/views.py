@@ -174,7 +174,7 @@ class UserProfilePreviewViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = UserProfile.objects.filter(is_kyc_verified=True, kyc_status='approved')
     serializer_class = CombinedUserProfileSerializer 
-    permission_classes = [permissions.IsAuthenticated] 
+    permission_classes = [permissions.IsAuthenticated,IsAdminUser] 
     lookup_field = 'reference'
     
     def get_serializer_class(self):
