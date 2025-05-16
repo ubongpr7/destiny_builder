@@ -56,9 +56,9 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 500px;
-            height: 500px;
-            opacity: 0.05; 
+            width: 700px;
+            height: 700px;
+            opacity: 0.2; 
             z-index: -2;
         }
         .header {
@@ -74,8 +74,8 @@
             text-align: center;
         }
         .organization-name {
-            font-size: 24px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: extra-bold;
             color: #2c3e50;
             margin: 0 0 5px 0;
             letter-spacing: 1px;
@@ -91,7 +91,7 @@
             margin: 0;
         }
         .logo-left {
-            width: 120px;
+            width: 200px;
             height: auto;
             margin-right: 20px;
         }
@@ -229,23 +229,25 @@
 <body>
     <div class="certificate-container">
         <div class="certificate-border"></div>
-        <div class="watermark">DESTINY BUILDERS</div>
+        <!-- <div class="watermark">DESTINY BUILDERS</div> -->
         <img src="{% static 'assets/images/logo.jpg' %}" class="watermark-logo" alt="Watermark Logo">
         
         <div class="header">
-            <img src="{% static 'assets/images/logo.jpg' %}" class="logo-left" alt="Logo">
+            <!-- <img src="{% static 'assets/images/logo.jpg' %}" class="logo-left" alt="Logo"> -->
             <div class="organization-info">
-                <h1 class="organization-name">DESTINY BUILDERS EMPOWERMENT FOUNDATION</h1>
-                <p class="organization-tagline">Building African Destinies, Transforming Lives</p>
+                <h1 class="organization-name">DESTINY BUILDERS EMPOWERMENT INITIATIVE</h1>
+                <h3 class="organization-tagline">Building African Destinies, Transforming Lives</h3>
                 <p class="organization-website">www.destinybuilders.africa</p>
             </div>
-            <img src="{% static 'assets/images/logo.jpg' %}" class="logo-right" alt="Logo">
+            <!-- <img src="{% static 'assets/images/logo.jpg' %}" class="logo-right" alt="Logo"> -->
         </div>
         
         <div class="content">
             <div class="profile-section">
                 <div class="profile-image-container">
-                    <img src="{{ profile.profile_image.url }}" class="profile-image" alt="Profile">
+            <img src="{% static 'assets/images/logo.jpg' %}" class="profile-image" alt="Logo">
+
+                    <!-- <img src="{{ profile.profile_image.url }}" class="profile-image" alt="Profile"> -->
                 </div>
                 <h2 class="profile-name">{{ profile.user.get_full_name }}</h2>
                 <p class="reference-number"><strong>Reference:</strong> {{ reference }}</p>
