@@ -15,6 +15,8 @@ from mainapps.user_profile.api.views import BaseReferenceViewSet
 from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdateMedia
 from .serializers import *
 from django.db.models import F, Sum, Count, Avg, Case, When, DecimalField, Value, Q
+from decimal import Decimal
+
 
 User = get_user_model()
 class BaseUserViewSet(ReadOnlyModelViewSet):
