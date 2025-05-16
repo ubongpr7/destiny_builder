@@ -249,10 +249,7 @@
 
                     <!-- <img src="{{ profile.profile_image.url }}" class="profile-image" alt="Profile"> -->
                 </div>
-                <h2 class="profile-name">{{ profile.user.get_full_name }}</h2>
-                <p class="reference-number"><strong>Reference:</strong> {{ reference }}</p>
-                <p class="verification-date"><strong>Main Role:</strong> {{ role }}</p>
-                <p class="verification-date"><strong>Verified:</strong> {{ verification_date|date:"F d, Y" }}</p>
+                
             </div>
             
             <div class="certificate-section">
@@ -264,6 +261,11 @@
                 </p>
                 
                 <div class="verification-section">
+                    <h2 class="profile-name">{{ profile.user.get_full_name }}</h2>
+                    <p class="reference-number"><strong>Reference:</strong> {{ reference }}</p>
+                    <p class="verification-date"><strong>Main Role:</strong> {{ role }}</p>
+                    <p class="verification-date"><strong>Verified:</strong> {{ verification_date|date:"F d, Y" }}</p>
+                    <br>
                     <img src="data:image/png;base64,{{ qr_base64 }}" class="qr-code" alt="QR Code">
                     <p class="verification-url">
                         <strong>Scan QR code to verify</strong>
