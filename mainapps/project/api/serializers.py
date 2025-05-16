@@ -39,7 +39,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     manager = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
     officials = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), many=True, required=False)
     category = serializers.PrimaryKeyRelatedField(queryset=ProjectCategory.objects.all(), allow_null=True)
-    
+    funds_allocated = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    funds_spent = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     budget_utilization = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
     is_overbudget = serializers.SerializerMethodField()
@@ -89,6 +90,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
     """Simplified serializer for list views"""
     manager_name = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
+    
     
     class Meta:
         model = Project

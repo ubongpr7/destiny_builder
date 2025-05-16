@@ -5,6 +5,8 @@ from mptt.models import MPTTModel, TreeForeignKey
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from django.db.models import Sum
+from decimal import Decimal
 User=get_user_model()
 
 
@@ -51,10 +53,9 @@ class Project(models.Model):
     officials = models.ManyToManyField(User, help_text='Destiny builders officials responsible for the project', related_name='monitored_projects')
     start_date = models.DateField()
     target_end_date = models.DateField()
+    full_budget_disbursed = models.BooleanField(default=False)
     actual_end_date = models.DateField(blank=True, null=True)
     budget = models.DecimalField(max_digits=12, decimal_places=2)
-    funds_allocated = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    funds_spent = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planning')
     location = models.CharField(max_length=200, blank=True, null=True)
     beneficiaries = models.TextField(blank=True, null=True)
@@ -66,6 +67,35 @@ class Project(models.Model):
     
     def __str__(self):
         return self.title
+    @property
+    def funds_allocated(self):
+        """
+        Calculate funds allocated on demand:
+        - If full_budget_disbursed is True, return the full budget
+        - Otherwise, sum all reimbursed expenses
+        """
+        if self.full_budget_disbursed:
+            return self.budget
+        
+        # Sum all reimbursed expenses
+        reimbursed_sum = self.expenses.filter(status='reimbursed').aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        return reimbursed_sum
+    
+    @property
+    def funds_spent(self):
+        """
+        Calculate funds spent on demand:
+        - Sum of all reimbursed expenses
+        """
+        # Sum all reimbursed expenses
+        reimbursed_sum = self.expenses.filter(status='reimbursed').aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        return reimbursed_sum
 
 class ProjectTeamMember(models.Model):
     """Team members assigned to projects"""

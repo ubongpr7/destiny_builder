@@ -14,7 +14,7 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from mainapps.user_profile.api.views import BaseReferenceViewSet
 from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdateMedia
 from .serializers import *
-
+from django.db.models import F, Sum, Count, Avg, Case, When, DecimalField, Value, Q
 
 User = get_user_model()
 class BaseUserViewSet(ReadOnlyModelViewSet):
@@ -89,9 +89,29 @@ class ProjectViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """
-        Customize queryset based on query parameters
+        Customize queryset based on query parameters and annotate with calculated fields
         """
-        queryset = Project.objects.all()
+        # Annotate queryset with calculated fields
+        queryset = Project.objects.annotate(
+            calculated_funds_spent=Sum(
+                Case(
+                    When(expenses__status='reimbursed', then='expenses__amount'),
+                    default=Value(Decimal('0.00')),
+                    output_field=DecimalField()
+                )
+            ),
+            calculated_funds_allocated=Case(
+                When(full_budget_disbursed=True, then=F('budget')),
+                default=Sum(
+                    Case(
+                        When(expenses__status='reimbursed', then='expenses__amount'),
+                        default=Value(Decimal('0.00')),
+                        output_field=DecimalField()
+                    )
+                ),
+                output_field=DecimalField()
+            )
+        )
         
         # Filter by manager
         manager_id = self.request.query_params.get('manager_id')
@@ -127,10 +147,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if max_budget:
             queryset = queryset.filter(budget__lte=max_budget)
         
-        # Filter overbudget projects
+        # Filter overbudget projects - now using calculated_funds_spent
         overbudget = self.request.query_params.get('overbudget')
         if overbudget and overbudget.lower() == 'true':
-            queryset = queryset.filter(funds_spent__gt=F('budget'))
+            queryset = queryset.filter(calculated_funds_spent__gt=F('budget'))
         
         # Filter delayed projects
         delayed = self.request.query_params.get('delayed')
@@ -145,30 +165,29 @@ class ProjectViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Set current user as creator if not specified"""
-
         serializer.save()
-        instance= serializer.instance
-        instance.create_by=self.request.user
+        instance = serializer.instance
+        instance.created_by = self.request.user
         instance.save()
     
     @action(detail=False, methods=['get'])
     def assigned(self, request):
         """Get projects assigned to the current user (as official)"""
-        projects = Project.objects.filter(officials=request.user)
+        projects = self.get_queryset().filter(officials=request.user)
         serializer = self.get_serializer(projects, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def created(self, request):
         """Get projects created by the current user"""
-        projects = Project.objects.filter(created_by=request.user)
+        projects = self.get_queryset().filter(created_by=request.user)
         serializer = self.get_serializer(projects, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def managed(self, request):
         """Get projects managed by the current user"""
-        projects = Project.objects.filter(manager=request.user)
+        projects = self.get_queryset().filter(manager=request.user)
         serializer = self.get_serializer(projects, many=True)
         return Response(serializer.data)
     
@@ -207,13 +226,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
             data = serializer.validated_data
             notes = data.get('notes', '')
             
-            # Update budget fields if provided
+            # Update budget field if provided
             if 'budget' in data:
                 project.budget = data['budget']
-            if 'funds_allocated' in data:
-                project.funds_allocated = data['funds_allocated']
-            if 'funds_spent' in data:
-                project.funds_spent = data['funds_spent']
+            
+            # Update full_budget_disbursed flag if provided
+            if 'full_budget_disbursed' in data:
+                project.full_budget_disbursed = data['full_budget_disbursed']
             
             # Add note about budget update
             if notes:
@@ -300,39 +319,42 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=False)
     def statistics(self, request):
         """Get project statistics"""
+        # Get queryset with calculated fields
+        queryset = self.get_queryset()
+        
         # Count projects by status
-        status_counts = dict(Project.objects.values('status').annotate(count=Count('id')).values_list('status', 'count'))
+        status_counts = dict(queryset.values('status').annotate(count=Count('id')).values_list('status', 'count'))
         
         # Count projects by type
-        type_counts = dict(Project.objects.values('project_type').annotate(count=Count('id')).values_list('project_type', 'count'))
+        type_counts = dict(queryset.values('project_type').annotate(count=Count('id')).values_list('project_type', 'count'))
         
-        # Budget statistics
-        budget_stats = Project.objects.aggregate(
+        # Budget statistics - now using calculated fields
+        budget_stats = queryset.aggregate(
             total_budget=Sum('budget'),
-            total_allocated=Sum('funds_allocated'),
-            total_spent=Sum('funds_spent'),
+            total_allocated=Sum('calculated_funds_allocated'),
+            total_spent=Sum('calculated_funds_spent'),
             avg_budget=Avg('budget')
         )
         
         # Project timeline statistics
         today = timezone.now().date()
-        active_projects = Project.objects.filter(status='active').count()
-        delayed_projects = Project.objects.filter(
+        active_projects = queryset.filter(status='active').count()
+        delayed_projects = queryset.filter(
             target_end_date__lt=today,
             status__in=['planning', 'active', 'on_hold']
         ).count()
-        completed_on_time = Project.objects.filter(
+        completed_on_time = queryset.filter(
             status='completed',
             actual_end_date__lte=F('target_end_date')
         ).count()
-        completed_late = Project.objects.filter(
+        completed_late = queryset.filter(
             status='completed',
             actual_end_date__gt=F('target_end_date')
         ).count()
         
         # Projects by category
         category_counts = dict(
-            Project.objects.values('category__name')
+            queryset.values('category__name')
             .annotate(count=Count('id'))
             .values_list('category__name', 'count')
         )
