@@ -245,7 +245,7 @@
         <div class="content">
             <div class="profile-section">
                 <div class="profile-image-container">
-            <img src="{% static 'assets/images/logo.jpg' %}" class="profile-image" alt="Logo">
+                <img src="{% static 'assets/images/logo.jpg' %}" class="profile-image" alt="Logo">
 
                     <!-- <img src="{{ profile.profile_image.url }}" class="profile-image" alt="Profile"> -->
                 </div>
@@ -258,7 +258,7 @@
             <div class="certificate-section">
                 <h2 class="certificate-title">CERTIFICATE OF KYC VERIFICATION</h2>
                 <p class="certificate-text">
-                    This certifies that the above named individual has successfully completed 
+                    This certifies that {{ profile.user.get_full_name }}  has successfully completed 
                     the Know Your Customer (KYC) verification process and has been approved 
                     as a verified member ({{ role }}) of Destiny Builders Empowerment Foundation.
                 </p>
