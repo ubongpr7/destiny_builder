@@ -105,5 +105,5 @@ def send_certificate_email(profile, pdf_content):
 def get_highest_role_display(profile):
     for field, _ in ReferenceGenerator.ROLE_HIERARCHY:
         if getattr(profile, field, False):
-            return field.replace('is_', '').replace('_', ' ').title()
+            return field.replace('is_', '').replace('_', ' ').replace('DB',"Destiny Builders").title()
     return "Verified Member"
