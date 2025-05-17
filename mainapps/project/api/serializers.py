@@ -44,6 +44,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     budget_utilization = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
     is_overbudget = serializers.SerializerMethodField()
+    milestone_count = serializers.SerializerMethodField()
+    milestones_completed_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -62,7 +64,12 @@ class ProjectSerializer(serializers.ModelSerializer):
         users= User.objects.filter(id__in=[member.user.id for member in team_members])
         # Serialize the user details
         return ProjectUserSerializer(users, many=True).data
-    
+    def get_milestones_completed_count(self, obj):
+        """Get the count of completed milestones for the project"""
+        return ProjectMilestone.objects.filter(project=obj, status='completed').count()
+    def get_milestone_count(self, obj):
+        """Get the count of milestones for the project"""
+        return ProjectMilestone.objects.filter(project=obj).count()
     def get_budget_utilization(self, obj):
         """Calculate percentage of budget spent"""
         if obj.budget == 0:
