@@ -103,7 +103,6 @@ class Task(MPTTModel):
     # Manual completion percentage for tasks without subtasks
     completion_percentage_manual = models.PositiveIntegerField(
         default=0, 
-        validators=[models.validators.MaxValueValidator(100)]
     )
 
     dependencies = models.ManyToManyField(

@@ -67,10 +67,10 @@ class SimpleTaskSerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    assigned_to = UserSerializer(many=True, read_only=True)
-    created_by = UserSerializer(read_only=True)
+    assigned_to = TaskUserSerializer(many=True, read_only=True)
+    created_by = TaskUserSerializer(read_only=True)
     milestone = ProjectMilestoneSerializer(read_only=True)
-    project = SimpleProjectSerializer(read_only=True)
+    project = ProjectMinimalSerializer(read_only=True)
     dependencies = SimpleTaskSerializer(many=True, read_only=True)
     dependents = SimpleTaskSerializer(many=True, read_only=True)
     subtasks = serializers.SerializerMethodField()
@@ -174,7 +174,7 @@ class DetailedTaskSerializer(TaskSerializer):
     time_logs = TaskTimeLogSerializer(many=True, read_only=True)
     
     class Meta(TaskSerializer.Meta):
-        fields = TaskSerializer.Meta.fields + ['comments', 'attachments', 'time_logs']
+        fields = '__all__'
 
 
 class TaskTreeSerializer(serializers.ModelSerializer):
