@@ -321,42 +321,53 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=False)
     def statistics(self, request):
         """Get project statistics"""
-        # Get queryset with calculated fields
-        queryset = self.get_queryset()
+        base_queryset = self.get_queryset()
         
-        # Count projects by status
-        status_counts = dict(queryset.values('status').annotate(count=Count('id')).values_list('status', 'count'))
+        # Get full status counts (including all statuses)
+        status_counts = dict(
+            base_queryset.values('status')
+            .annotate(count=Count('id'))
+            .values_list('status', 'count')
+        )
         
-        # Count projects by type
-        type_counts = dict(queryset.values('project_type').annotate(count=Count('id')).values_list('project_type', 'count'))
+        # Create filtered queryset excluding submitted/cancelled projects
+        filtered_queryset = base_queryset.exclude(
+            status__in=['submitted', 'cancelled','rejected']
+        )
         
-        # Budget statistics - now using calculated fields
-        budget_stats = queryset.aggregate(
+        # Financial calculations using filtered queryset
+        budget_stats = filtered_queryset.aggregate(
             total_budget=Sum('budget'),
             total_allocated=Sum('calculated_funds_allocated'),
             total_spent=Sum('calculated_funds_spent'),
             avg_budget=Avg('budget')
         )
         
-        # Project timeline statistics
+        # Timeline statistics using filtered queryset
         today = timezone.now().date()
-        active_projects = queryset.filter(status='active').count()
-        delayed_projects = queryset.filter(
+        active_projects = filtered_queryset.filter(status='active').count()
+        delayed_projects = filtered_queryset.filter(
             target_end_date__lt=today,
             status__in=['planning', 'active', 'on_hold']
         ).count()
-        completed_on_time = queryset.filter(
+        completed_on_time = filtered_queryset.filter(
             status='completed',
             actual_end_date__lte=F('target_end_date')
         ).count()
-        completed_late = queryset.filter(
+        completed_late = filtered_queryset.filter(
             status='completed',
             actual_end_date__gt=F('target_end_date')
         ).count()
         
-        # Projects by category
+        # Type and category counts using filtered queryset
+        type_counts = dict(
+            filtered_queryset.values('project_type')
+            .annotate(count=Count('id'))
+            .values_list('project_type', 'count')
+        )
+        
         category_counts = dict(
-            queryset.values('category__name')
+            filtered_queryset.values('category__name')
             .annotate(count=Count('id'))
             .values_list('category__name', 'count')
         )
@@ -373,7 +384,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
             },
             'category_counts': category_counts
         })
-
 
 
 class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
