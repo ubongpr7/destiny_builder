@@ -98,6 +98,8 @@ class ProjectListSerializer(serializers.ModelSerializer):
     """Simplified serializer for list views"""
     manager_name = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
+    milestone_count = serializers.SerializerMethodField()
+    milestones_completed_count = serializers.SerializerMethodField()
     
     
     class Meta:
@@ -105,9 +107,15 @@ class ProjectListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'project_type', 'category_name',
             'manager_name', 'start_date', 'target_end_date',
-            'budget', 'status', 'location'
+            'budget', 'status', 'location', 'milestone_count',
+            'milestones_completed_count'
         ]
-    
+    def get_milestones_completed_count(self, obj):
+        """Get the count of completed milestones for the project"""
+        return ProjectMilestone.objects.filter(project=obj, status='completed').count()
+    def get_milestone_count(self, obj):
+        """Get the count of milestones for the project"""
+        return ProjectMilestone.objects.filter(project=obj).count()
     def get_manager_name(self, obj):
         if obj.manager.first_name and obj.manager.last_name:
             return f"{obj.manager.first_name} {obj.manager.last_name}"
