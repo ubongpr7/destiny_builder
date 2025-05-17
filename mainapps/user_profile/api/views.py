@@ -228,6 +228,25 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = CombinedUserProfileSerializer
     
+    # def get_queryset(self):
+    #     queryset = UserProfile.objects.all()
+        
+    #     # Filter by KYC status if requested
+    #     kyc_status = self.request.query_params.get('kyc_status', None)
+    #     if kyc_status:
+    #         queryset = queryset.filter(kyc_status=kyc_status)
+            
+    #     # Search functionality
+    #     search = self.request.query_params.get('search', None)
+    #     if search:
+    #         queryset = queryset.filter(
+    #             Q(user__first_name__icontains=search) | 
+    #             Q(user__last_name__icontains=search) | 
+    #             Q(user__email__icontains=search)
+    #         )
+            
+    #     return queryset
+    
     def get_queryset(self):
         queryset = UserProfile.objects.all()
         
@@ -235,6 +254,32 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         kyc_status = self.request.query_params.get('kyc_status', None)
         if kyc_status:
             queryset = queryset.filter(kyc_status=kyc_status)
+            
+        # Geographic filtering
+        country_id = self.request.query_params.get('country_id', None)
+        region_id = self.request.query_params.get('region_id', None)
+        subregion_id = self.request.query_params.get('subregion_id', None)
+        
+        # Filter by country if provided
+        if country_id:
+            queryset = queryset.filter(address__country_id=country_id)
+            
+        # Filter by region if provided (only if country is also provided)
+        if region_id and country_id:
+            queryset = queryset.filter(address__region_id=region_id)
+            
+        # Filter by subregion if provided (only if region is also provided)
+        if subregion_id and region_id:
+            queryset = queryset.filter(address__subregion_id=subregion_id)
+        
+        # Geographic name search
+        geo_search = self.request.query_params.get('geo_search', None)
+        if geo_search:
+            queryset = queryset.filter(
+                Q(address__country__name__icontains=geo_search) |
+                Q(address__region__name__icontains=geo_search) |
+                Q(address__subregion__name__icontains=geo_search)
+            )
             
         # Search functionality
         search = self.request.query_params.get('search', None)
