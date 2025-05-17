@@ -55,7 +55,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             'start_date', 'target_end_date', 'actual_end_date',
             'budget', 'funds_allocated', 'funds_spent', 'budget_utilization', 'is_overbudget',
             'status', 'location', 'beneficiaries', 'success_criteria', 'risks', 'notes',
-            'created_at', 'updated_at', 'days_remaining', 'team_members'
+            'created_at', 'updated_at', 'days_remaining', 'team_members', 'milestone_count',
+            'milestones_completed_count'
         ]
         read_only_fields = ['created_at', 'updated_at']
     def get_team_members(self, obj):
