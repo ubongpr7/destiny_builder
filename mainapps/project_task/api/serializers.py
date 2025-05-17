@@ -1,101 +1,210 @@
-
-
-from ..models import Task
-from mainapps.accounts.api.serializers import MyUserSerializer
 from rest_framework import serializers
+from ..models import Task, TaskComment, TaskAttachment, TaskTimeLog, TaskStatus, TaskPriority, TaskType
 from django.contrib.auth import get_user_model
+from mainapps.project.api.serializers import ProjectMilestoneSerializer, ProjectMinimalSerializer
+from mainapps.project.models import ProjectMilestone
 
-from mainapps.project.models import Project, ProjectMilestone
-User= get_user_model()
+User = get_user_model()
 
-class MilestoneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ProjectMilestone
-        fields = ['id', 'title', 'description', 'project', 'due_date', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
 
-class TaskDependencySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = ['id', 'title', 'status']
-
-class TaskAssigneeSerializer(serializers.ModelSerializer):
+class TaskUserSerializer(serializers.ModelSerializer):
+    profile_image = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name', 'email']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'profile_image']
+        read_only_fields = ['profile_image']
+    def get_profile_image(self, obj):
+        if obj.profile:
+            return obj.profile.profile_image.url if obj.profile.profile_image else None
+
+
+
+class TaskAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by = TaskUserSerializer(read_only=True)
+    
+    class Meta:
+        model = TaskAttachment
+        fields = '__all__'
+        read_only_fields = ['uploaded_by', 'uploaded_at']
+        
+    def create(self, validated_data):
+        validated_data['uploaded_by'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class TaskTimeLogSerializer(serializers.ModelSerializer):
+    user = TaskUserSerializer(read_only=True)
+    
+    class Meta:
+        model = TaskTimeLog
+        fields = '__all__'
+        read_only_fields = ['user', 'logged_at']
+        
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class TaskCommentSerializer(serializers.ModelSerializer):
+    user = TaskUserSerializer(read_only=True)
+    
+    class Meta:
+        model = TaskComment
+        fields = '__all__'
+        read_only_fields = ['user', 'created_at', 'updated_at']
+        
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class SimpleTaskSerializer(serializers.ModelSerializer):
+    """Simplified Task serializer for nested relationships"""
+    class Meta:
+        model = Task
+        fields = ['id', 'title', 'status', 'priority', 'due_date', 'completion_percentage']
+
 
 class TaskSerializer(serializers.ModelSerializer):
-    assigned_to = TaskAssigneeSerializer(many=True, read_only=True)
-    created_by = MyUserSerializer(read_only=True)
-    is_completed = serializers.BooleanField(read_only=True)
+    assigned_to = UserSerializer(many=True, read_only=True)
+    created_by = UserSerializer(read_only=True)
+    milestone = ProjectMilestoneSerializer(read_only=True)
+    project = SimpleProjectSerializer(read_only=True)
+    dependencies = SimpleTaskSerializer(many=True, read_only=True)
+    dependents = SimpleTaskSerializer(many=True, read_only=True)
+    subtasks = serializers.SerializerMethodField()
+    parent_details = SimpleTaskSerializer(source='parent', read_only=True)
+    comments_count = serializers.IntegerField(read_only=True)
+    attachments_count = serializers.IntegerField(read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
-    has_subtasks = serializers.BooleanField(read_only=True)
-    completion_percentage = serializers.IntegerField(read_only=True)
     is_unblocked = serializers.BooleanField(read_only=True)
+    days_until_due = serializers.IntegerField(read_only=True)
+    time_spent_formatted = serializers.CharField(read_only=True)
     
-    # For write operations
+    # IDs for write operations
+    milestone_id = serializers.PrimaryKeyRelatedField(
+        queryset=ProjectMilestone.objects.all(),
+        source='milestone',
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
     assigned_to_ids = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),
-        write_only=True,
-        many=True,
+        source='assigned_to',
         required=False,
-        source='assigned_to'
+        many=True,
+        write_only=True
+    )
+    dependency_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.all(),
+        source='dependencies',
+        required=False,
+        many=True,
+        write_only=True
+    )
+    parent_id = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.all(),
+        source='parent',
+        required=False,
+        allow_null=True,
+        write_only=True
     )
     
     class Meta:
         model = Task
-        fields = [
-            'id', 'title', 'description', 'project', 'milestone', 'parent',
-            'assigned_to', 'assigned_to_ids', 'created_by', 'status', 'priority',
-            'start_date', 'due_date', 'completion_date', 'estimated_hours',
-            'actual_hours', 'notes', 'created_at', 'updated_at',
-            'is_completed', 'is_overdue', 'has_subtasks', 'completion_percentage',
-            'is_unblocked', 'level'
+        fields = '__all__'
+        read_only_fields = [
+            'created_at', 'updated_at', 'is_overdue', 'is_unblocked',
+            'days_until_due', 'time_spent_formatted', 'completion_percentage',
+            'project'  # Project is now read-only
         ]
-        read_only_fields = ['created_at', 'updated_at', 'created_by', 'level']
-
-class TaskDetailSerializer(TaskSerializer):
-    subtasks = serializers.SerializerMethodField()
-    dependencies = TaskDependencySerializer(many=True, read_only=True)
-    blocked_by = TaskDependencySerializer(many=True, read_only=True)
-    milestone = MilestoneSerializer(read_only=True)
+        
+    def get_subtasks(self, obj):
+        """Get direct subtasks only"""
+        if obj.level == 0:  # Only for top-level tasks
+            subtasks = obj.get_children()
+            return SimpleTaskSerializer(subtasks, many=True).data
+        return []
     
-    # For write operations
-    dependency_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Task.objects.all(),
-        write_only=True,
-        many=True,
-        required=False,
-        source='dependencies'
-    )
+    def validate(self, data):
+        # Validate start_date and due_date
+        start_date = data.get('start_date')
+        due_date = data.get('due_date')
+        
+        if start_date and due_date and start_date > due_date:
+            raise serializers.ValidationError("Start date cannot be after due date")
+        
+        # Validate recurrence_end_date
+        is_recurring = data.get('is_recurring', False)
+        recurrence_end_date = data.get('recurrence_end_date')
+        
+        if is_recurring and recurrence_end_date and start_date and recurrence_end_date < start_date:
+            raise serializers.ValidationError("Recurrence end date cannot be before start date")
+        
+        return data
+        
+    def create(self, validated_data):
+        assigned_to = validated_data.pop('assigned_to', [])
+        dependencies = validated_data.pop('dependencies', [])
+        
+        # Set project based on milestone if provided
+        milestone = validated_data.get('milestone')
+        if milestone and not validated_data.get('project'):
+            validated_data['project'] = milestone.project
+            
+        # Set created_by from context
+        validated_data['created_by'] = self.context['request'].user
+        
+        task = Task.objects.create(**validated_data)
+        
+        if assigned_to:
+            task.assigned_to.set(assigned_to)
+            
+        if dependencies:
+            task.dependencies.set(dependencies)
+            
+        return task
+
+class DetailedTaskSerializer(TaskSerializer):
+    """Detailed Task serializer with comments and attachments"""
+    comments = TaskCommentSerializer(many=True, read_only=True)
+    attachments = TaskAttachmentSerializer(many=True, read_only=True)
+    time_logs = TaskTimeLogSerializer(many=True, read_only=True)
     
     class Meta(TaskSerializer.Meta):
-        fields = TaskSerializer.Meta.fields + ['subtasks', 'dependencies', 'dependency_ids', 'blocked_by']
-    
-    def get_subtasks(self, obj):
-        # Get direct children only
-        children = obj.get_children()
-        return TaskSerializer(children, many=True).data
+        fields = TaskSerializer.Meta.fields + ['comments', 'attachments', 'time_logs']
 
-class ProjectSerializer(serializers.ModelSerializer):
-    created_by = MyUserSerializer(read_only=True)
+
+class TaskTreeSerializer(serializers.ModelSerializer):
+    """Serializer for hierarchical task view"""
+    children = serializers.SerializerMethodField()
+    assigned_to = TaskUserSerializer(many=True, read_only=True)
     
     class Meta:
-        model = Project
+        model = Task
         fields = [
-            'id', 'title', 'description', 'start_date', 'end_date',
-            'created_by', 'created_at', 'updated_at'
+            'id', 'title', 'status', 'priority', 'due_date', 
+            'completion_percentage', 'assigned_to', 'children'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'created_by']
+        
+    def get_children(self, obj):
+        children = obj.get_children()
+        return TaskTreeSerializer(children, many=True).data
 
-class ProjectDetailSerializer(ProjectSerializer):
-    tasks = serializers.SerializerMethodField()
-    milestones = MilestoneSerializer(many=True, read_only=True)
+
+class TaskStatisticsSerializer(serializers.Serializer):
+    """Serializer for task statistics"""
+    total = serializers.IntegerField()
+    completed = serializers.IntegerField()
+    in_progress = serializers.IntegerField()
+    todo = serializers.IntegerField()
+    blocked = serializers.IntegerField()
+    overdue = serializers.IntegerField()
+    completion_rate = serializers.IntegerField()
     
-    class Meta(ProjectSerializer.Meta):
-        fields = ProjectSerializer.Meta.fields + ['tasks', 'milestones']
-    
-    def get_tasks(self, obj):
-        # Get only root tasks (no parent)
-        root_tasks = obj.tasks.filter(parent__isnull=True)
-        return TaskSerializer(root_tasks, many=True).data
+    # Additional statistics
+    by_priority = serializers.DictField(child=serializers.IntegerField())
+    by_type = serializers.DictField(child=serializers.IntegerField())
+    recent_activity = serializers.ListField(child=serializers.DictField())
