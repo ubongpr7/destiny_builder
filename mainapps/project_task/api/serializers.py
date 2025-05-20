@@ -82,7 +82,6 @@ class TaskSerializer(serializers.ModelSerializer):
     days_until_due = serializers.IntegerField(read_only=True)
     time_spent_formatted = serializers.CharField(read_only=True)
     
-    # IDs for write operations
     milestone_id = serializers.PrimaryKeyRelatedField(
         queryset=ProjectMilestone.objects.all(),
         source='milestone',

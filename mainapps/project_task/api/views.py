@@ -247,6 +247,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         queryset = queryset.order_by(ordering)
         
         serializer = self.get_serializer(queryset, many=True)
+        print(serializer.data)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
