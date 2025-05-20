@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from mainapps.inventory.models import Asset
@@ -7,6 +8,9 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from django.db.models import Sum
 from decimal import Decimal
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+
 User=get_user_model()
 
 
@@ -233,23 +237,118 @@ class DailyProjectUpdate(models.Model):
     def __str__(self):
         return f"{self.project.title} - {self.date}"
 
-class ProjectUpdateMedia(models.Model):
-    """Media files attached to daily project updates"""
+
+
+
+class BaseMedia(models.Model):
+    """Abstract base model for all media files"""
     MEDIA_TYPE_CHOICES = [
         ('image', 'Image'),
         ('video', 'Video'),
         ('document', 'Document'),
         ('audio', 'Audio'),
+        ('blueprint', 'Blueprint'),
+        ('contract', 'Contract'),
+        ('diagram', 'Diagram'),
+        ('report', 'Report'),
     ]
     
-    update = models.ForeignKey(DailyProjectUpdate, on_delete=models.CASCADE, related_name='media_files')
     media_type = models.CharField(max_length=20, choices=MEDIA_TYPE_CHOICES)
-    file = models.FileField(upload_to='project_updates/')
+    file = models.FileField(upload_to='media/', null=True, blank=True)
+    title = models.CharField(max_length=255,null=True, blank=True)
+    description = models.TextField(blank=True, null=True)
     caption = models.CharField(max_length=255, blank=True, null=True)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='%(class)s_uploads')
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        abstract = True
+        ordering = ['-uploaded_at']
+    def get_upload_path(instance, filename):
+        """Dynamic path based on the model class and related object"""
+        model_name = instance.__class__.__name__.lower()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return f'{model_name}/{timestamp}/{filename}'
+
+class ProjectMedia(BaseMedia):
+    """Media files attached directly to projects"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='media_files')
+    is_featured = models.BooleanField(default=False, help_text="Featured media appears prominently in project views")
+    
+    class Meta:
+        verbose_name_plural = "Project Media"
+        ordering = ['-is_featured', '-uploaded_at']
     
     def __str__(self):
-        return f"{self.update.project.title} - {self.update.date} - {self.media_type}"
+        return f"{self.project.title} - {self.title}"
+    
+    
+class MilestoneMedia(BaseMedia):
+    """Media files attached to project milestones"""
+    milestone = models.ForeignKey('ProjectMilestone', on_delete=models.CASCADE, related_name='media_files')
+    represents_deliverable = models.BooleanField(default=False, help_text="This media represents a milestone deliverable")
+    
+    class Meta:
+        verbose_name_plural = "Milestone Media"
+        ordering = ['-represents_deliverable', '-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.milestone.title} - {self.title}"
+    
+    
+class ProjectUpdateMedia(BaseMedia):
+    """Media files attached to daily project updates"""
+    update = models.ForeignKey('DailyProjectUpdate', on_delete=models.CASCADE, related_name='media_files')
+    
+    class Meta:
+        verbose_name_plural = "Project Update Media"
+    
+    def __str__(self):
+        return f"{self.update.project.title} - {self.update.date} - {self.title}"
+    
+class GenericMedia(models.Model):
+    """Generic media that can be attached to any model"""
+    MEDIA_TYPE_CHOICES = [
+        ('image', 'Image'),
+        ('video', 'Video'),
+        ('document', 'Document'),
+        ('audio', 'Audio'),
+        ('blueprint', 'Blueprint'),
+        ('contract', 'Contract'),
+        ('diagram', 'Diagram'),
+        ('report', 'Report'),
+    ]
+    
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    
+    media_type = models.CharField(max_length=20, choices=MEDIA_TYPE_CHOICES)
+    file = models.FileField(upload_to='generic_media/')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    caption = models.CharField(max_length=255, blank=True, null=True)
+    is_featured = models.BooleanField(default=False)
+    represents_deliverable = models.BooleanField(default=False)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='uploaded_media')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Media Files"
+        ordering = ['-is_featured', '-uploaded_at']
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+    
+    def __str__(self):
+        return f"{self.content_object} - {self.title}"
+    
+    def get_upload_path(instance, filename):
+        """Dynamic path based on the related object"""
+        ct = instance.content_type
+        model = ct.model_class()._meta.model_name
+        return f'{model}/{instance.object_id}/{filename}'
 
 class ProjectExpense(models.Model):
     """Expenses incurred during project execution"""

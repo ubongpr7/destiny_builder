@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
 from mainapps.inventory.models import Asset
-from ..models import DailyProjectUpdate, Project, ProjectAsset, ProjectCategory, ProjectExpense, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
+from ..models import DailyProjectUpdate, MilestoneMedia, Project, ProjectAsset, ProjectCategory, ProjectExpense, ProjectMedia, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
 from django.utils import timezone
 User = get_user_model()
 
@@ -335,11 +335,14 @@ class ProjectMilestoneCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 
+
+
 class ProjectUpdateMinimalSerializer(serializers.ModelSerializer):
     """Minimal serializer for DailyProjectUpdate references"""
     class Meta:
         model = DailyProjectUpdate
         fields = ['id', 'date', 'summary']
+
 
 class ProjectExpenseSerializer(serializers.ModelSerializer):
     """Serializer for ProjectExpense model with related data"""
@@ -412,6 +415,8 @@ class ExpenseReimbursementSerializer(serializers.Serializer):
     """Serializer for marking expenses as reimbursed"""
     notes = serializers.CharField(required=False, allow_blank=True)
     reimbursement_date = serializers.DateField(default=timezone.now().date())
+
+
 
 
 
@@ -503,6 +508,130 @@ class ProjectUpdateMediaSerializer(serializers.ModelSerializer):
             return self.context['request'].build_absolute_uri(obj.file.url)
         return None
 
+class ProjectUpdateMediaCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating ProjectUpdateMedia"""
+    
+    class Meta:
+        model = ProjectUpdateMedia
+        fields = [
+            'update', 'media_type', 'file', 'caption'
+        ]
+    
+    def validate(self, data):
+        """
+        Validate media data
+        """
+        # Validate file type based on media_type
+        media_type = data.get('media_type')
+        file = data.get('file')
+        
+        if media_type and file:
+            file_extension = file.name.split('.')[-1].lower()
+            
+            if media_type == 'image' and file_extension not in ['jpg', 'jpeg', 'png', 'gif']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid image format. Supported formats: jpg, jpeg, png, gif."}
+                )
+            elif media_type == 'video' and file_extension not in ['mp4', 'mov', 'avi', 'wmv']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid video format. Supported formats: mp4, mov, avi, wmv."}
+                )
+            elif media_type == 'document' and file_extension not in ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid document format. Supported formats: pdf, doc, docx, xls, xlsx, ppt, pptx, txt."}
+                )
+            elif media_type == 'audio' and file_extension not in ['mp3', 'wav', 'ogg']:
+                raise serializers.ValidationError(
+                    {"file": "Invalid audio format. Supported formats: mp3, wav, ogg."}
+                )
+        
+        return data
+
+
+
+class BaseMediaSerializer(serializers.ModelSerializer):
+    """Base serializer for all media models"""
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        abstract = True
+        fields = [
+            'id', 'media_type', 'file', 'file_url', 'title',
+            'description', 'caption', 'uploaded_by', 'uploaded_at', 'updated_at'
+        ]
+        read_only_fields = ['uploaded_at', 'updated_at', 'uploaded_by']
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            return self.context['request'].build_absolute_uri(obj.file.url)
+        return None
+
+class BaseMediaCreateSerializer(serializers.ModelSerializer):
+    """Base serializer for creating media objects"""
+    
+    class Meta:
+        abstract = True
+        fields = [
+            'media_type', 'file', 'title', 'description', 'caption'
+        ]
+    
+    def validate(self, data):
+        """Validate media data based on media_type"""
+        media_type = data.get('media_type')
+        file = data.get('file')
+        
+        if media_type and file:
+            file_extension = file.name.split('.')[-1].lower()
+            
+            allowed_extensions = {
+                'image': ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
+                'video': ['mp4', 'mov', 'avi', 'wmv', 'webm', 'mkv'],
+                'document': ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md'],
+                'audio': ['mp3', 'wav', 'ogg', 'aac', 'flac'],
+                'blueprint': ['pdf', 'dwg', 'dxf', 'svg'],
+                'contract': ['pdf', 'doc', 'docx', 'txt'],
+                'diagram': ['pdf', 'svg', 'png', 'jpg', 'jpeg'],
+                'report': ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']
+            }
+            
+            if media_type in allowed_extensions and file_extension not in allowed_extensions[media_type]:
+                raise serializers.ValidationError({
+                    "file": f"Invalid {media_type} format. Supported formats: {', '.join(allowed_extensions[media_type])}."
+                })
+        
+        return data
+    
+    def create(self, validated_data):
+        """Add the current user as uploaded_by"""
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['uploaded_by'] = request.user
+        return super().create(validated_data)
+
+class ProjectMediaSerializer(BaseMediaSerializer):
+    class Meta(BaseMediaSerializer.Meta):
+        model = ProjectMedia
+        fields='__all__'
+
+class ProjectMediaCreateSerializer(BaseMediaCreateSerializer):
+    class Meta(BaseMediaCreateSerializer.Meta):
+        model = ProjectMedia
+        fields='__all__'
+
+
+# Milestone Media Serializers
+class MilestoneMediaSerializer(BaseMediaSerializer):
+    class Meta(BaseMediaSerializer.Meta):
+        model = MilestoneMedia
+        fields = BaseMediaSerializer.Meta.fields + ['milestone', 'represents_deliverable']
+
+class MilestoneMediaCreateSerializer(BaseMediaCreateSerializer):
+    class Meta(BaseMediaCreateSerializer.Meta):
+        model = MilestoneMedia
+        fields = BaseMediaCreateSerializer.Meta.fields + ['milestone', 'represents_deliverable']
+
+
+
 class DailyProjectUpdateSerializer(serializers.ModelSerializer):
     """Serializer for DailyProjectUpdate model with related data"""
     submitted_by_details = ProjectUserSerializer(source='submitted_by', read_only=True)
@@ -560,45 +689,6 @@ class DailyProjectUpdateCreateUpdateSerializer(serializers.ModelSerializer):
             if DailyProjectUpdate.objects.filter(project=project, date=date).exists():
                 raise serializers.ValidationError(
                     {"date": "An update for this project on this date already exists."}
-                )
-        
-        return data
-
-class ProjectUpdateMediaCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating ProjectUpdateMedia"""
-    
-    class Meta:
-        model = ProjectUpdateMedia
-        fields = [
-            'update', 'media_type', 'file', 'caption'
-        ]
-    
-    def validate(self, data):
-        """
-        Validate media data
-        """
-        # Validate file type based on media_type
-        media_type = data.get('media_type')
-        file = data.get('file')
-        
-        if media_type and file:
-            file_extension = file.name.split('.')[-1].lower()
-            
-            if media_type == 'image' and file_extension not in ['jpg', 'jpeg', 'png', 'gif']:
-                raise serializers.ValidationError(
-                    {"file": "Invalid image format. Supported formats: jpg, jpeg, png, gif."}
-                )
-            elif media_type == 'video' and file_extension not in ['mp4', 'mov', 'avi', 'wmv']:
-                raise serializers.ValidationError(
-                    {"file": "Invalid video format. Supported formats: mp4, mov, avi, wmv."}
-                )
-            elif media_type == 'document' and file_extension not in ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt']:
-                raise serializers.ValidationError(
-                    {"file": "Invalid document format. Supported formats: pdf, doc, docx, xls, xlsx, ppt, pptx, txt."}
-                )
-            elif media_type == 'audio' and file_extension not in ['mp3', 'wav', 'ogg']:
-                raise serializers.ValidationError(
-                    {"file": "Invalid audio format. Supported formats: mp3, wav, ogg."}
                 )
         
         return data

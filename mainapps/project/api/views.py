@@ -19,6 +19,7 @@ from decimal import Decimal
 
 
 User = get_user_model()
+
 class BaseUserViewSet(ReadOnlyModelViewSet):
     """
     Base Read-only ViewSet for users with dynamic profile filters
@@ -1705,3 +1706,205 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 
+
+class BaseMediaViewSet(viewsets.ModelViewSet):
+    """Base ViewSet for all media models"""
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'description', 'caption', 'media_type']
+    ordering_fields = ['uploaded_at', 'updated_at']
+    ordering = ['-uploaded_at']
+    def get_serializer_class(self):
+        """Use different serializers for different actions"""
+        if self.action in ['create', 'update', 'partial_update']:
+            return self.create_serializer_class
+        return self.serializer_class
+    
+    @action(detail=False, methods=['get'])
+    def by_media_type(self, request):
+        """Get media files filtered by media_type"""
+        media_type = request.query_params.get('media_type')
+        if not media_type:
+            return Response(
+                {"detail": "media_type parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        queryset = self.filter_queryset(self.get_queryset().filter(media_type=media_type))
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def images(self, request):
+        """Get all image media files"""
+        queryset = self.filter_queryset(self.get_queryset().filter(media_type='image'))
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def videos(self, request):
+        """Get all video media files"""
+        queryset = self.filter_queryset(self.get_queryset().filter(media_type='video'))
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def documents(self, request):
+        """Get all document media files"""
+        queryset = self.filter_queryset(self.get_queryset().filter(media_type='document'))
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+class ProjectMediaViewSet(BaseMediaViewSet):
+    """ViewSet for managing project media files"""
+    serializer_class = ProjectMediaSerializer
+    create_serializer_class = ProjectMediaCreateSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on query parameters"""
+        queryset = ProjectMedia.objects.all()
+        
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        is_featured = self.request.query_params.get('is_featured')
+        if is_featured is not None:
+            is_featured = is_featured.lower() == 'true'
+            queryset = queryset.filter(is_featured=is_featured)
+            
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request):
+        """Get all media files for a specific project"""
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        queryset = self.filter_queryset(ProjectMedia.objects.filter(project=project))
+        
+        media_type = request.query_params.get('media_type')
+        if media_type:
+            queryset = queryset.filter(media_type=media_type)
+            
+        is_featured = request.query_params.get('is_featured')
+        if is_featured is not None:
+            is_featured = is_featured.lower() == 'true'
+            queryset = queryset.filter(is_featured=is_featured)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def featured(self, request):
+        """Get featured media files"""
+        queryset = self.filter_queryset(ProjectMedia.objects.filter(is_featured=True))
+        
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+class MilestoneMediaViewSet(BaseMediaViewSet):
+    """ViewSet for managing milestone media files"""
+    serializer_class = MilestoneMediaSerializer
+    create_serializer_class = MilestoneMediaCreateSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on query parameters"""
+        queryset = MilestoneMedia.objects.all()
+        
+        # Filter by milestone if milestone_id is provided
+        milestone_id = self.request.query_params.get('milestone_id')
+        if milestone_id:
+            queryset = queryset.filter(milestone_id=milestone_id)
+            
+        # Filter by project if project_id is provided
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(milestone__project_id=project_id)
+            
+        # Filter by deliverable status if provided
+        represents_deliverable = self.request.query_params.get('represents_deliverable')
+        if represents_deliverable is not None:
+            represents_deliverable = represents_deliverable.lower() == 'true'
+            queryset = queryset.filter(represents_deliverable=represents_deliverable)
+            
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def by_milestone(self, request):
+        """Get all media files for a specific milestone"""
+        milestone_id = request.query_params.get('milestone_id')
+        if not milestone_id:
+            return Response(
+                {"detail": "milestone_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        milestone = get_object_or_404(ProjectMilestone, id=milestone_id)
+        queryset = self.filter_queryset(MilestoneMedia.objects.filter(milestone=milestone))
+        
+        # Apply additional filters
+        media_type = request.query_params.get('media_type')
+        if media_type:
+            queryset = queryset.filter(media_type=media_type)
+            
+        represents_deliverable = request.query_params.get('represents_deliverable')
+        if represents_deliverable is not None:
+            represents_deliverable = represents_deliverable.lower() == 'true'
+            queryset = queryset.filter(represents_deliverable=represents_deliverable)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_project(self, request):
+        """Get all milestone media files for a specific project"""
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        project = get_object_or_404(Project, id=project_id)
+        queryset = self.filter_queryset(MilestoneMedia.objects.filter(milestone__project=project))
+        
+        # Apply additional filters
+        media_type = request.query_params.get('media_type')
+        if media_type:
+            queryset = queryset.filter(media_type=media_type)
+            
+        represents_deliverable = request.query_params.get('represents_deliverable')
+        if represents_deliverable is not None:
+            represents_deliverable = represents_deliverable.lower() == 'true'
+            queryset = queryset.filter(represents_deliverable=represents_deliverable)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def deliverables(self, request):
+        """Get media files that represent deliverables"""
+        queryset = self.filter_queryset(MilestoneMedia.objects.filter(represents_deliverable=True))
+        
+        # Filter by milestone if provided
+        milestone_id = request.query_params.get('milestone_id')
+        if milestone_id:
+            queryset = queryset.filter(milestone_id=milestone_id)
+            
+        # Filter by project if provided
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(milestone__project_id=project_id)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

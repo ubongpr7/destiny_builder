@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    AllUserViewSet, CEOUserViewSet, ProjectExpenseViewSet, ProjectViewSet, ProjectCategoryViewSet, 
+    AllUserViewSet, CEOUserViewSet, MilestoneMediaViewSet, ProjectExpenseViewSet, ProjectMediaViewSet, ProjectViewSet, ProjectCategoryViewSet, 
     DailyProjectUpdateViewSet, ProjectUpdateMediaViewSet,
     ProjectTeamMemberViewSet,ProjectMilestoneViewSet, UserRelatedProjectsViewSet, get_project_team_members, project_model_info
 )
@@ -20,7 +20,10 @@ router.register(r'expenses', ProjectExpenseViewSet, basename='expenses')
 router.register(r'updates', DailyProjectUpdateViewSet, basename='update')
 router.register(r'media', ProjectUpdateMediaViewSet, basename='media')
 router.register(r'user-projects', UserRelatedProjectsViewSet, basename='user-projects')
-# 
+router.register(r'project-media', ProjectMediaViewSet, basename='project-media')
+router.register(r'milestone-media', MilestoneMediaViewSet, basename='milestone-media')
+
+
 urlpatterns = [
     path('', include(router.urls)),
     path('projects/<int:project_id>/team/', 
