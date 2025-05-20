@@ -122,18 +122,32 @@ class TaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         task = self.get_object()
-        task.mark_completed()
-        return Response({'status': 'task completed'})
+        
+        cascade = request.data.get('cascade', True)
+        if isinstance(cascade, str):
+            cascade = cascade.lower() == 'true'
+        
+        task.update_status(TaskStatus.COMPLETED, cascade=cascade)
+        
+        serializer = self.get_serializer(task)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         task = self.get_object()
-        status = request.data.get('status')
-        if status not in dict(TaskStatus.choices).keys():
+        status_value = request.data.get('status')
+        
+        if status_value not in dict(TaskStatus.choices).keys():
             return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
         
-        task.update_status(status)
-        return Response({'status': 'task status updated'})
+        cascade = request.data.get('cascade', True)
+        if isinstance(cascade, str):
+            cascade = cascade.lower() == 'true'
+        
+        task.update_status(status_value, cascade=cascade)
+        
+        serializer = self.get_serializer(task)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def update_percentage(self, request, pk=None):
