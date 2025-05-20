@@ -626,7 +626,11 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
         if obj.status == 'completed':
             return 100
         else:
-            return 0
+            completed_tasks=obj.tasks.filter(status='completed').count()
+            total_tasks=obj.tasks.count()
+            if total_tasks == 0:
+                return 0
+            return round((completed_tasks / total_tasks) * 100, 2)
     def get_is_overbudget(self, obj):
         """Check if project is over budget"""
         return obj.funds_spent > obj.budget
