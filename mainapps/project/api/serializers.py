@@ -628,6 +628,7 @@ class UserProjectRoleSerializer(serializers.ModelSerializer):
         else:
             completed_tasks=obj.tasks.filter(status='completed').count()
             total_tasks=obj.tasks.count()
+            print(completed_tasks, total_tasks)
             if total_tasks == 0:
                 return 0
             return round((completed_tasks / total_tasks) * 100, 2)
