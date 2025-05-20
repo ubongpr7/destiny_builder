@@ -186,22 +186,21 @@ class TaskViewSet(viewsets.ModelViewSet):
         
         return Response(TaskTimeLogSerializer(time_log).data)
     
+
     @action(detail=False, methods=['get'])
     def by_milestone(self, request):
         milestone_id = request.query_params.get('milestone_id')
         if not milestone_id:
             return Response({'error': 'milestone_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Start with base queryset filtered by milestone
         queryset = Task.objects.filter(milestone_id=milestone_id)
         
-        # Apply additional filters from query params
-        # Status filter
+        queryset = queryset.filter(parent__isnull=True)
+        
         status = request.query_params.get('status')
         if status:
             queryset = queryset.filter(status=status)
         
-        # Priority filter
         priority = request.query_params.get('priority')
         if priority:
             queryset = queryset.filter(priority=priority)
@@ -229,14 +228,13 @@ class TaskViewSet(viewsets.ModelViewSet):
                 status__in=[TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED]
             )
         
-        # Completed tasks filter
         is_completed = request.query_params.get('isCompleted')
         if is_completed == 'true':
             queryset = queryset.filter(status=TaskStatus.COMPLETED)
         elif is_completed == 'false':
             queryset = queryset.exclude(status=TaskStatus.COMPLETED)
         
-        # Annotate with counts (same as in get_queryset)
+
         queryset = queryset.annotate(
             comments_count=Count('comments', distinct=True),
             attachments_count=Count('attachments', distinct=True)
@@ -247,8 +245,70 @@ class TaskViewSet(viewsets.ModelViewSet):
         queryset = queryset.order_by(ordering)
         
         serializer = self.get_serializer(queryset, many=True)
-        print(serializer.data)
         return Response(serializer.data)
+
+    # @action(detail=False, methods=['get'])
+    # def by_milestone(self, request):
+    #     milestone_id = request.query_params.get('milestone_id')
+    #     if not milestone_id:
+    #         return Response({'error': 'milestone_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    #     # Start with base queryset filtered by milestone
+    #     queryset = Task.objects.filter(milestone_id=milestone_id)
+        
+    #     # Apply additional filters from query params
+    #     # Status filter
+    #     status = request.query_params.get('status')
+    #     if status:
+    #         queryset = queryset.filter(status=status)
+        
+    #     # Priority filter
+    #     priority = request.query_params.get('priority')
+    #     if priority:
+    #         queryset = queryset.filter(priority=priority)
+        
+    #     # Task type filter
+    #     task_type = request.query_params.get('taskType')
+    #     if task_type:
+    #         queryset = queryset.filter(task_type=task_type)
+        
+    #     # Due date range filters
+    #     due_date_start = request.query_params.get('dueDateStart')
+    #     if due_date_start:
+    #         queryset = queryset.filter(due_date__gte=due_date_start)
+        
+    #     due_date_end = request.query_params.get('dueDateEnd')
+    #     if due_date_end:
+    #         queryset = queryset.filter(due_date__lte=due_date_end)
+        
+    #     # Overdue tasks filter
+    #     is_overdue = request.query_params.get('isOverdue')
+    #     if is_overdue == 'true':
+    #         today = timezone.now().date()
+    #         queryset = queryset.filter(
+    #             due_date__lt=today,
+    #             status__in=[TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED]
+    #         )
+        
+    #     # Completed tasks filter
+    #     is_completed = request.query_params.get('isCompleted')
+    #     if is_completed == 'true':
+    #         queryset = queryset.filter(status=TaskStatus.COMPLETED)
+    #     elif is_completed == 'false':
+    #         queryset = queryset.exclude(status=TaskStatus.COMPLETED)
+        
+    #     # Annotate with counts (same as in get_queryset)
+    #     queryset = queryset.annotate(
+    #         comments_count=Count('comments', distinct=True),
+    #         attachments_count=Count('attachments', distinct=True)
+    #     )
+        
+    #     # Apply ordering
+    #     ordering = request.query_params.get('ordering', '-created_at')
+    #     queryset = queryset.order_by(ordering)
+        
+    #     serializer = self.get_serializer(queryset, many=True)
+    #     return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def by_user(self, request):

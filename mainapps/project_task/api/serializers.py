@@ -117,16 +117,42 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'created_at', 'updated_at', 'is_overdue', 'is_unblocked',
             'days_until_due', 'time_spent_formatted', 'completion_percentage',
-            'project'  # Project is now read-only
+            'project' 
         ]
         
+    # def get_subtasks(self, obj):
+    #     """Get direct subtasks only"""
+    #     if obj.level == 0:  # Only for top-level tasks
+    #         subtasks = obj.get_children()
+    #         return SimpleTaskSerializer(subtasks, many=True).data
+    #     return []
     def get_subtasks(self, obj):
-        """Get direct subtasks only"""
-        if obj.level == 0:  # Only for top-level tasks
-            subtasks = obj.get_children()
-            return SimpleTaskSerializer(subtasks, many=True).data
-        return []
-    
+        """Get direct subtasks with their own subtasks recursively"""
+        subtasks = obj.get_children()
+        if not subtasks:
+            return []
+            
+        class TaskSubtaskSerializer(serializers.ModelSerializer):
+            subtasks = serializers.SerializerMethodField()
+            assigned_to = TaskUserSerializer(many=True, read_only=True)
+            parent_details = SimpleTaskSerializer(source='parent', read_only=True)
+            
+            class Meta:
+                model = Task
+                # fields = ['id', 'title', 'description', 'status', 'priority', 
+                #           'due_date', 'completion_percentage', 'assigned_to', 
+                #           'parent_details', 'subtasks']
+                fields = '__all__'
+                
+            def get_subtasks(self, obj):
+                """Recursive subtasks"""
+                child_subtasks = obj.get_children()
+                if child_subtasks:
+                    return TaskSubtaskSerializer(child_subtasks, many=True).data
+                return []
+                
+        return TaskSubtaskSerializer(subtasks, many=True).data
+
     def validate(self, data):
         # Validate start_date and due_date
         start_date = data.get('start_date')
