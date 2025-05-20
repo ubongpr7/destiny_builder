@@ -205,6 +205,7 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
     is_overdue = serializers.SerializerMethodField()
     created_by_details = ProjectUserSerializer(source='created_by', read_only=True)
     project_details = ProjectMinimalSerializer(source='project', read_only=True)
+    completion_percentage = serializers.SerializerMethodField()
     class Meta:
         model = ProjectMilestone
         fields = [
@@ -218,6 +219,18 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
     
     def get_days_remaining(self, obj):
         return obj.days_remaining()
+    
+    def get_completion_percentage(self, obj):
+        """Calculate the completion percentage of the project"""
+        if obj.status == 'completed':
+            return 100
+        else:
+            completed_tasks=obj.tasks.filter(status='completed').count()
+            total_tasks=obj.tasks.count()
+            print(completed_tasks, total_tasks)
+            if total_tasks == 0:
+                return 0
+            return round((completed_tasks / total_tasks) * 100, 2)
     
     def get_is_overdue(self, obj):
         return obj.is_overdue()
