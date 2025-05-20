@@ -274,6 +274,11 @@ class Task(MPTTModel):
             self.completion_percentage_manual = 100
         elif status != TaskStatus.COMPLETED and old_status == TaskStatus.COMPLETED:
             self.completion_date = None
+            if self.parent and self.parent.status == TaskStatus.COMPLETED:
+                self.parent.update_status(status)
+            
+
+        
             
         self.save()
         
