@@ -168,7 +168,6 @@ class TaskSerializer(serializers.ModelSerializer):
         assigned_to = validated_data.pop('assigned_to', [])
         dependencies = validated_data.pop('dependencies', [])
         
-        # Set project based on milestone if provided
         milestone = validated_data.get('milestone')
         if milestone and not validated_data.get('project'):
             validated_data['project'] = milestone.project
@@ -177,6 +176,11 @@ class TaskSerializer(serializers.ModelSerializer):
         validated_data['created_by'] = self.context['request'].user
         
         task = Task.objects.create(**validated_data)
+        parent= task.parent
+        if parent:
+            if parent.status== 'completed':
+                parent.update_status(TaskStatus.TODO)
+            parent.save()
         
         if assigned_to:
             task.assigned_to.set(assigned_to)
