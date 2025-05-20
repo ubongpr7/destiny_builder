@@ -263,11 +263,12 @@ class Task(MPTTModel):
         """Add time spent to the task"""
         self.time_spent += minutes
         self.save(update_fields=['time_spent'])
-    def update_status(self, status, cascade=True, update_parent=True):
+    def update_status(self, status):
         """Update task status with proper handling and cascading updates"""
         old_status = self.status
         self.status = status
         
+        # Handle completion date
         if status == TaskStatus.COMPLETED and old_status != TaskStatus.COMPLETED:
             self.completion_date = timezone.now()
             self.completion_percentage_manual = 100
@@ -276,24 +277,25 @@ class Task(MPTTModel):
             
         self.save()
         
-        if cascade and status == TaskStatus.COMPLETED:
+        if old_status == TaskStatus.COMPLETED or status == TaskStatus.COMPLETED:
             for subtask in self.subtasks.all():
-                subtask.update_status(status, cascade=True, update_parent=False)
+                subtask.update_status(status)
         
-        if update_parent and self.parent:
-            self._update_parent_status()
+        # If this is a child task that was completed, check if all siblings are completed
+        if self.parent and status == TaskStatus.COMPLETED:
+            self._check_siblings_completion()
         
-    def _update_parent_status(self):
+    def _check_siblings_completion(self):
         """Check if all siblings are completed and update parent accordingly"""
         parent = self.parent
         siblings = parent.subtasks.all()
         
-        # If all siblings (including self) are completed, mark parent as completed
+        # If all siblings are completed, mark parent as completed
         all_completed = all(sibling.status == TaskStatus.COMPLETED for sibling in siblings)
         
         if all_completed and parent.status != TaskStatus.COMPLETED:
-            parent.update_status(TaskStatus.COMPLETED, cascade=False, update_parent=True)
-   
+            parent.update_status(TaskStatus.COMPLETED)
+
     def create_subtask(self, title, **kwargs):
         """Helper method to create a subtask"""
         return Task.objects.create(

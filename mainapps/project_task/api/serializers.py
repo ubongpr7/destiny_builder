@@ -120,12 +120,6 @@ class TaskSerializer(serializers.ModelSerializer):
             'project' 
         ]
         
-    # def get_subtasks(self, obj):
-    #     """Get direct subtasks only"""
-    #     if obj.level == 0:  # Only for top-level tasks
-    #         subtasks = obj.get_children()
-    #         return SimpleTaskSerializer(subtasks, many=True).data
-    #     return []
     def get_subtasks(self, obj):
         """Get direct subtasks with their own subtasks recursively"""
         subtasks = obj.get_children()
@@ -191,7 +185,22 @@ class TaskSerializer(serializers.ModelSerializer):
             task.dependencies.set(dependencies)
             
         return task
-
+    
+    def update(self, instance, validated_data):
+        old_status = instance.status
+        new_status = validated_data.pop('status')
+        
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        
+        if new_status and new_status != old_status:
+            instance.refresh_from_db()
+            instance.update_status(new_status)
+        
+        return instance
 class DetailedTaskSerializer(TaskSerializer):
     """Detailed Task serializer with comments and attachments"""
     comments = TaskCommentSerializer(many=True, read_only=True)
