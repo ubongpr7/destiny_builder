@@ -179,7 +179,7 @@ class TaskSerializer(serializers.ModelSerializer):
         parent= task.parent
         if parent:
             if parent.status== 'completed':
-                parent.update_status(TaskStatus.TODO)
+                parent.update_status(task.status)
             parent.save()
         
         if assigned_to:
