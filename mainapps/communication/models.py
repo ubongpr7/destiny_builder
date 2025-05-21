@@ -4,31 +4,6 @@ from mptt.models import MPTTModel, TreeForeignKey
 from django.utils.translation import gettext_lazy as _
 User=get_user_model()
 
-class Notification(models.Model):
-    """System notifications for users"""
-    NOTIFICATION_TYPE_CHOICES = [
-        ('system', 'System Notification'),
-        ('project', 'Project Notification'),
-        ('task', 'Task Notification'),
-        ('message', 'Message Notification'),
-        ('donation', 'Donation Notification'),
-        ('membership', 'Membership Notification'),
-    ]
-    
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    title = models.CharField(max_length=200)
-    message = models.TextField()
-    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPE_CHOICES)
-    is_read = models.BooleanField(default=False)
-    url = models.CharField(max_length=255, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['-created_at']
-    
-    def __str__(self):
-        return f"{self.user.username} - {self.title}"
-
 class Message(models.Model):
     """Private messages between users"""
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')

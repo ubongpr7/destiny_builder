@@ -61,6 +61,7 @@ CORE_APPS = [
     'mainapps.permit',
     'mainapps.user_profile',
     'mainapps.project_task',
+    'mainapps.notification'
 ]
 INSTALLED_APPS=[
 ]

@@ -45,4 +45,5 @@ urlpatterns = [
     path('task_api/', include("mainapps.project_task.api.urls",)),
     path('common_api/', include("mainapps.common.api.urls")),
     path('profile_api/', include("mainapps.user_profile.api.urls")),
+    path('notification_api/', include("mainapps.notification.api.urls")),
 ]+static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

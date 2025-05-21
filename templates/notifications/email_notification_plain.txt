@@ -1,0 +1,13 @@
+{{ notification.title }}
+
+{{ notification.body }}
+
+{% if notification.action_url %}
+View Details: {{ site_url }}{{ notification.action_url }}
+{% endif %}
+
+---
+This is an automated message from {{ site_name }}. Please do not reply to this email.
+If you have any questions, please contact us at support@destinybuilders.africa.
+
+© {{ current_year }} Destiny Builders Empowerment Foundation. All rights reserved.
