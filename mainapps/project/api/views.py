@@ -16,6 +16,10 @@ from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdate
 from .serializers import *
 from django.db.models import F, Sum, Count, Avg, Case, When, DecimalField, Value, Q
 from decimal import Decimal
+from django.http import HttpResponse, FileResponse
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+from django.conf import settings
 
 
 User = get_user_model()
@@ -1636,6 +1640,70 @@ class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Securely download a file from S3"""
+        media_object = self.get_object()
+        
+        if not media_object.file:
+            return Response(
+                {"detail": "No file associated with this media"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        # Get the file key from the file field
+        file_key = str(media_object.file)
+        
+        # Initialize S3 client
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        )
+        
+        try:
+            # Get the file from S3
+            s3_response = s3.get_object(
+                Bucket=settings.AWS_STORAGE_BUCKET_NAME, 
+                Key=file_key
+            )
+            
+            # Set the appropriate headers for file download
+            response = HttpResponse(
+                s3_response["Body"].read(), 
+                content_type=s3_response["ContentType"]
+            )
+            
+            # Use the original filename if available, otherwise extract from the key
+            filename = media_object.title or file_key.split("/")[-1]
+            
+            # Ensure filename has the correct extension
+            if "." not in filename:
+                extension = file_key.split(".")[-1] if "." in file_key else ""
+                if extension:
+                    filename = f"{filename}.{extension}"
+            
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            response["Content-Length"] = s3_response["ContentLength"]
+            
+            return response
+            
+        except s3.exceptions.NoSuchKey:
+            return Response(
+                {"detail": "File not found on storage server"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except (NoCredentialsError, PartialCredentialsError):
+            return Response(
+                {"detail": "Server configuration error. Please contact support."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            return Response(
+                {"detail": f"Error downloading file: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
 @api_view(['GET'])
 def project_model_info(request):
     """
@@ -1761,6 +1829,71 @@ class BaseMediaViewSet(viewsets.ModelViewSet):
         queryset = self.filter_queryset(self.get_queryset().filter(media_type='document'))
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Securely download a file from S3"""
+        media_object = self.get_object()
+        
+        if not media_object.file:
+            return Response(
+                {"detail": "No file associated with this media"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        # Get the file key from the file field
+        file_key = str(media_object.file)
+        
+        # Initialize S3 client
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        )
+        
+        try:
+            # Get the file from S3
+            s3_response = s3.get_object(
+                Bucket=settings.AWS_STORAGE_BUCKET_NAME, 
+                Key=file_key
+            )
+            
+            # Set the appropriate headers for file download
+            response = HttpResponse(
+                s3_response["Body"].read(), 
+                content_type=s3_response["ContentType"]
+            )
+            
+            # Use the original filename if available, otherwise extract from the key
+            filename = media_object.title or file_key.split("/")[-1]
+            
+            # Ensure filename has the correct extension
+            if "." not in filename:
+                extension = file_key.split(".")[-1] if "." in file_key else ""
+                if extension:
+                    filename = f"{filename}.{extension}"
+            
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            response["Content-Length"] = s3_response["ContentLength"]
+            
+            return response
+            
+        except s3.exceptions.NoSuchKey:
+            return Response(
+                {"detail": "File not found on storage server"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except (NoCredentialsError, PartialCredentialsError):
+            return Response(
+                {"detail": "Server configuration error. Please contact support."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            return Response(
+                {"detail": f"Error downloading file: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
 
 class ProjectMediaViewSet(BaseMediaViewSet):
     """ViewSet for managing project media files"""
@@ -1833,7 +1966,7 @@ class MilestoneMediaViewSet(BaseMediaViewSet):
     """ViewSet for managing milestone media files"""
     serializer_class = MilestoneMediaSerializer
     create_serializer_class = MilestoneMediaCreateSerializer
-    
+
     def get_queryset(self):
         """Filter queryset based on query parameters"""
         queryset = MilestoneMedia.objects.all()
