@@ -641,10 +641,10 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
             completion_date = timezone.now().date()
             
         milestone.complete_milestone(completion_date)
-        tasks=milestone.tasks.filter(pareent__isnull=True)
+        tasks=milestone.tasks.filter(parent__isnull=True)
         for task in tasks:
             task.update_status('completed')
-            
+
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
     
