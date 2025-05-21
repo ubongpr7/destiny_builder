@@ -641,6 +641,10 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
             completion_date = timezone.now().date()
             
         milestone.complete_milestone(completion_date)
+        tasks=milestone.tasks.filter(pareent__isnull=True)
+        for task in tasks:
+            task.update_status('completed')
+            
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
     
@@ -670,6 +674,9 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
         if new_status == 'completed' and milestone.status != 'completed':
             milestone.completion_date = timezone.now().date()
             milestone.completion_percentage = 100
+            tasks=milestone.tasks.filter(parent__isnull=True)
+            for task in tasks:
+                task.update_status('completed')
         
         milestone.status = new_status
         milestone.save()
