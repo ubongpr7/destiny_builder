@@ -206,6 +206,9 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
     created_by_details = ProjectUserSerializer(source='created_by', read_only=True)
     project_details = ProjectMinimalSerializer(source='project', read_only=True)
     completion_percentage = serializers.SerializerMethodField()
+    tasks_count = serializers.SerializerMethodField()
+    task_completed_count = serializers.SerializerMethodField()
+    
     class Meta:
         model = ProjectMilestone
         fields = [
@@ -213,7 +216,8 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
             'completion_date', 'status', 'priority', 'completion_percentage',
             'assigned_to', 'dependencies', 'deliverables', 'notes',
             'created_at', 'updated_at', 'created_by', 'created_by_details',
-            'days_remaining', 'is_overdue', 'project_details'
+            'days_remaining', 'is_overdue', 'project_details', 'tasks_count',
+            'task_completed_count'
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by']
     
@@ -231,6 +235,12 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
             if total_tasks == 0:
                 return 0
             return round((completed_tasks / total_tasks) * 100, 2)
+    def get_tasks_count(self, obj):
+        """Get the count of tasks for the project"""
+        return obj.tasks.count()
+    def get_task_completed_count(self, obj):
+        """Get the count of completed tasks for the project"""
+        return obj.tasks.filter(status='completed').count()
     
     def get_is_overdue(self, obj):
         return obj.is_overdue()
