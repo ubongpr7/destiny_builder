@@ -1908,6 +1908,16 @@ class MilestoneMediaViewSet(BaseMediaViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
+    @action(detail=True, methods=['post'])
+    def toggle_deliverable(self, request, pk=None):
+        """Toggle the represents_deliverable status of a milestone media file"""
+        media_file = self.get_object()
+        media_file.represents_deliverable = not media_file.represents_deliverable
+        media_file.save()
+        serialiser=self.get_serializer(media_file)
+        return Response(serialiser.data)
+
+        
     @action(detail=False, methods=['get'])
     def deliverables(self, request):
         """Get media files that represent deliverables"""
