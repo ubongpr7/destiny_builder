@@ -207,7 +207,7 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
     project_details = ProjectMinimalSerializer(source='project', read_only=True)
     completion_percentage = serializers.SerializerMethodField()
     tasks_count = serializers.SerializerMethodField()
-    task_completed_count = serializers.SerializerMethodField()
+    completed_tasks_count = serializers.SerializerMethodField()
     
     class Meta:
         model = ProjectMilestone
@@ -217,7 +217,7 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
             'assigned_to', 'dependencies', 'deliverables', 'notes',
             'created_at', 'updated_at', 'created_by', 'created_by_details',
             'days_remaining', 'is_overdue', 'project_details', 'tasks_count',
-            'task_completed_count'
+            'completed_tasks_count'
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by']
     
@@ -238,7 +238,7 @@ class ProjectMilestoneSerializer(serializers.ModelSerializer):
     def get_tasks_count(self, obj):
         """Get the count of tasks for the project"""
         return obj.tasks.count()
-    def get_task_completed_count(self, obj):
+    def get_completed_tasks_count(self, obj):
         """Get the count of completed tasks for the project"""
         return obj.tasks.filter(status='completed').count()
     
