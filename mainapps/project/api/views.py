@@ -1807,6 +1807,16 @@ class ProjectMediaViewSet(BaseMediaViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
+
+    @action(detail=True, methods=['post'])
+    def toggle_featured(self, request, pk=None):
+        """Toggle the featured status of a media file"""
+        media_file = self.get_object()
+        media_file.is_featured = not media_file.is_featured
+        media_file.save()
+        serializer = self.get_serializer(media_file)
+        return Response(serializer.data)
+    
     @action(detail=False, methods=['get'])
     def featured(self, request):
         """Get featured media files"""
