@@ -35,29 +35,19 @@ class NotificationType(models.Model):
         choices=NotificationCategory.choices,
         default=NotificationCategory.SYSTEM
     )
-    # Template for notification title with placeholders like {project_name}
     title_template = models.CharField(max_length=255)
-    # Template for notification body with placeholders
     body_template = models.TextField()
-    # Default icon to use (can be overridden)
     icon = models.CharField(max_length=50, default='bell')
-    # Default color to use (can be overridden)
     color = models.CharField(max_length=20, default='primary')
-    # Default priority
     default_priority = models.CharField(
         max_length=10,
         choices=NotificationPriority.choices,
         default=NotificationPriority.NORMAL
     )
-    # Whether this notification should be sent via email by default
     send_email = models.BooleanField(default=False)
-    # Whether this notification should be sent via SMS by default
     send_sms = models.BooleanField(default=False)
-    # Whether this notification should be sent as a push notification by default
     send_push = models.BooleanField(default=False)
-    # Whether this notification is active
     is_active = models.BooleanField(default=True)
-    # Whether this notification can be disabled by users
     can_disable = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -76,37 +66,28 @@ class Notification(models.Model):
         on_delete=models.CASCADE, 
         related_name='notifications'
     )
-    # The type of notification
     notification_type = models.ForeignKey(
         NotificationType,
         on_delete=models.CASCADE,
         related_name='instances'
     )
-    # The actual title and body after template variables are replaced
     title = models.CharField(max_length=255)
     body = models.TextField()
-    # Priority for this specific notification
     priority = models.CharField(
         max_length=10,
         choices=NotificationPriority.choices,
         default=NotificationPriority.NORMAL
     )
-    # Icon to use (falls back to notification_type.icon if not specified)
     icon = models.CharField(max_length=50, blank=True)
-    # Color to use (falls back to notification_type.color if not specified)
     color = models.CharField(max_length=20, blank=True)
-    # URL to redirect to when notification is clicked
     action_url = models.CharField(max_length=255, blank=True)
     
-    # Generic relation to the object this notification is about
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
     object_id = models.PositiveIntegerField(null=True, blank=True)
     related_object = GenericForeignKey('content_type', 'object_id')
     
-    # Additional data as JSON (can be used for dynamic content)
     data = models.JSONField(default=dict, blank=True)
     
-    # Tracking fields
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
     is_email_sent = models.BooleanField(default=False)
@@ -152,13 +133,9 @@ class NotificationPreference(models.Model):
         related_name='user_preferences'
     )
     
-    # Whether to receive in-app notifications
     receive_in_app = models.BooleanField(default=True)
-    # Whether to receive email notifications
     receive_email = models.BooleanField(default=True)
-    # Whether to receive SMS notifications
     receive_sms = models.BooleanField(default=True)
-    # Whether to receive push notifications
     receive_push = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)

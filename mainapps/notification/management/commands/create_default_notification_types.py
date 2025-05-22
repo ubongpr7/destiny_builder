@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from notification.models import NotificationType, NotificationCategory, NotificationPriority
+from ...models import NotificationType, NotificationCategory, NotificationPriority
 
 class Command(BaseCommand):
     help = 'Create default notification types'
