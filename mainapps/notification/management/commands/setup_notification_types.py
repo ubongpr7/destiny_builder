@@ -7,6 +7,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Define notification types
         notification_types = [
+            # Existing notification types
             {
                 'name': 'welcome_message',
                 'description': 'Welcome message for new users',
@@ -75,6 +76,37 @@ class Command(BaseCommand):
                 'body_template': '$user_first_name, your verification is under additional review. We\'ll notify you once the process is complete.',
                 'icon': 'alert-triangle',
                 'color': '#FF9800',
+                'default_priority': 'high',
+                'send_email': True,
+                'send_sms': True,
+                'send_push': True,
+                'is_active': True,
+                'can_disable': False,
+            },
+            # New notification types
+            {
+                'name': 'profile_updated',
+                'description': 'Profile information updated',
+                'category': 'account',
+                'title_template': 'Profile Updated',
+                'body_template': '$user_first_name, your profile information has been updated successfully.',
+                'icon': 'user',
+                'color': '#2196F3',
+                'default_priority': 'low',
+                'send_email': True,
+                'send_sms': False,
+                'send_push': True,
+                'is_active': True,
+                'can_disable': True,
+            },
+            {
+                'name': 'edit_code_requested',
+                'description': 'Profile edit verification code',
+                'category': 'security',
+                'title_template': 'Profile Edit Authorization Code',
+                'body_template': '$user_first_name, an administrator ($admin_name) has requested to edit your profile. Your verification code is: $verification_code',
+                'icon': 'key',
+                'color': '#9C27B0',
                 'default_priority': 'high',
                 'send_email': True,
                 'send_sms': True,

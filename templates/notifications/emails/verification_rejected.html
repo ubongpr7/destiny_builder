@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification Unsuccessful</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-width: 150px;
+        }
+        .notification {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #F44336;
+        }
+        .notification-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .notification-body {
+            margin-bottom: 20px;
+        }
+        .reason {
+            background-color: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #F44336;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #777;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{ site_url }}/static/images/logo.png" alt="{{ site_name }}" class="logo">
+    </div>
+    
+    <div class="notification">
+        <div class="notification-title">Verification Unsuccessful</div>
+        <div class="notification-body">
+            <p>Hello {{ user_first_name }},</p>
+            <p>We regret to inform you that your verification was not approved.</p>
+            
+            <div class="reason">
+                <strong>Reason:</strong> {{ rejection_reason }}
+            </div>
+            
+            <p>Please update your information and try again. If you have any questions, please contact our support team.</p>
+        </div>
+        
+        <a href="{{ profile_url }}" class="button">Update Your Information</a>
+    </div>
+    
+    <div class="footer">
+        <p>This email was sent to {{ recipient.email }} because you registered on {{ app_name }}.</p>
+        <p>© {{ app_name }} {% now "Y" %}</p>
+    </div>
+</body>
+</html>

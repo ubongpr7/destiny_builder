@@ -1,4 +1,3 @@
-
 import threading
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -17,6 +16,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from django.utils import timezone
 from django.db.models import Q
+from django.urls import reverse
 
 from rest_framework.response import Response
 
@@ -32,7 +32,221 @@ from .serializers import (
 from django.contrib.auth import get_user_model
 from rest_framework import generics
 
+# Import notification service
+from mainapps.notification.services import NotificationService
+
 User = get_user_model()
+
+
+# Notification helper functions
+def send_notification_safely(func, *args, **kwargs):
+    """Safely send a notification without disrupting the main flow if it fails"""
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        print(f"Error sending notification: {str(e)}")
+        return None
+
+
+def send_kyc_approved_notification(profile, request=None):
+    """Send notification when KYC is approved"""
+    try:
+        user = profile.user
+        if not user:
+            return False
+            
+        # Create context data for the notification
+        context_data = {
+            'app_name': settings.SITE_NAME,
+            'user_first_name': user.first_name or user.username or 'there',
+            'dashboard_url': f"{settings.SITE_URL}{reverse('dashboard')}"
+        }
+        
+        # Send the notification
+        NotificationService.create_notification(
+            recipient=user,
+            notification_type_name='verification_approved',
+            context_data=context_data,
+            action_url=reverse('dashboard'),
+            priority='high',
+            icon='check-circle',
+            color='#4CAF50',  # Green color
+            send_email=True,
+            send_sms=True if hasattr(profile, 'phone_number') and profile.phone_number else False
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending KYC approved notification: {e}")
+        return False
+
+
+def send_kyc_rejected_notification(profile, reason=None):
+    """Send notification when KYC is rejected"""
+    try:
+        user = profile.user
+        if not user:
+            return False
+            
+        # Create context data for the notification
+        context_data = {
+            'app_name': settings.SITE_NAME,
+            'user_first_name': user.first_name or user.username or 'there',
+            'rejection_reason': reason or 'Please check your details and try again.',
+            'profile_url': f"{settings.SITE_URL}{reverse('profile-update')}"
+        }
+        
+        # Send the notification
+        NotificationService.create_notification(
+            recipient=user,
+            notification_type_name='verification_rejected',
+            context_data=context_data,
+            action_url=reverse('profile-update'),
+            priority='high',
+            icon='alert-circle',
+            color='#F44336',  # Red color
+            send_email=True,
+            send_sms=True if hasattr(profile, 'phone_number') and profile.phone_number else False
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending KYC rejected notification: {e}")
+        return False
+
+
+def send_kyc_flagged_notification(profile, reason=None):
+    """Send notification when KYC is flagged"""
+    try:
+        user = profile.user
+        if not user:
+            return False
+            
+        # Create context data for the notification
+        context_data = {
+            'app_name': settings.SITE_NAME,
+            'user_first_name': user.first_name or user.username or 'there',
+            'flag_reason': reason or 'Your verification requires additional review.',
+            'profile_url': f"{settings.SITE_URL}{reverse('profile-update')}"
+        }
+        
+        # Send the notification
+        NotificationService.create_notification(
+            recipient=user,
+            notification_type_name='verification_flagged',
+            context_data=context_data,
+            action_url=reverse('profile-update'),
+            priority='high',
+            icon='alert-triangle',
+            color='#FF9800',  # Orange color
+            send_email=True,
+            send_sms=True if hasattr(profile, 'phone_number') and profile.phone_number else False
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending KYC flagged notification: {e}")
+        return False
+
+
+def send_kyc_reminder_notification(profile):
+    """Send notification to remind user to complete KYC"""
+    try:
+        user = profile.user
+        if not user:
+            return False
+            
+        # Create context data for the notification
+        context_data = {
+            'app_name': settings.SITE_NAME,
+            'user_first_name': user.first_name or user.username or 'there',
+            'profile_url': f"{settings.SITE_URL}{reverse('profile-update')}"
+        }
+        
+        # Send the notification
+        NotificationService.create_notification(
+            recipient=user,
+            notification_type_name='profile_incomplete',
+            context_data=context_data,
+            action_url=reverse('profile-update'),
+            priority='normal',
+            icon='user-check',
+            color='#FFC107',  # Yellow/amber color
+            send_email=True
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending KYC reminder notification: {e}")
+        return False
+
+
+def send_profile_updated_notification(profile):
+    """Send notification when profile is updated"""
+    try:
+        user = profile.user
+        if not user:
+            return False
+            
+        # Create context data for the notification
+        context_data = {
+            'app_name': settings.SITE_NAME,
+            'user_first_name': user.first_name or user.username or 'there',
+            'profile_url': f"{settings.SITE_URL}{reverse('profile-view')}"
+        }
+        
+        # Send the notification
+        NotificationService.create_notification(
+            recipient=user,
+            notification_type_name='profile_updated',
+            context_data=context_data,
+            action_url=reverse('profile-view'),
+            priority='low',
+            icon='user',
+            color='#2196F3',  # Blue color
+            send_email=True
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending profile updated notification: {e}")
+        return False
+
+
+def send_edit_code_notification(user, code, admin_user, admin_profile=None):
+    """Send notification when edit code is requested"""
+    try:
+        if not user:
+            return False
+            
+        # Create context data for the notification
+        admin_name = f"{admin_user.first_name} {admin_user.last_name}".strip() or admin_user.username
+        
+        context_data = {
+            'app_name': settings.SITE_NAME,
+            'user_first_name': user.first_name or user.username or 'there',
+            'verification_code': code,
+            'admin_name': admin_name,
+            'admin_email': admin_user.email
+        }
+        
+        # Send the notification
+        NotificationService.create_notification(
+            recipient=user,
+            notification_type_name='edit_code_requested',
+            context_data=context_data,
+            action_url=None,  # No action needed
+            priority='high',
+            icon='key',
+            color='#9C27B0',  # Purple color
+            send_email=True,
+            send_sms=True  # Important security notification
+        )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending edit code notification: {e}")
+        return False
 
 
 class BaseReferenceViewSet(viewsets.ReadOnlyModelViewSet):
@@ -157,6 +371,9 @@ class ProfileViewSet(viewsets.ModelViewSet):
                     instance.expertise.add(expertise)
                 except Expertise.DoesNotExist:
                     pass
+        
+        # Send notification for profile update
+        send_notification_safely(send_profile_updated_notification, instance)
         
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
@@ -380,6 +597,9 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
                     pdf = generate_certificate_pdf(profile,request)
                     send_certificate_email(profile, pdf)
+                    
+                    # Send notification for KYC approval
+                    send_notification_safely(send_kyc_approved_notification, profile, request)
 
                     return Response({
                         "message": "KYC approved",
@@ -391,7 +611,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 return Response({"error": str(e)}, status=400)
 
             
-        elif action == 'reject':
+        elif action_type == 'reject':
             reason = request.data.get('reason')
             if not reason:
                 return Response(
@@ -405,12 +625,15 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             profile.kyc_rejection_reason = reason
             profile.save()
             
+            # Send notification for KYC rejection
+            send_notification_safely(send_kyc_rejected_notification, profile, reason)
+            
             return Response({
                 "message": "KYC verification rejected.",
                 "profile": CombinedUserProfileSerializer(profile).data
             })
             
-        elif action == 'flag':
+        elif action_type == 'flag':
             reason = request.data.get('reason')
             if not reason:
                 return Response(
@@ -424,12 +647,15 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             profile.kyc_rejection_reason = reason
             profile.save()
             
+            # Send notification for KYC flagging
+            send_notification_safely(send_kyc_flagged_notification, profile, reason)
+            
             return Response({
                 "message": "User flagged for review.",
                 "profile": CombinedUserProfileSerializer(profile).data
             })
             
-        elif action == 'mark_scammer':
+        elif action_type == 'mark_scammer':
             reason = request.data.get('reason')
             if not reason:
                 return Response(
@@ -442,6 +668,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             profile.kyc_verification_date = None
             profile.kyc_rejection_reason = reason
             profile.save()
+            
+            # No notification for scammers
             
             return Response({
                 "message": "User marked as scammer.",
@@ -485,6 +713,10 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
                     pdf = generate_certificate_pdf(profile,request)
                     send_certificate_email(profile, pdf)
+                    
+                    # Send notification for KYC approval
+                    send_notification_safely(send_kyc_approved_notification, profile, request)
+                    
                     updated.append(profile.id)
             except Exception as e:
                 errors.append({
@@ -497,6 +729,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             'errors': errors,
             'message': f'Processed {len(updated)} profiles with {len(errors)} errors'
         })
+        
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def send_kyc_reminder(self, request, pk=None):
         """
@@ -540,6 +773,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             msg.attach_alternative(html_content, "text/html")
             EmailThread(msg).start()
             
+            # Also send in-app notification
+            send_notification_safely(send_kyc_reminder_notification, profile)
             
             return Response({
                 "success": True,
@@ -604,6 +839,15 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             msg = EmailMultiAlternatives(subject, text_content, settings.EMAIL_HOST_USER, to_email)
             msg.attach_alternative(html_content, "text/html")
             EmailThread(msg).start()
+            
+            # Also send in-app notification
+            send_notification_safely(
+                send_edit_code_notification,
+                user=user,
+                code=verification_code.code,
+                admin_user=admin_user,
+                admin_profile=admin_profile
+            )
             
             return Response({
                 "success": True,
@@ -718,8 +962,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         """
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
-
-
 
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = CAddressSerializer
