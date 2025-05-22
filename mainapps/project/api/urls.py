@@ -3,13 +3,14 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AllUserViewSet, CEOUserViewSet, MilestoneMediaViewSet, ProjectExpenseViewSet, ProjectMediaViewSet, ProjectViewSet, ProjectCategoryViewSet, 
     DailyProjectUpdateViewSet, ProjectUpdateMediaViewSet,
-    ProjectTeamMemberViewSet,ProjectMilestoneViewSet, UserRelatedProjectsViewSet, get_project_team_members, project_model_info
+    ProjectTeamMemberViewSet,ProjectMilestoneViewSet, TeambleUserViewSet, UserRelatedProjectsViewSet, get_project_team_members, project_model_info
 )
 
 router = DefaultRouter()
 
 # Register viewsets with the router
 router.register(r'all-users', AllUserViewSet,basename='all-users')
+router.register(r'teamable', TeambleUserViewSet, basename='teamable-users')
 router.register(r'ceos', CEOUserViewSet,basename='ceo')
 router.register(r'projects', ProjectViewSet)
 router.register(r'project-categories', ProjectCategoryViewSet)
