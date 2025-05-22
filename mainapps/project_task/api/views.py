@@ -7,11 +7,20 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models.functions import TruncDate
 
+from mainapps.notification.models import Notification
+
 from ..models import Task, TaskComment, TaskAttachment, TaskTimeLog, TaskStatus, TaskPriority, TaskType
 from .serializers import (
     TaskSerializer, DetailedTaskSerializer, TaskCommentSerializer,
     TaskAttachmentSerializer, TaskTimeLogSerializer, TaskTreeSerializer,
     TaskStatisticsSerializer, SimpleTaskSerializer
+)
+from .notification_utils import (
+    notify_task_created, notify_task_assigned, notify_task_unassigned,
+    notify_task_status_changed, notify_task_completed, notify_task_approaching_due,
+    notify_task_overdue, notify_task_comment_added, notify_task_attachment_added,
+    notify_task_time_logged, notify_task_dependency_completed,
+    notify_task_priority_changed, notify_subtask_created
 )
 
 
@@ -117,13 +126,82 @@ class TaskViewSet(viewsets.ModelViewSet):
         return TaskSerializer
     
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        task = serializer.save(created_by=self.request.user)
+        
+        # Send notification for task creation
+        notify_task_created(task)
+        
+        # Send notifications for assigned users
+        for user in task.assigned_to.all():
+            notify_task_assigned(task, user, self.request.user)
+        
+        # Check for approaching due date
+        if task.due_date:
+            days_until_due = (task.due_date.date() - timezone.now().date()).days
+            if 0 < days_until_due <= 3:  # If due within 3 days
+                notify_task_approaching_due(task, days_until_due)
     
+    def perform_update(self, serializer):
+        # Get the original task before update
+        original_task = self.get_object()
+        original_status = original_task.status
+        original_priority = original_task.priority
+        original_assigned_users = set(original_task.assigned_to.all())
+        
+        # Save the updated task
+        task = serializer.save()
+        
+        # Check for status change
+        if original_status != task.status:
+            notify_task_status_changed(task, original_status, task.status, self.request.user)
+            
+            # If task is now completed, send completion notification
+            if task.status == TaskStatus.COMPLETED and original_status != TaskStatus.COMPLETED:
+                notify_task_completed(task, self.request.user)
+                
+                # Notify dependent tasks that this dependency is completed
+                for dependent_task in task.dependents.all():
+                    notify_task_dependency_completed(task, dependent_task)
+        
+        # Check for priority change
+        if original_priority != task.priority:
+            notify_task_priority_changed(task, original_priority, task.priority, self.request.user)
+        
+        # Check for assignment changes
+        current_assigned_users = set(task.assigned_to.all())
+        
+        # Users who were newly assigned
+        newly_assigned = current_assigned_users - original_assigned_users
+        for user in newly_assigned:
+            notify_task_assigned(task, user, self.request.user)
+        
+        # Users who were unassigned
+        unassigned = original_assigned_users - current_assigned_users
+        for user in unassigned:
+            notify_task_unassigned(task, user, self.request.user)
+        
+        # Check for approaching due date
+        if task.due_date and task.status not in [TaskStatus.COMPLETED, TaskStatus.CANCELLED]:
+            days_until_due = (task.due_date.date() - timezone.now().date()).days
+            if 0 < days_until_due <= 3:  # If due within 3 days
+                notify_task_approaching_due(task, days_until_due)
+            elif days_until_due < 0:  # If overdue
+                notify_task_overdue(task)
     
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         task = self.get_object()
+        old_status = task.status
         task.update_status(TaskStatus.COMPLETED)
+        
+        # Send notifications
+        if old_status != TaskStatus.COMPLETED:
+            notify_task_status_changed(task, old_status, TaskStatus.COMPLETED, request.user)
+            notify_task_completed(task, request.user)
+            
+            # Notify dependent tasks that this dependency is completed
+            for dependent_task in task.dependents.all():
+                notify_task_dependency_completed(task, dependent_task)
         
         serializer = self.get_serializer(task)
         return Response(serializer.data)
@@ -136,7 +214,20 @@ class TaskViewSet(viewsets.ModelViewSet):
         if status_value not in dict(TaskStatus.choices).keys():
             return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
         
+        old_status = task.status
         task.update_status(status_value)
+        
+        # Send notifications
+        if old_status != status_value:
+            notify_task_status_changed(task, old_status, status_value, request.user)
+            
+            # If task is now completed, send completion notification
+            if status_value == TaskStatus.COMPLETED and old_status != TaskStatus.COMPLETED:
+                notify_task_completed(task, request.user)
+                
+                # Notify dependent tasks that this dependency is completed
+                for dependent_task in task.dependents.all():
+                    notify_task_dependency_completed(task, dependent_task)
         
         # Return the updated task with its subtasks
         serializer = self.get_serializer(task)
@@ -155,8 +246,24 @@ class TaskViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Percentage must be between 0 and 100'}, 
                            status=status.HTTP_400_BAD_REQUEST)
         
+        # Store original status
+        old_status = task.status
+        
         task.completion_percentage_manual = percentage
         task.save(update_fields=['completion_percentage_manual'])
+        
+        # If percentage is 100%, automatically mark as completed
+        if percentage == 100 and task.status != TaskStatus.COMPLETED:
+            task.update_status(TaskStatus.COMPLETED)
+            
+            # Send notifications
+            notify_task_status_changed(task, old_status, TaskStatus.COMPLETED, request.user)
+            notify_task_completed(task, request.user)
+            
+            # Notify dependent tasks that this dependency is completed
+            for dependent_task in task.dependents.all():
+                notify_task_dependency_completed(task, dependent_task)
+        
         return Response({'status': 'completion percentage updated'})
     
     @action(detail=True, methods=['post'])
@@ -164,9 +271,24 @@ class TaskViewSet(viewsets.ModelViewSet):
         task = self.get_object()
         user_ids = request.data.get('user_ids', [])
         
+        # Get original assigned users
+        original_assigned_users = set(task.assigned_to.all())
+        
+        # Clear and reassign
         task.assigned_to.clear()
         for user_id in user_ids:
             task.assign_user(user_id)
+        
+        # Get new assigned users
+        new_assigned_users = set(task.assigned_to.all())
+        
+        # Send notifications for newly assigned users
+        for user in new_assigned_users - original_assigned_users:
+            notify_task_assigned(task, user, request.user)
+        
+        # Send notifications for unassigned users
+        for user in original_assigned_users - new_assigned_users:
+            notify_task_unassigned(task, user, request.user)
         
         return Response({'status': 'users assigned'})
     
@@ -191,9 +313,11 @@ class TaskViewSet(viewsets.ModelViewSet):
             description=description
         )
         
+        # Send notification
+        notify_task_time_logged(time_log)
+        
         return Response(TaskTimeLogSerializer(time_log).data)
     
-
     @action(detail=False, methods=['get'])
     def by_milestone(self, request):
         milestone_id = request.query_params.get('milestone_id')
@@ -241,7 +365,6 @@ class TaskViewSet(viewsets.ModelViewSet):
         elif is_completed == 'false':
             queryset = queryset.exclude(status=TaskStatus.COMPLETED)
         
-
         queryset = queryset.annotate(
             comments_count=Count('comments', distinct=True),
             attachments_count=Count('attachments', distinct=True)
@@ -253,8 +376,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-
+    
     @action(detail=False, methods=['get'])
     def by_user(self, request):
         user_id = request.query_params.get('user_id')
@@ -279,6 +401,19 @@ class TaskViewSet(viewsets.ModelViewSet):
         if user_id:
             tasks = tasks.filter(assigned_to=user_id)
         
+        # Send overdue notifications for tasks that haven't been notified recently
+        for task in tasks:
+            # Check if notification was sent in the last 24 hours
+            recent_notification = Notification.objects.filter(
+                recipient__in=task.assigned_to.all(),
+                notification_type__name='task_overdue',
+                created_at__gte=timezone.now() - timezone.timedelta(hours=24),
+                context_data__contains=f'"task_title": "{task.title}"'
+            ).exists()
+            
+            if not recent_notification:
+                notify_task_overdue(task)
+        
         serializer = self.get_serializer(tasks, many=True)
         return Response(serializer.data)
     
@@ -300,6 +435,23 @@ class TaskViewSet(viewsets.ModelViewSet):
         user_id = request.query_params.get('user_id')
         if user_id:
             tasks = tasks.filter(assigned_to=user_id)
+        
+        # Send approaching due notifications for tasks due soon
+        today = timezone.now().date()
+        for task in tasks:
+            if task.due_date:
+                days_until_due = (task.due_date.date() - today).days
+                if 0 < days_until_due <= 3:  # If due within 3 days
+                    # Check if notification was sent in the last 24 hours
+                    recent_notification = Notification.objects.filter(
+                        recipient__in=task.assigned_to.all(),
+                        notification_type__name='task_approaching_due',
+                        created_at__gte=timezone.now() - timezone.timedelta(hours=24),
+                        context_data__contains=f'"task_title": "{task.title}"'
+                    ).exists()
+                    
+                    if not recent_notification:
+                        notify_task_approaching_due(task, days_until_due)
         
         serializer = self.get_serializer(tasks, many=True)
         return Response(serializer.data)
@@ -368,14 +520,23 @@ class TaskViewSet(viewsets.ModelViewSet):
         
         if serializer.is_valid():
             # Automatically set project and milestone from parent
-            serializer.save(
+            subtask = serializer.save(
                 parent=parent_task,
                 project=parent_task.project,
                 milestone=parent_task.milestone,
                 created_by=request.user
             )
+            
+            # Send notifications
+            notify_subtask_created(subtask)
+            
+            # Send notifications for assigned users
+            for user in subtask.assigned_to.all():
+                notify_task_assigned(subtask, user, request.user)
+            
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class TaskCommentViewSet(viewsets.ModelViewSet):
     """ViewSet for task comments"""
@@ -390,7 +551,10 @@ class TaskCommentViewSet(viewsets.ModelViewSet):
         return TaskComment.objects.none()
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        comment = serializer.save(user=self.request.user)
+        
+        # Send notification
+        notify_task_comment_added(comment)
 
 
 class TaskAttachmentViewSet(viewsets.ModelViewSet):
@@ -406,7 +570,10 @@ class TaskAttachmentViewSet(viewsets.ModelViewSet):
         return TaskAttachment.objects.none()
     
     def perform_create(self, serializer):
-        serializer.save(uploaded_by=self.request.user)
+        attachment = serializer.save(uploaded_by=self.request.user)
+        
+        # Send notification
+        notify_task_attachment_added(attachment)
 
 
 class TaskTimeLogViewSet(viewsets.ModelViewSet):
@@ -422,4 +589,7 @@ class TaskTimeLogViewSet(viewsets.ModelViewSet):
         return TaskTimeLog.objects.none()
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        time_log = serializer.save(user=self.request.user)
+        
+        # Send notification
+        notify_task_time_logged(time_log)
