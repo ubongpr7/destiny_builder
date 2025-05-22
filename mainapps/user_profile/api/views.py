@@ -16,7 +16,6 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from django.utils import timezone
 from django.db.models import Q
-from django.urls import reverse
 
 from rest_framework.response import Response
 
@@ -59,7 +58,7 @@ def send_kyc_approved_notification(profile, request=None):
         context_data = {
             'app_name': settings.SITE_NAME,
             'user_first_name': user.first_name or user.username or 'there',
-            'dashboard_url': f"{settings.SITE_URL}{reverse('dashboard')}"
+            'dashboard_url': f"{settings.SITE_URL}/dashboard"
         }
         
         # Send the notification
@@ -67,7 +66,7 @@ def send_kyc_approved_notification(profile, request=None):
             recipient=user,
             notification_type_name='verification_approved',
             context_data=context_data,
-            action_url=reverse('dashboard'),
+            action_url='/dashboard',
             priority='high',
             icon='check-circle',
             color='#4CAF50',  # Green color
@@ -93,7 +92,7 @@ def send_kyc_rejected_notification(profile, reason=None):
             'app_name': settings.SITE_NAME,
             'user_first_name': user.first_name or user.username or 'there',
             'rejection_reason': reason or 'Please check your details and try again.',
-            'profile_url': f"{settings.SITE_URL}{reverse('profile-update')}"
+            'profile_url': f"{settings.SITE_URL}/profile/update"
         }
         
         # Send the notification
@@ -101,7 +100,7 @@ def send_kyc_rejected_notification(profile, reason=None):
             recipient=user,
             notification_type_name='verification_rejected',
             context_data=context_data,
-            action_url=reverse('profile-update'),
+            action_url='/profile/update',
             priority='high',
             icon='alert-circle',
             color='#F44336',  # Red color
@@ -127,7 +126,7 @@ def send_kyc_flagged_notification(profile, reason=None):
             'app_name': settings.SITE_NAME,
             'user_first_name': user.first_name or user.username or 'there',
             'flag_reason': reason or 'Your verification requires additional review.',
-            'profile_url': f"{settings.SITE_URL}{reverse('profile-update')}"
+            'profile_url': f"{settings.SITE_URL}/profile/update"
         }
         
         # Send the notification
@@ -135,7 +134,7 @@ def send_kyc_flagged_notification(profile, reason=None):
             recipient=user,
             notification_type_name='verification_flagged',
             context_data=context_data,
-            action_url=reverse('profile-update'),
+            action_url='/profile/update',
             priority='high',
             icon='alert-triangle',
             color='#FF9800',  # Orange color
@@ -160,7 +159,7 @@ def send_kyc_reminder_notification(profile):
         context_data = {
             'app_name': settings.SITE_NAME,
             'user_first_name': user.first_name or user.username or 'there',
-            'profile_url': f"{settings.SITE_URL}{reverse('profile-update')}"
+            'profile_url': f"{settings.SITE_URL}/profile/update"
         }
         
         # Send the notification
@@ -168,7 +167,7 @@ def send_kyc_reminder_notification(profile):
             recipient=user,
             notification_type_name='profile_incomplete',
             context_data=context_data,
-            action_url=reverse('profile-update'),
+            action_url='/profile/update',
             priority='normal',
             icon='user-check',
             color='#FFC107',  # Yellow/amber color
@@ -192,7 +191,7 @@ def send_profile_updated_notification(profile):
         context_data = {
             'app_name': settings.SITE_NAME,
             'user_first_name': user.first_name or user.username or 'there',
-            'profile_url': f"{settings.SITE_URL}{reverse('profile-view')}"
+            'profile_url': f"{settings.SITE_URL}/profile"
         }
         
         # Send the notification
@@ -200,7 +199,7 @@ def send_profile_updated_notification(profile):
             recipient=user,
             notification_type_name='profile_updated',
             context_data=context_data,
-            action_url=reverse('profile-view'),
+            action_url='/profile',
             priority='low',
             icon='user',
             color='#2196F3',  # Blue color

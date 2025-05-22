@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Edit Authorization Code</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-width: 150px;
+        }
+        .notification {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #9C27B0;
+        }
+        .notification-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .notification-body {
+            margin-bottom: 20px;
+        }
+        .code-box {
+            background-color: #f3e5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 5px;
+            color: #9C27B0;
+        }
+        .admin-info {
+            background-color: #e8eaf6;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .warning {
+            color: #F44336;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #777;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{ site_url }}/static/images/logo.png" alt="{{ site_name }}" class="logo">
+    </div>
+    
+    <div class="notification">
+        <div class="notification-title">Profile Edit Authorization Code</div>
+        <div class="notification-body">
+            <p>Hello {{ user_first_name }},</p>
+            <p>An administrator has requested to edit your profile. Please verify their identity before sharing this code.</p>
+            
+            <div class="admin-info">
+                <strong>Administrator:</strong> {{ admin_name }}<br>
+                <strong>Email:</strong> {{ admin_email }}
+            </div>
+            
+            <p>Your verification code is:</p>
+            <div class="code-box">{{ verification_code }}</div>
+            
+            <p class="warning">IMPORTANT: Only share this code with the administrator if you are with them in person or have verified their identity through official channels.</p>
+            <p>This code will expire in 15 minutes.</p>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>This email was sent to {{ recipient.email }} because you registered on {{ app_name }}.</p>
+        <p>© {{ app_name }} {% now "Y" %}</p>
+    </div>
+</body>
+</html>

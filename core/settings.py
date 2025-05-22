@@ -25,7 +25,7 @@ ALLOWED_HOSTS = [
 # ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "").split(",") if host.strip()]
 
 SITE_URL = 'https://www.destinybuilders.africa/'
-SITE_NAME=SITE_URL
+SITE_NAME='Destiny Builders Africa'
 # Application definition
 DJ_DEFAULT_INSTALLED_APPS=[
     'django.contrib.admin',

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Account is Verified!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-width: 150px;
+        }
+        .notification {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4CAF50;
+        }
+        .notification-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .notification-body {
+            margin-bottom: 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #777;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{ site_url }}/static/images/logo.png" alt="{{ site_name }}" class="logo">
+    </div>
+    
+    <div class="notification">
+        <div class="notification-title">Your Account is Verified!</div>
+        <div class="notification-body">
+            <p>Congratulations {{ user_first_name }}!</p>
+            <p>Your account has been verified. You now have access to all features of {{ app_name }}.</p>
+            <p>Thank you for completing the verification process.</p>
+        </div>
+        
+        <a href="{{ dashboard_url }}" class="button">Go to Dashboard</a>
+    </div>
+    
+    <div class="footer">
+        <p>This email was sent to {{ recipient.email }} because you registered on {{ app_name }}.</p>
+        <p>© {{ app_name }} {% now "Y" %}</p>
+    </div>
+</body>
+</html>
