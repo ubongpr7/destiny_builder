@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ notification.title }}</title>
     <style>
@@ -9,71 +9,77 @@
             font-family: Arial, sans-serif;
             line-height: 1.6;
             color: #333;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
         }
         .header {
-            background-color: #1e7e34;
-            padding: 20px;
             text-align: center;
+            margin-bottom: 20px;
         }
-        .header h1 {
-            color: white;
-            margin: 0;
-            font-size: 24px;
+        .logo {
+            max-width: 150px;
         }
-        .content {
-            padding: 20px;
+        .notification {
             background-color: #f9f9f9;
-        }
-        .footer {
+            border-radius: 8px;
             padding: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #666;
+            margin-bottom: 20px;
+            border-left: 4px solid {{ notification.color|default:"#4CAF50" }};
+        }
+        .notification-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .notification-body {
+            margin-bottom: 20px;
         }
         .button {
             display: inline-block;
-            padding: 10px 20px;
-            background-color: #1e7e34;
+            background-color: #4CAF50;
             color: white;
             text-decoration: none;
+            padding: 10px 20px;
             border-radius: 4px;
-            margin-top: 20px;
+            font-weight: bold;
         }
-        .priority-high {
-            border-left: 4px solid #ff9800;
-        }
-        .priority-urgent {
-            border-left: 4px solid #f44336;
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #777;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>{{ site_name }}</h1>
-        </div>
+    <div class="header">
+        <img src="{{ site_url }}/static/images/logo.png" alt="{{ site_name }}" class="logo">
+    </div>
+    
+    <div class="notification">
+        <div class="notification-title">{{ notification.title }}</div>
+        <div class="notification-body">{{ notification.body }}</div>
         
-        <div class="content {% if notification.priority == 'high' %}priority-high{% elif notification.priority == 'urgent' %}priority-urgent{% endif %}">
-            <h2>{{ notification.title }}</h2>
-            <p>{{ notification.body }}</p>
-            
-            {% if notification.action_url %}
-            <a href="{{ site_url }}{{ notification.action_url }}" class="button">View Details</a>
+        {% if notification.action_url %}
+        <a href="{{ site_url }}{{ notification.action_url }}" class="button">
+            {% if notification.notification_type.name == 'welcome_message' %}
+                Complete Your Profile
+            {% elif notification.notification_type.name == 'profile_incomplete' %}
+                Update Profile
+            {% elif notification.notification_type.name == 'verification_approved' %}
+                Go to Dashboard
+            {% else %}
+                View Details
             {% endif %}
-        </div>
-        
-        <div class="footer">
-            <p>This is an automated message from {{ site_name }}. Please do not reply to this email.</p>
-            <p>If you have any questions, please contact us at <a href="mailto:support@destinybuilders.africa">support@destinybuilders.africa</a>.</p>
-            <p>© {{ current_year }} Destiny Builders Empowerment Foundation. All rights reserved.</p>
-        </div>
+        </a>
+        {% endif %}
+    </div>
+    
+    <div class="footer">
+        <p>This email was sent to {{ recipient.email }} because you registered on {{ site_name }}.</p>
+        <p>© {{ site_name }} {% now "Y" %}</p>
     </div>
 </body>
 </html>

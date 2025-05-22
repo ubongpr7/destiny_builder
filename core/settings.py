@@ -21,6 +21,9 @@ ALLOWED_HOSTS = [
     '13.51.147.202'
     
 ]
+# ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+# ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "").split(",") if host.strip()]
+
 SITE_URL = 'https://www.destinybuilders.africa/'
 
 # Application definition
