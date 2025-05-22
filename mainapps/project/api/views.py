@@ -12,6 +12,16 @@ from rest_framework.decorators import api_view, permission_classes, action
 from django.db.models.functions import TruncDate
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from mainapps.user_profile.api.views import BaseReferenceViewSet
+from .notification_utils import (
+    notify_project_created, notify_project_status_changed, notify_team_member_added,
+    notify_team_member_removed, notify_milestone_created, notify_milestone_assigned,
+    notify_milestone_unassigned, notify_milestone_status_changed, notify_milestone_completed,
+    notify_expense_created, notify_expense_status_changed, notify_update_created,
+    notify_project_budget_updated, notify_project_dates_updated, notify_official_added,
+    notify_official_removed, notify_media_uploaded, notify_team_member_role_changed,
+    notify_project_approaching_end, notify_project_overbudget, notify_milestone_approaching,
+    notify_milestone_overdue, notify_comment_added
+)
 from ..models import Project, ProjectCategory, DailyProjectUpdate, ProjectUpdateMedia
 from .serializers import *
 from django.db.models import F, Sum, Count, Avg, Case, When, DecimalField, Value, Q
@@ -53,8 +63,6 @@ class BaseUserViewSet(ReadOnlyModelViewSet):
             queryset = queryset.filter(email__icontains=email)
 
         return queryset
-
-
 
 class CEOUserViewSet(BaseUserViewSet):
     serializer_class = ProjectUserSerializer
@@ -176,6 +184,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
         instance = serializer.instance
         instance.created_by = self.request.user
         instance.save()
+        
+        # Send notification for project creation
+        notify_project_created(instance)
+        
+        # Check for approaching end date
+        today = timezone.now().date()
+        if instance.target_end_date:
+            days_remaining = (instance.target_end_date - today).days
+            if 0 < days_remaining <= 7:
+                notify_project_approaching_end(instance, days_remaining)
     
     @action(detail=False, methods=['get'])
     def assigned(self, request):
@@ -205,6 +223,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer = ProjectStatusUpdateSerializer(data=request.data)
         
         if serializer.is_valid():
+            old_status = project.status
             new_status = serializer.validated_data['status']
             notes = serializer.validated_data.get('notes', '')
             
@@ -219,6 +238,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
             
             project.save()
             
+            # Send notification for status change
+            notify_project_status_changed(project, old_status, new_status, request.user)
+            
             return Response(ProjectSerializer(project).data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -232,6 +254,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             data = serializer.validated_data
             notes = data.get('notes', '')
+            old_budget = project.budget
             
             # Update budget field if provided
             if 'budget' in data:
@@ -247,6 +270,15 @@ class ProjectViewSet(viewsets.ModelViewSet):
             
             project.save()
             
+            # Send notification for budget update
+            if 'budget' in data and old_budget != project.budget:
+                notify_project_budget_updated(project, old_budget, project.budget, request.user)
+            
+            # Check if project is over budget
+            funds_spent = project.funds_spent
+            if funds_spent > project.budget:
+                notify_project_overbudget(project, funds_spent, project.budget)
+            
             return Response(ProjectSerializer(project).data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -261,19 +293,46 @@ class ProjectViewSet(viewsets.ModelViewSet):
             data = serializer.validated_data
             notes = data.get('notes', '')
             
-            # Update date fields if provided
+            # Track date changes for notifications
+            date_changes = []
+            
+            # Update start_date if provided
             if 'start_date' in data:
+                old_date = project.start_date
                 project.start_date = data['start_date']
+                if old_date != project.start_date:
+                    date_changes.append(('start_date', old_date, project.start_date))
+            
+            # Update target_end_date if provided
             if 'target_end_date' in data:
+                old_date = project.target_end_date
                 project.target_end_date = data['target_end_date']
+                if old_date != project.target_end_date:
+                    date_changes.append(('target_end_date', old_date, project.target_end_date))
+            
+            # Update actual_end_date if provided
             if 'actual_end_date' in data:
+                old_date = project.actual_end_date
                 project.actual_end_date = data['actual_end_date']
+                if old_date != project.actual_end_date:
+                    date_changes.append(('actual_end_date', old_date, project.actual_end_date))
             
             # Add note about date update
             if notes:
                 project.notes = (project.notes or '') + f"\n\nDates updated on {timezone.now().date()}: {notes}"
             
             project.save()
+            
+            # Send notifications for date changes
+            for field, old_date, new_date in date_changes:
+                notify_project_dates_updated(project, field, old_date, new_date, request.user)
+            
+            # Check for approaching end date
+            today = timezone.now().date()
+            if project.target_end_date:
+                days_remaining = (project.target_end_date - today).days
+                if 0 < days_remaining <= 7:
+                    notify_project_approaching_end(project, days_remaining)
             
             return Response(ProjectSerializer(project).data)
         
@@ -295,6 +354,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
             try:
                 user = User.objects.get(pk=user_id)
                 project.officials.add(user)
+                
+                # Send notification for official added
+                notify_official_added(project, user, request.user)
+                
                 return Response({'status': 'official added'})
             except User.DoesNotExist:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -317,6 +380,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
             try:
                 user = User.objects.get(pk=user_id)
                 project.officials.remove(user)
+                
+                # Send notification for official removed
+                notify_official_removed(project, user, request.user)
+                
                 return Response({'status': 'official removed'})
             except User.DoesNotExist:
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -432,6 +499,29 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
             return ProjectTeamMemberCreateSerializer
         return ProjectTeamMemberSerializer
     
+    def perform_create(self, serializer):
+        """
+        Set created_by to current user when creating a team member
+        """
+        team_member = serializer.save()
+        
+        # Send notification for team member added
+        notify_team_member_added(team_member)
+    
+    def perform_destroy(self, instance):
+        """
+        Send notification before deleting team member
+        """
+        project = instance.project
+        user = instance.user
+        role = dict(instance.ROLE_CHOICES).get(instance.role, instance.role)
+        
+        # Delete the instance
+        instance.delete()
+        
+        # Send notification for team member removed
+        notify_team_member_removed(project, user, role)
+    
     @action(detail=False, methods=['get'])
     def by_project(self, request):
         """
@@ -525,12 +615,10 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
     def change_role(self, request, pk=None):
         """
         Change the role of a team member
-
         """
-
         team_member = self.get_object()
         new_role = request.data.get('role')
-        print(new_role)
+        
         if not new_role:
             return Response(
                 {"detail": "role is required"},
@@ -544,14 +632,16 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
                 {"detail": f"Invalid role. Must be one of: {', '.join(valid_roles)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-            
+        
+        old_role = team_member.role
         team_member.role = new_role
         team_member.save()
         
+        # Send notification for role change
+        notify_team_member_role_changed(team_member, old_role, new_role, request.user)
+        
         serializer = self.get_serializer(team_member)
         return Response(serializer.data)
-
-
 
 class ProjectMilestoneViewSet(viewsets.ModelViewSet):
     """
@@ -622,7 +712,51 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
         """
         Set created_by to current user when creating a milestone
         """
-        serializer.save(created_by=self.request.user)
+        milestone = serializer.save(created_by=self.request.user)
+        
+        # Send notification for milestone created
+        notify_milestone_created(milestone)
+        
+        # Send notifications for assigned users
+        for user in milestone.assigned_to.all():
+            notify_milestone_assigned(milestone, user)
+        
+        # Check for approaching due date
+        today = timezone.now().date()
+        days_remaining = (milestone.due_date - today).days
+        if 0 < days_remaining <= 7:
+            notify_milestone_approaching(milestone, days_remaining)
+        elif days_remaining < 0:
+            notify_milestone_overdue(milestone)
+    
+    def perform_update(self, serializer):
+        """
+        Handle notifications when updating a milestone
+        """
+        milestone = self.get_object()
+        old_assigned_users = set(milestone.assigned_to.all())
+        
+        # Save the updated milestone
+        updated_milestone = serializer.save()
+        
+        # Check for changes in assigned users
+        new_assigned_users = set(updated_milestone.assigned_to.all())
+        
+        # Users who were added
+        for user in new_assigned_users - old_assigned_users:
+            notify_milestone_assigned(updated_milestone, user)
+        
+        # Users who were removed
+        for user in old_assigned_users - new_assigned_users:
+            notify_milestone_unassigned(updated_milestone, user)
+        
+        # Check for approaching due date
+        today = timezone.now().date()
+        days_remaining = (updated_milestone.due_date - today).days
+        if 0 < days_remaining <= 7:
+            notify_milestone_approaching(updated_milestone, days_remaining)
+        elif days_remaining < 0 and updated_milestone.status != 'completed':
+            notify_milestone_overdue(updated_milestone)
     
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
@@ -645,9 +779,12 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
             completion_date = timezone.now().date()
             
         milestone.complete_milestone(completion_date)
-        tasks=milestone.tasks.filter(parent__isnull=True)
+        tasks = milestone.tasks.filter(parent__isnull=True)
         for task in tasks:
             task.update_status('completed')
+        
+        # Send notification for milestone completed
+        notify_milestone_completed(milestone, request.user)
 
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
@@ -673,17 +810,26 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
                 {"detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        old_status = milestone.status
             
         # If marking as completed, set completion date and percentage
         if new_status == 'completed' and milestone.status != 'completed':
             milestone.completion_date = timezone.now().date()
             milestone.completion_percentage = 100
-            tasks=milestone.tasks.filter(parent__isnull=True)
+            tasks = milestone.tasks.filter(parent__isnull=True)
             for task in tasks:
                 task.update_status('completed')
+            
+            # Will send completed notification
+            notify_milestone_completed(milestone, request.user)
         
         milestone.status = new_status
         milestone.save()
+        
+        # Send notification for status change (if not completed, as we already sent that)
+        if new_status != 'completed' or old_status == 'completed':
+            notify_milestone_status_changed(milestone, old_status, new_status, request.user)
         
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
@@ -707,14 +853,23 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
                 {"detail": "Completion percentage must be between 0 and 100"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        old_status = milestone.status
             
         # If setting to 100%, also mark as completed
         if percentage == 100 and milestone.status != 'completed':
             milestone.status = 'completed'
             milestone.completion_date = timezone.now().date()
             
+            # Will send completed notification
+            notify_milestone_completed(milestone, request.user)
+            
         milestone.completion_percentage = percentage
         milestone.save()
+        
+        # Send notification for status change if it changed and not to completed
+        if old_status != milestone.status and milestone.status != 'completed':
+            notify_milestone_status_changed(milestone, old_status, milestone.status, request.user)
         
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
@@ -732,12 +887,26 @@ class ProjectMilestoneViewSet(viewsets.ModelViewSet):
                 {"detail": "user_ids must be a list of integers"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # Get current assigned users
+        old_assigned_users = set(milestone.assigned_to.all())
             
         # Get valid users
         users = User.objects.filter(id__in=user_ids)
         
         # Set the assigned users
         milestone.assigned_to.set(users)
+        
+        # Get new assigned users
+        new_assigned_users = set(users)
+        
+        # Send notifications for newly assigned users
+        for user in new_assigned_users - old_assigned_users:
+            notify_milestone_assigned(milestone, user)
+        
+        # Send notifications for unassigned users
+        for user in old_assigned_users - new_assigned_users:
+            notify_milestone_unassigned(milestone, user)
         
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
@@ -1035,9 +1204,18 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         Set incurred_by to current user if not provided
         """
         if 'incurred_by' not in serializer.validated_data:
-            serializer.save(incurred_by=self.request.user, created_by=self.request.user)
+            expense = serializer.save(incurred_by=self.request.user, created_by=self.request.user)
         else:
-            serializer.save()
+            expense = serializer.save()
+        
+        # Send notification for expense created
+        notify_expense_created(expense)
+        
+        # Check if project is over budget
+        project = expense.project
+        funds_spent = project.funds_spent
+        if funds_spent > project.budget:
+            notify_project_overbudget(project, funds_spent, project.budget)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -1063,6 +1241,8 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
+        old_status = expense.status
+        
         # Update expense
         expense.status = 'approved'
         expense.approved_by = request.user
@@ -1076,6 +1256,9 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
                 expense.notes = f"Approval notes: {serializer.validated_data['notes']}"
                 
         expense.save()
+        
+        # Send notification for expense status change
+        notify_expense_status_changed(expense, old_status, 'approved', request.user)
         
         # Return updated expense
         response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
@@ -1105,6 +1288,8 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
+        old_status = expense.status
+        
         # Update expense
         expense.status = 'rejected'
         expense.approved_by = request.user
@@ -1118,6 +1303,9 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
                 expense.notes = f"Rejection notes: {serializer.validated_data['notes']}"
                 
         expense.save()
+        
+        # Send notification for expense status change
+        notify_expense_status_changed(expense, old_status, 'rejected', request.user)
         
         # Return updated expense
         response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
@@ -1140,6 +1328,8 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
+        old_status = expense.status
+        
         # Update expense
         expense.status = 'reimbursed'
         
@@ -1152,20 +1342,25 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
                 
         expense.save()
         
+        # Send notification for expense status change
+        notify_expense_status_changed(expense, old_status, 'reimbursed', request.user)
+        
         # Return updated expense
         response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
         return Response(response_serializer.data)
     
     @action(detail=False, methods=['get'])
-    def by_project(self, request,project_id=None):
+    def by_project(self, request, project_id=None):
         """
         Get all expenses for a specific project
         """
         if not project_id:
-            return Response(
-                {"detail": "project_id is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            project_id = request.query_params.get('project_id')
+            if not project_id:
+                return Response(
+                    {"detail": "project_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
         project = get_object_or_404(Project, id=project_id)
         expenses = ProjectExpense.objects.filter(project=project)
@@ -1270,9 +1465,6 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             'expenses_by_user': expenses_by_user
         })
 
-
-
-
 class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing daily project updates
@@ -1339,9 +1531,18 @@ class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
         Set submitted_by to current user if not provided
         """
         if 'submitted_by' not in serializer.validated_data:
-            serializer.save(submitted_by=self.request.user)
+            update = serializer.save(submitted_by=self.request.user)
         else:
-            serializer.save()
+            update = serializer.save()
+        
+        # Send notification for update created
+        notify_update_created(update)
+        
+        # Check if project is over budget due to funds spent today
+        project = update.project
+        funds_spent = project.funds_spent
+        if funds_spent > project.budget:
+            notify_project_overbudget(project, funds_spent, project.budget)
     
     @action(detail=False, methods=['get'])
     def by_project(self, request, project_id=None):
@@ -1529,6 +1730,15 @@ class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return ProjectUpdateMediaCreateSerializer
         return ProjectUpdateMediaSerializer
+    
+    def perform_create(self, serializer):
+        """
+        Set uploaded_by to current user when creating media
+        """
+        media = serializer.save(uploaded_by=self.request.user)
+        
+        # Send notification for media uploaded
+        notify_media_uploaded(media, media.media_type, 'update', media.update)
     
     @action(detail=False, methods=['get'])
     def by_update(self, request, update_id=None):
@@ -1779,9 +1989,6 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         context['request'] = self.request
         return context
 
-
-
-
 class BaseMediaViewSet(viewsets.ModelViewSet):
     """Base ViewSet for all media models"""
     permission_classes = [IsAuthenticated]
@@ -1794,6 +2001,16 @@ class BaseMediaViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return self.create_serializer_class
         return self.serializer_class
+    
+    def perform_create(self, serializer):
+        """Set uploaded_by to current user when creating media"""
+        media = serializer.save(uploaded_by=self.request.user)
+        
+        # Determine the related object type and object
+        if hasattr(media, 'project'):
+            notify_media_uploaded(media, media.media_type, 'project', media.project)
+        elif hasattr(media, 'milestone'):
+            notify_media_uploaded(media, media.media_type, 'milestone', media.milestone)
     
     @action(detail=False, methods=['get'])
     def by_media_type(self, request):

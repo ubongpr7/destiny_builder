@@ -19,6 +19,13 @@ class NotificationCategory(models.TextChoices):
     PAYMENT = 'payment', 'Payment'
     DOCUMENT = 'document', 'Document'
     OTHER = 'other', 'Other'
+    UPDATE= 'update', 'Update'
+    MEDIA= 'media', 'Media'
+    COMMENT= 'comment', 'Comment'
+    FEEDBACK= 'feedback', 'Feedback'
+    
+
+
 
 class NotificationPriority(models.TextChoices):
     LOW = 'low', 'Low'
