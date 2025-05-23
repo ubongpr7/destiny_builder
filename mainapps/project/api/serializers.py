@@ -46,6 +46,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     is_overbudget = serializers.SerializerMethodField()
     milestones_count = serializers.SerializerMethodField()
     milestones_completed_count = serializers.SerializerMethodField()
+    featured_image=serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -56,9 +57,20 @@ class ProjectSerializer(serializers.ModelSerializer):
             'budget', 'funds_allocated', 'funds_spent', 'budget_utilization', 'is_overbudget',
             'status', 'location', 'beneficiaries', 'success_criteria', 'risks', 'notes',
             'created_at', 'updated_at', 'days_remaining', 'team_members', 'milestones_count',
-            'milestones_completed_count'
+            'milestones_completed_count', 'featured_image'
         ]
         read_only_fields = ['created_at', 'updated_at']
+    
+    def get_featured_image(self, obj):
+        media =ProjectMedia.objects.filter(project=obj,is_featured=True, media_type='image').first()
+        if media:
+            return media.file.url
+        media =ProjectMedia.objects.filter(project=obj, media_type='image').first()
+        if media:
+            return media.file.url
+        
+        return None
+
     def get_team_members(self, obj):
         """Get team members for the project"""
         team_members = ProjectTeamMember.objects.filter(project=obj)
