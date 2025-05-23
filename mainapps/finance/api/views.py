@@ -3,10 +3,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Avg, Q
+from django.db.models import Sum, Count, Avg, Q, F
 from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
+import pytz
 
 from ..models import (
     DonationCampaign, Donation, RecurringDonation, InKindDonation,
@@ -580,19 +581,26 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
     def statistics(self, request):
         """Get comprehensive finance statistics for dashboard"""
         # Get date range from query params
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
         
         # Default to current year if no dates provided
-        if not start_date:
-            start_date = timezone.now().replace(month=1, day=1).date()
+        default_tz = timezone.get_current_timezone()
+        
+        if not start_date_str:
+            start_date = timezone.now().replace(month=1, day=1)
         else:
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            # Parse the date string and make it timezone-aware
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            start_date = default_tz.localize(start_date)
             
-        if not end_date:
-            end_date = timezone.now().date()
+        if not end_date_str:
+            end_date = timezone.now()
         else:
-            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            # Parse the date string and make it timezone-aware
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            # Set to end of day
+            end_date = default_tz.localize(end_date.replace(hour=23, minute=59, second=59))
             
         # Previous period for comparison (same length as selected period)
         period_length = (end_date - start_date).days
@@ -602,29 +610,33 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
         # Filter data based on date range
         donations = Donation.objects.filter(
             status='completed',
-            donation_date__range=[start_date, end_date]
+            donation_date__gte=start_date,
+            donation_date__lte=end_date
         )
         prev_donations = Donation.objects.filter(
             status='completed',
-            donation_date__range=[prev_start_date, prev_end_date]
+            donation_date__gte=prev_start_date,
+            donation_date__lte=prev_end_date
         )
         
         campaigns = DonationCampaign.objects.filter(
             is_active=True,
-            start_date__lte=end_date,
-            end_date__gte=start_date
+            start_date__lte=end_date.date(),
+            end_date__gte=start_date.date()
         )
         
         expenses = OrganizationalExpense.objects.filter(
-            expense_date__range=[start_date, end_date]
+            expense_date__gte=start_date,
+            expense_date__lte=end_date
         )
         prev_expenses = OrganizationalExpense.objects.filter(
-            expense_date__range=[prev_start_date, prev_end_date]
+            expense_date__gte=prev_start_date,
+            expense_date__lte=prev_end_date
         )
         
         budgets = Budget.objects.filter(
-            start_date__lte=end_date,
-            end_date__gte=start_date
+            start_date__lte=end_date.date(),
+            end_date__gte=start_date.date()
         )
         
         # Calculate donation statistics
