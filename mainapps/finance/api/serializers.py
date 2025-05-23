@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from ..models import (
     DonationCampaign, Donation, RecurringDonation, InKindDonation,
-    Grant, GrantReport, Budget, BudgetItem, Expense, OrganizationalExpense
+    Grant, GrantReport, Budget, BudgetItem, OrganizationalExpense
 )
 from mainapps.project.models import Project
 from django.db import models
