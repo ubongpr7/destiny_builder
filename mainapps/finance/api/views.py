@@ -84,7 +84,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
 class DonationViewSet(viewsets.ModelViewSet):
     queryset = Donation.objects.all()
     serializer_class = DonationSerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'donation_type', 'campaign', 'project', 'donor']
     search_fields = ['donor_name', 'notes', 'transaction_id']
