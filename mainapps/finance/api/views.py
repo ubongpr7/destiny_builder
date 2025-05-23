@@ -143,6 +143,23 @@ class DonationViewSet(viewsets.ModelViewSet):
         if end_date:
             donations = donations.filter(donation_date__lte=end_date)
         
+        # Get top donors (add this section)
+        top_donors = []
+        if not donations.filter(is_anonymous=True).exists():
+            donor_stats = donations.values('donor', 'donor_name').annotate(
+                total=Sum('amount'),
+                count=Count('id')
+            ).order_by('-total')[:5]
+            
+            top_donors = [
+                {
+                    'donor_id': item['donor'],
+                    'donor_name': item['donor_name'] or 'Unknown',
+                    'total': item['total'],
+                    'count': item['count']
+                } for item in donor_stats if item['donor'] or item['donor_name']
+            ]
+        
         stats = {
             'total_amount': donations.aggregate(total=Sum('amount'))['total'] or 0,
             'total_count': donations.count(),
@@ -153,6 +170,7 @@ class DonationViewSet(viewsets.ModelViewSet):
                 total=Sum('amount')
             ),
             'monthly_trend': self._get_monthly_trend(donations),
+            'top_donors': top_donors,  # Make sure this is included
         }
         
         serializer = DonationStatsSerializer(stats)

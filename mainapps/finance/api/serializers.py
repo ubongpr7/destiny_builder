@@ -161,5 +161,5 @@ class DonationStatsSerializer(serializers.Serializer):
     total_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     total_count = serializers.IntegerField()
     average_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
-    top_donors = serializers.ListField()
+    top_donors = serializers.ListField(default=[])  # Add default empty list
     monthly_trend = serializers.ListField()
