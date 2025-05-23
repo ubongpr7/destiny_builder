@@ -23,7 +23,7 @@ router.register(r'grant-reports', GrantReportViewSet, basename='grantreport')
 router.register(r'budgets', BudgetViewSet, basename='budget')
 router.register(r'budget-items', BudgetItemViewSet, basename='budgetitem')
 router.register(r'organizational-expenses', OrganizationalExpenseViewSet, basename='organizationalexpense')
-router.register(r'dashboard', FinanceDashboardViewSet, basename='financedashboard')
+router.register(r'dashboard', FinanceDashboardViewSet, basename='finance-dashboard')
 
 urlpatterns = [
     path('', include(router.urls)),
