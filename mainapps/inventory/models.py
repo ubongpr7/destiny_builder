@@ -144,7 +144,6 @@ class AssetAttachment(models.Model):
     file = models.FileField(upload_to='asset_attachments/')
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='asset_attachments')
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    
     def __str__(self):
         return f"{self.asset.name} - {self.title}"
 

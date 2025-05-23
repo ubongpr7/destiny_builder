@@ -42,6 +42,7 @@ urlpatterns = [
 
     path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
     path('project_api/', include("mainapps.project.api.urls",)),
+    path('finance_api/', include("mainapps.finance.api.urls",)),
     path('task_api/', include("mainapps.project_task.api.urls",)),
     path('common_api/', include("mainapps.common.api.urls")),
     path('profile_api/', include("mainapps.user_profile.api.urls")),
