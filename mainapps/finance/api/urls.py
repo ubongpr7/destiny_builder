@@ -11,6 +11,7 @@ from .views import (
     BudgetItemViewSet,
     OrganizationalExpenseViewSet,
     FinanceDashboardViewSet,
+    create_public_donation,
 )
 
 router = DefaultRouter()
@@ -27,4 +28,5 @@ router.register(r'dashboard', FinanceDashboardViewSet, basename='finance-dashboa
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('donations/public/', create_public_donation, name='create_public_donation'),
 ]

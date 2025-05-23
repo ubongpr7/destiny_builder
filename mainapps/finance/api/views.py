@@ -24,6 +24,44 @@ from .notification_utils import (
     send_grant_status_notification, send_budget_alert_notification,
     send_expense_approval_notification, send_recurring_donation_notification
 )
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_public_donation(request):
+    """
+    Create a donation for unauthenticated users.
+    This is a simplified endpoint that doesn't require authentication.
+    """
+    serializer = DonationSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        # Save without processed_by since user is not authenticated
+        donation = serializer.save(processed_by=None)
+        
+        # Send notification for completed donations
+        if donation.status == 'completed':
+            send_donation_received_notification(donation)
+            
+            # Update campaign current amount if applicable
+            if donation.campaign:
+                campaign = donation.campaign
+                campaign.current_amount += donation.amount
+                campaign.save()
+                
+                # Check for milestones
+                progress = campaign.progress_percentage
+                if progress >= 100:
+                    send_campaign_milestone_notification(campaign, 'target_reached')
+                elif progress >= 75:
+                    send_campaign_milestone_notification(campaign, '75_percent')
+                elif progress >= 50:
+                    send_campaign_milestone_notification(campaign, '50_percent')
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class DonationCampaignViewSet(viewsets.ModelViewSet):
     queryset = DonationCampaign.objects.all()
@@ -81,10 +119,11 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         
         return Response(stats)
 
+
 class DonationViewSet(viewsets.ModelViewSet):
     queryset = Donation.objects.all()
     serializer_class = DonationSerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'donation_type', 'campaign', 'project', 'donor']
     search_fields = ['donor_name', 'notes', 'transaction_id']
