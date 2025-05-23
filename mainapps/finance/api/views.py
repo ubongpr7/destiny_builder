@@ -26,7 +26,9 @@ from .notification_utils import (
 )
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from django.views.decorators.csrf import csrf_exempt
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def create_public_donation(request):
