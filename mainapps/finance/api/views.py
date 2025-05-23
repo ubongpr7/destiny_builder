@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Avg, Q, F
 from django.utils import timezone
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from decimal import Decimal
 import pytz
 
@@ -492,32 +492,40 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
     def summary(self, request):
         """Get finance summary for dashboard"""
         # Get date range from query params
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
         
         # Default to current year if no dates provided
-        if not start_date:
+        if not start_date_str:
             start_date = timezone.now().replace(month=1, day=1).date()
-        if not end_date:
+        else:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            
+        if not end_date_str:
             end_date = timezone.now().date()
+        else:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         
         # Calculate totals
         donations = Donation.objects.filter(
             status='completed',
-            donation_date__range=[start_date, end_date]
+            donation_date__date__gte=start_date,
+            donation_date__date__lte=end_date
         )
         grants = Grant.objects.filter(
             status__in=['approved', 'active', 'completed'],
-            approval_date__range=[start_date, end_date]
+            approval_date__gte=start_date,
+            approval_date__lte=end_date
         )
         expenses = OrganizationalExpense.objects.filter(
             status='approved',
-            expense_date__range=[start_date, end_date]
+            expense_date__gte=start_date,
+            expense_date__lte=end_date
         )
         
         # Monthly data for current year
         current_month_start = timezone.now().replace(day=1).date()
-        monthly_donations = donations.filter(donation_date__gte=current_month_start)
+        monthly_donations = donations.filter(donation_date__date__gte=current_month_start)
         monthly_expenses = expenses.filter(expense_date__gte=current_month_start)
         
         summary_data = {
@@ -545,12 +553,14 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
             
             month_donations = Donation.objects.filter(
                 status='completed',
-                donation_date__range=[month_start, month_end]
+                donation_date__date__gte=month_start,
+                donation_date__date__lte=month_end
             ).aggregate(total=Sum('amount'))['total'] or 0
             
             month_expenses = OrganizationalExpense.objects.filter(
                 status='approved',
-                expense_date__range=[month_start, month_end]
+                expense_date__gte=month_start,
+                expense_date__lte=month_end
             ).aggregate(total=Sum('amount'))['total'] or 0
             
             monthly_data.append({
@@ -580,172 +590,218 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """Get comprehensive finance statistics for dashboard"""
-        # Get date range from query params
-        start_date_str = request.query_params.get('start_date')
-        end_date_str = request.query_params.get('end_date')
-        
-        # Default to current year if no dates provided
-        default_tz = timezone.get_current_timezone()
-        
-        if not start_date_str:
-            start_date = timezone.now().replace(month=1, day=1)
-        else:
-            # Parse the date string and make it timezone-aware
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-            start_date = default_tz.localize(start_date)
+        try:
+            # Get date range from query params
+            start_date_str = request.query_params.get('start_date')
+            end_date_str = request.query_params.get('end_date')
             
-        if not end_date_str:
-            end_date = timezone.now()
-        else:
-            # Parse the date string and make it timezone-aware
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-            # Set to end of day
-            end_date = default_tz.localize(end_date.replace(hour=23, minute=59, second=59))
-            
-        # Previous period for comparison (same length as selected period)
-        period_length = (end_date - start_date).days
-        prev_end_date = start_date - timedelta(days=1)
-        prev_start_date = prev_end_date - timedelta(days=period_length)
-        
-        # Filter data based on date range
-        donations = Donation.objects.filter(
-            status='completed',
-            donation_date__gte=start_date,
-            donation_date__lte=end_date
-        )
-        prev_donations = Donation.objects.filter(
-            status='completed',
-            donation_date__gte=prev_start_date,
-            donation_date__lte=prev_end_date
-        )
-        
-        campaigns = DonationCampaign.objects.filter(
-            is_active=True,
-            start_date__lte=end_date.date(),
-            end_date__gte=start_date.date()
-        )
-        
-        expenses = OrganizationalExpense.objects.filter(
-            expense_date__gte=start_date,
-            expense_date__lte=end_date
-        )
-        prev_expenses = OrganizationalExpense.objects.filter(
-            expense_date__gte=prev_start_date,
-            expense_date__lte=prev_end_date
-        )
-        
-        budgets = Budget.objects.filter(
-            start_date__lte=end_date.date(),
-            end_date__gte=start_date.date()
-        )
-        
-        # Calculate donation statistics
-        donation_total = donations.aggregate(total=Sum('amount'))['total'] or 0
-        prev_donation_total = prev_donations.aggregate(total=Sum('amount'))['total'] or 0
-        donation_growth = 0
-        if prev_donation_total > 0:
-            donation_growth = ((donation_total - prev_donation_total) / prev_donation_total) * 100
-            
-        # Get recent donations
-        recent_donations = donations.order_by('-donation_date')[:5].values(
-            'id', 'amount', 'donation_date', 'donor_name', 'is_anonymous',
-            'donor', 'status'
-        )
-        
-        # Add donor details to recent donations
-        for donation in recent_donations:
-            if donation['donor']:
-                from django.contrib.auth import get_user_model
-                User = get_user_model()
-                try:
-                    user = User.objects.get(id=donation['donor'])
-                    donation['donor_details'] = {
-                        'name': user.get_full_name() or user.username,
-                        'email': user.email
-                    }
-                except User.DoesNotExist:
-                    donation['donor_details'] = None
+            # Default to current year if no dates provided
+            if not start_date_str:
+                start_date = timezone.now().replace(month=1, day=1).date()
             else:
-                donation['donor_details'] = None
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                
+            if not end_date_str:
+                end_date = timezone.now().date()
+            else:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                
+            # Create datetime objects for start and end of day
+            start_datetime = datetime.combine(start_date, time.min)
+            start_datetime = timezone.make_aware(start_datetime)
+            
+            end_datetime = datetime.combine(end_date, time.max)
+            end_datetime = timezone.make_aware(end_datetime)
+                
+            # Previous period for comparison (same length as selected period)
+            period_length = (end_date - start_date).days
+            prev_end_date = start_date - timedelta(days=1)
+            prev_start_date = prev_end_date - timedelta(days=period_length)
+            
+            prev_start_datetime = datetime.combine(prev_start_date, time.min)
+            prev_start_datetime = timezone.make_aware(prev_start_datetime)
+            
+            prev_end_datetime = datetime.combine(prev_end_date, time.max)
+            prev_end_datetime = timezone.make_aware(prev_end_datetime)
+            
+            # Filter data based on date range
+            donations = Donation.objects.filter(
+                status='completed',
+                donation_date__gte=start_datetime,
+                donation_date__lte=end_datetime
+            )
+            prev_donations = Donation.objects.filter(
+                status='completed',
+                donation_date__gte=prev_start_datetime,
+                donation_date__lte=prev_end_datetime
+            )
+            
+            campaigns = DonationCampaign.objects.filter(
+                is_active=True,
+                start_date__lte=end_date,
+                end_date__gte=start_date
+            )
+            
+            expenses = OrganizationalExpense.objects.filter(
+                expense_date__gte=start_date,
+                expense_date__lte=end_date
+            )
+            prev_expenses = OrganizationalExpense.objects.filter(
+                expense_date__gte=prev_start_date,
+                expense_date__lte=prev_end_date
+            )
+            
+            budgets = Budget.objects.filter(
+                start_date__lte=end_date,
+                end_date__gte=start_date
+            )
+            
+            # Calculate donation statistics
+            donation_total = donations.aggregate(total=Sum('amount'))['total'] or 0
+            prev_donation_total = prev_donations.aggregate(total=Sum('amount'))['total'] or 0
+            donation_growth = 0
+            if prev_donation_total > 0:
+                donation_growth = ((donation_total - prev_donation_total) / prev_donation_total) * 100
+                
+            # Get recent donations
+            recent_donations = donations.order_by('-donation_date')[:5].values(
+                'id', 'amount', 'donation_date', 'donor_name', 'is_anonymous',
+                'donor', 'status'
+            )
+            
+            # Add donor details to recent donations
+            for donation in recent_donations:
+                if donation['donor']:
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    try:
+                        user = User.objects.get(id=donation['donor'])
+                        donation['donor_details'] = {
+                            'name': user.get_full_name() or user.username,
+                            'email': user.email
+                        }
+                    except User.DoesNotExist:
+                        donation['donor_details'] = None
+                else:
+                    donation['donor_details'] = None
+                
+                # Convert date to string for JSON serialization
+                donation['date'] = donation['donation_date'].isoformat()
+                
+            # Calculate campaign statistics
+            active_campaigns = campaigns.count()
+            total_raised = campaigns.annotate(
+                raised=Sum('donations__amount', filter=Q(donations__status='completed'))
+            ).aggregate(total=Sum('raised'))['total'] or 0
+            total_target = campaigns.aggregate(total=Sum('target_amount'))['total'] or 0
+            success_rate = 0
+            if active_campaigns > 0:
+                completed_campaigns = campaigns.filter(current_amount__gte=F('target_amount')).count()
+                success_rate = (completed_campaigns / active_campaigns) * 100
+                
+            # Calculate expense statistics
+            expense_total = expenses.filter(status='approved').aggregate(total=Sum('amount'))['total'] or 0
+            pending_amount = expenses.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
+            prev_expense_total = prev_expenses.filter(status='approved').aggregate(total=Sum('amount'))['total'] or 0
+            expense_growth = 0
+            if prev_expense_total > 0:
+                expense_growth = ((expense_total - prev_expense_total) / prev_expense_total) * 100
+                
+            approval_rate = 0
+            total_expenses = expenses.count()
+            if total_expenses > 0:
+                approved_expenses = expenses.filter(status='approved').count()
+                approval_rate = (approved_expenses / total_expenses) * 100
+                
+            # Get recent expenses
+            recent_expenses = expenses.order_by('-expense_date')[:5].values(
+                'id', 'amount', 'expense_date', 'title', 'description', 'status'
+            )
             
             # Convert date to string for JSON serialization
-            donation['date'] = donation['donation_date'].isoformat()
-            
-        # Calculate campaign statistics
-        active_campaigns = campaigns.count()
-        total_raised = campaigns.annotate(
-            raised=Sum('donations__amount', filter=Q(donations__status='completed'))
-        ).aggregate(total=Sum('raised'))['total'] or 0
-        total_target = campaigns.aggregate(total=Sum('target_amount'))['total'] or 0
-        success_rate = 0
-        if active_campaigns > 0:
-            completed_campaigns = campaigns.filter(current_amount__gte=F('target_amount')).count()
-            success_rate = (completed_campaigns / active_campaigns) * 100
-            
-        # Calculate expense statistics
-        expense_total = expenses.filter(status='approved').aggregate(total=Sum('amount'))['total'] or 0
-        pending_amount = expenses.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
-        prev_expense_total = prev_expenses.filter(status='approved').aggregate(total=Sum('amount'))['total'] or 0
-        expense_growth = 0
-        if prev_expense_total > 0:
-            expense_growth = ((expense_total - prev_expense_total) / prev_expense_total) * 100
-            
-        approval_rate = 0
-        total_expenses = expenses.count()
-        if total_expenses > 0:
-            approved_expenses = expenses.filter(status='approved').count()
-            approval_rate = (approved_expenses / total_expenses) * 100
-            
-        # Get recent expenses
-        recent_expenses = expenses.order_by('-expense_date')[:5].values(
-            'id', 'amount', 'expense_date', 'title', 'description', 'status'
-        )
-        
-        # Convert date to string for JSON serialization
-        for expense in recent_expenses:
-            expense['date'] = expense['expense_date'].isoformat()
-            
-        # Calculate budget statistics
-        total_budget = budgets.aggregate(total=Sum('total_amount'))['total'] or 0
-        spent_budget = budgets.aggregate(spent=Sum('spent_amount'))['spent'] or 0
-        remaining_budget = total_budget - spent_budget
-        utilization_rate = 0
-        if total_budget > 0:
-            utilization_rate = (spent_budget / total_budget) * 100
-            
-        # Compile all statistics
-        statistics = {
-            'donation_stats': {
-                'total_amount': donation_total,
-                'donor_count': donations.values('donor').distinct().count(),
-                'growth_rate': donation_growth,
-                'average_amount': donations.aggregate(avg=Avg('amount'))['avg'] or 0,
-            },
-            'campaign_stats': {
-                'active_count': active_campaigns,
-                'total_raised': total_raised,
-                'total_target': total_target,
-                'success_rate': success_rate,
-            },
-            'expense_stats': {
-                'total_amount': expense_total,
-                'pending_amount': pending_amount,
-                'growth_rate': expense_growth,
-                'approval_rate': approval_rate,
-            },
-            'budget_stats': {
-                'total_budget': total_budget,
-                'total_spent': spent_budget,
-                'total_remaining': remaining_budget,
-                'utilization_rate': utilization_rate,
-            },
-            'recent_donations': list(recent_donations),
-            'recent_expenses': list(recent_expenses),
-            'date_range': {
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
-                'period_days': period_length,
+            for expense in recent_expenses:
+                expense['date'] = expense['expense_date'].isoformat()
+                
+            # Calculate budget statistics
+            total_budget = budgets.aggregate(total=Sum('total_amount'))['total'] or 0
+            spent_budget = budgets.aggregate(spent=Sum('spent_amount'))['spent'] or 0
+            remaining_budget = total_budget - spent_budget
+            utilization_rate = 0
+            if total_budget > 0:
+                utilization_rate = (spent_budget / total_budget) * 100
+                
+            # Compile all statistics
+            statistics = {
+                'donation_stats': {
+                    'total_amount': donation_total,
+                    'donor_count': donations.values('donor').distinct().count(),
+                    'growth_rate': donation_growth,
+                    'average_amount': donations.aggregate(avg=Avg('amount'))['avg'] or 0,
+                },
+                'campaign_stats': {
+                    'active_count': active_campaigns,
+                    'total_raised': total_target,
+                    'success_rate': success_rate,
+                },
+                'expense_stats': {
+                    'total_amount': expense_total,
+                    'pending_amount': pending_amount,
+                    'growth_rate': expense_growth,
+                    'approval_rate': approval_rate,
+                },
+                'budget_stats': {
+                    'total_budget': total_budget,
+                    'total_spent': spent_budget,
+                    'total_remaining': remaining_budget,
+                    'utilization_rate': utilization_rate,
+                },
+                'recent_donations': list(recent_donations),
+                'recent_expenses': list(recent_expenses),
+                'date_range': {
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat(),
+                    'period_days': period_length,
+                }
             }
-        }
-        
-        return Response(statistics)
+            
+            return Response(statistics)
+        except Exception as e:
+            # Log the error and return a simplified response
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in statistics endpoint: {str(e)}")
+            
+            return Response({
+                'donation_stats': {
+                    'total_amount': 0,
+                    'donor_count': 0,
+                    'growth_rate': 0,
+                    'average_amount': 0,
+                },
+                'campaign_stats': {
+                    'active_count': 0,
+                    'total_raised': 0,
+                    'total_target': 0,
+                    'success_rate': 0,
+                },
+                'expense_stats': {
+                    'total_amount': 0,
+                    'pending_amount': 0,
+                    'growth_rate': 0,
+                    'approval_rate': 0,
+                },
+                'budget_stats': {
+                    'total_budget': 0,
+                    'total_spent': 0,
+                    'total_remaining': 0,
+                    'utilization_rate': 0,
+                },
+                'recent_donations': [],
+                'recent_expenses': [],
+                'date_range': {
+                    'start_date': timezone.now().date().isoformat(),
+                    'end_date': timezone.now().date().isoformat(),
+                    'period_days': 0,
+                },
+                'error': str(e)
+            })
