@@ -112,7 +112,8 @@ class ProjectListSerializer(serializers.ModelSerializer):
     category_name = serializers.SerializerMethodField()
     milestones_count = serializers.SerializerMethodField()
     milestones_completed_count = serializers.SerializerMethodField()
-    
+    featured_image=serializers.SerializerMethodField()
+    team_member_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
@@ -121,7 +122,22 @@ class ProjectListSerializer(serializers.ModelSerializer):
             'manager_name', 'start_date', 'target_end_date',
             'budget', 'status', 'location', 'milestones_count',
             'milestones_completed_count'
+            ,'featured_image','team_member_count'
+
         ]
+    def get_team_member_count(self, obj):
+        """Get the count of team members for the project"""
+        return ProjectTeamMember.objects.filter(project=obj).count()
+    def get_featured_image(self, obj):
+        media =ProjectMedia.objects.filter(project=obj,is_featured=True, media_type='image').first()
+        if media:
+            return media.file.url
+        media =ProjectMedia.objects.filter(project=obj, media_type='image').first()
+        if media:
+            return media.file.url
+        
+        return None
+
     def get_milestones_completed_count(self, obj):
         """Get the count of completed milestones for the project"""
         return ProjectMilestone.objects.filter(project=obj, status='completed').count()
