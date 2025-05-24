@@ -150,6 +150,14 @@ class Donation(models.Model):
             models.Index(fields=['donor', 'status']),
             models.Index(fields=['campaign', 'status']),
         ]
+    @property
+    def donor_name_display(self):
+        if self.donor and not self.is_anonymous:
+            return self.donor.get_full_name
+        elif self.donor_name and not self.is_anonymous:
+            return self.donor_name
+        else:
+            return "Anonymous"
     
     def __str__(self):
         if self.donor and not self.is_anonymous:
