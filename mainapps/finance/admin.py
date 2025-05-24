@@ -11,7 +11,7 @@ from .models import (
 class RecurringDonationAdmin(admin.ModelAdmin):
     list_display = [
         'donor', 'amount', 'frequency', 'status', 'next_payment_date',
-        'payment_count', 'total_donated', 'created_at', 'actions'
+        'payment_count', 'total_donated', 'created_at', 'action_buttons'
     ]
     list_filter = ['status', 'frequency', 'created_at', 'next_payment_date']
     search_fields = ['donor__username', 'donor__email', 'donor__first_name', 'donor__last_name']
@@ -44,26 +44,45 @@ class RecurringDonationAdmin(admin.ModelAdmin):
         })
     )
     
-    def actions(self, obj):
-        """Custom actions for each recurring donation"""
-        actions = []
+    # Add proper Django admin actions
+    actions = ['pause_selected_donations', 'resume_selected_donations', 'cancel_selected_donations']
+    
+    def action_buttons(self, obj):
+        """Custom action buttons for each recurring donation"""
+        buttons = []
         
         if obj.status == 'active':
-            pause_url = reverse('admin:finance_recurringdonation_pause', args=[obj.pk])
-            actions.append(f'<a href="{pause_url}" class="button">Pause</a>')
+            buttons.append(f'<a href="#" onclick="pauseDonation({obj.pk})" class="button">Pause</a>')
         elif obj.status == 'paused':
-            resume_url = reverse('admin:finance_recurringdonation_resume', args=[obj.pk])
-            actions.append(f'<a href="{resume_url}" class="button">Resume</a>')
+            buttons.append(f'<a href="#" onclick="resumeDonation({obj.pk})" class="button">Resume</a>')
         
-        cancel_url = reverse('admin:finance_recurringdonation_cancel', args=[obj.pk])
-        actions.append(f'<a href="{cancel_url}" class="button">Cancel</a>')
+        buttons.append(f'<a href="#" onclick="cancelDonation({obj.pk})" class="button">Cancel</a>')
         
         history_url = reverse('admin:finance_donation_changelist') + f'?donor__id__exact={obj.donor.id}&donation_type__exact=recurring'
-        actions.append(f'<a href="{history_url}" class="button">View History</a>')
+        buttons.append(f'<a href="{history_url}" class="button">View History</a>')
         
-        return format_html(' '.join(actions))
+        return format_html(' '.join(buttons))
     
-    actions.short_description = 'Actions'
+    action_buttons.short_description = 'Actions'
+    action_buttons.allow_tags = True
+    
+    def pause_selected_donations(self, request, queryset):
+        """Admin action to pause selected donations"""
+        updated = queryset.filter(status='active').update(status='paused')
+        self.message_user(request, f'{updated} donations were paused.')
+    pause_selected_donations.short_description = "Pause selected donations"
+    
+    def resume_selected_donations(self, request, queryset):
+        """Admin action to resume selected donations"""
+        updated = queryset.filter(status='paused').update(status='active')
+        self.message_user(request, f'{updated} donations were resumed.')
+    resume_selected_donations.short_description = "Resume selected donations"
+    
+    def cancel_selected_donations(self, request, queryset):
+        """Admin action to cancel selected donations"""
+        updated = queryset.filter(status__in=['active', 'paused']).update(status='cancelled')
+        self.message_user(request, f'{updated} donations were cancelled.')
+    cancel_selected_donations.short_description = "Cancel selected donations"
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('donor', 'campaign', 'project')
