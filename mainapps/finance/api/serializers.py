@@ -46,7 +46,7 @@ class DonationSerializer(serializers.ModelSerializer):
         if obj.is_anonymous:
             return "Anonymous"
         if obj.donor:
-            return obj.donor.get_full_name() or obj.donor.username
+            return obj.donor.get_full_name or obj.donor.username
         return obj.donor_name or "Unknown"
 
 class RecurringDonationSerializer(serializers.ModelSerializer):
@@ -74,7 +74,7 @@ class InKindDonationSerializer(serializers.ModelSerializer):
         if obj.is_anonymous:
             return "Anonymous"
         if obj.donor:
-            return obj.donor.get_full_name() or obj.donor.username
+            return obj.donor.get_full_name or obj.donor.username
         return obj.donor_name or "Unknown"
 
 class GrantSerializer(serializers.ModelSerializer):
