@@ -25,15 +25,14 @@ def send_donation_received_notification(donation):
             # Check user preferences
             if hasattr(user, 'notification_preferences'):
                 prefs = user.notification_preferences.filter(notification_type=notification_type).first()
-                if prefs and not prefs.in_app_enabled:
+                if prefs and not prefs.receive_in_app:
                     continue
             
-            # Create in-app notification
             Notification.objects.create(
-                user=user,
+                recipient=user,
                 notification_type=notification_type,
                 title=f"New Donation Received",
-                message=f"A donation of ${donation.amount} has been received" + 
+                body=f"A donation of ${donation.amount} has been received" + 
                        (f" for {donation.campaign.title}" if donation.campaign else ""),
                 data={
                     'donation_id': donation.id,
@@ -46,7 +45,7 @@ def send_donation_received_notification(donation):
             # Send email if enabled
             if hasattr(user, 'notification_preferences'):
                 prefs = user.notification_preferences.filter(notification_type=notification_type).first()
-                if prefs and prefs.email_enabled:
+                if prefs and prefs.receive_email:
                     send_donation_email(user, donation)
     
     except NotificationType.DoesNotExist:
@@ -70,14 +69,14 @@ def send_campaign_milestone_notification(campaign, milestone_type):
             # Check user preferences
             if hasattr(user, 'notification_preferences'):
                 prefs = user.notification_preferences.filter(notification_type=notification_type).first()
-                if prefs and not prefs.in_app_enabled:
+                if prefs and not prefs.receive_in_app:
                     continue
             
             Notification.objects.create(
-                user=user,
+                recipient=user,
                 notification_type=notification_type,
                 title="Campaign Milestone",
-                message=message,
+                body=message,
                 data={
                     'campaign_id': campaign.id,
                     'milestone_type': milestone_type,
@@ -100,14 +99,14 @@ def send_grant_status_notification(grant, old_status, new_status):
             # Check user preferences
             if hasattr(user, 'notification_preferences'):
                 prefs = user.notification_preferences.filter(notification_type=notification_type).first()
-                if prefs and not prefs.in_app_enabled:
+                if prefs and not prefs.receive_in_app:
                     continue
             
             Notification.objects.create(
-                user=user,
+                recipient=user,
                 notification_type=notification_type,
                 title="Grant Status Update",
-                message=f"Grant '{grant.title}' status changed from {old_status} to {new_status}",
+                body=f"Grant '{grant.title}' status changed from {old_status} to {new_status}",
                 data={
                     'grant_id': grant.id,
                     'old_status': old_status,
@@ -139,14 +138,14 @@ def send_budget_alert_notification(budget, alert_type):
             # Check user preferences
             if hasattr(user, 'notification_preferences'):
                 prefs = user.notification_preferences.filter(notification_type=notification_type).first()
-                if prefs and not prefs.in_app_enabled:
+                if prefs and not prefs.receive_in_app:
                     continue
             
             Notification.objects.create(
-                user=user,
+                recipient=user,
                 notification_type=notification_type,
                 title="Budget Alert",
-                message=message,
+                body=message,
                 data={
                     'budget_id': budget.id,
                     'alert_type': alert_type,
@@ -167,12 +166,12 @@ def send_expense_approval_notification(expense, approved_by):
         # Notify the person who submitted the expense
         if hasattr(expense.submitted_by, 'notification_preferences'):
             prefs = expense.submitted_by.notification_preferences.filter(notification_type=notification_type).first()
-            if not prefs or prefs.in_app_enabled:
+            if not prefs or prefs.receive_in_app:
                 Notification.objects.create(
-                    user=expense.submitted_by,
+                    recipient=expense.submitted_by,
                     notification_type=notification_type,
                     title=f"Expense {expense.status.title()}",
-                    message=f"Your expense '{expense.title}' has been {expense.status} by {approved_by.get_full_name()}",
+                    body=f"Your expense '{expense.title}' has been {expense.status} by {approved_by.get_full_name()}",
                     data={
                         'expense_id': expense.id,
                         'status': expense.status,
@@ -201,14 +200,14 @@ def send_recurring_donation_notification(recurring_donation, notification_type_n
             # Check user preferences
             if hasattr(user, 'notification_preferences'):
                 prefs = user.notification_preferences.filter(notification_type=notification_type).first()
-                if prefs and not prefs.in_app_enabled:
+                if prefs and not prefs.receive_in_app:
                     continue
             
             Notification.objects.create(
-                user=user,
+                recipient=user,
                 notification_type=notification_type,
                 title="Recurring Donation Update",
-                message=message,
+                body=message,
                 data={
                     'recurring_donation_id': recurring_donation.id,
                     'amount': str(recurring_donation.amount),
