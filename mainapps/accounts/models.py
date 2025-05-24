@@ -278,8 +278,10 @@ class UserProfile(models.Model):
     partnership_start_date = models.DateField(blank=True, null=True)
     
     is_executive = models.BooleanField(default=False)
-    is_ceo = models.BooleanField(default=False)
     is_project_manager = models.BooleanField(default=False)
+    
+    
+    is_ceo = models.BooleanField(default=False)
     is_donor = models.BooleanField(default=False)
     is_volunteer = models.BooleanField(default=False)
     is_partner = models.BooleanField(default=False)
@@ -287,8 +289,6 @@ class UserProfile(models.Model):
     is_standard_member = models.BooleanField(default=False)
     is_DB_executive = models.BooleanField(default=False)
     is_DB_admin = models.BooleanField(default=False)
-    
-    
     
     company_size = models.CharField(max_length=50, blank=True, null=True)
     company_website = models.URLField(blank=True, null=True)

@@ -13,6 +13,7 @@ User = get_user_model()
 class DonationCampaignSerializer(serializers.ModelSerializer):
     progress_percentage = serializers.ReadOnlyField()
     is_completed = serializers.ReadOnlyField()
+    current_amount = serializers.ReadOnlyField()  # Add this since it's now a property
     project_name = serializers.CharField(source='project.title', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     donations_count = serializers.SerializerMethodField()
@@ -21,16 +22,18 @@ class DonationCampaignSerializer(serializers.ModelSerializer):
     class Meta:
         model = DonationCampaign
         fields = '__all__'
-        read_only_fields = ('current_amount', 'created_at', 'updated_at')
+        # Remove 'current_amount' from read_only_fields since it's now a property
+        read_only_fields = ('created_at', 'updated_at')
     
     def get_donations_count(self, obj):
         return obj.donations.filter(status='completed').count()
     
     def get_total_raised(self, obj):
-        return obj.donations.filter(status='completed').aggregate(
-            total=models.Sum('amount')
-        )['total'] or 0
+        # This method now duplicates the current_amount property
+        # You can either remove this method or keep it for backward compatibility
+        return obj.current_amount
 
+# Rest of the serializers remain the same...
 class DonationSerializer(serializers.ModelSerializer):
     donor_name_display = serializers.SerializerMethodField()
     campaign_title = serializers.CharField(source='campaign.title', read_only=True)
@@ -161,5 +164,5 @@ class DonationStatsSerializer(serializers.Serializer):
     total_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     total_count = serializers.IntegerField()
     average_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
-    top_donors = serializers.ListField(default=[])  # Add default empty list
+    top_donors = serializers.ListField(default=[])
     monthly_trend = serializers.ListField()

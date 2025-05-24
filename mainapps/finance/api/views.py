@@ -24,46 +24,6 @@ from .notification_utils import (
     send_grant_status_notification, send_budget_alert_notification,
     send_expense_approval_notification, send_recurring_donation_notification
 )
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from django.views.decorators.csrf import csrf_exempt
-
-@csrf_exempt
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_public_donation(request):
-    """
-    Create a donation for unauthenticated users.
-    This is a simplified endpoint that doesn't require authentication.
-    """
-    serializer = DonationSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        # Save without processed_by since user is not authenticated
-        donation = serializer.save(processed_by=None)
-        
-        # Send notification for completed donations
-        if donation.status == 'completed':
-            send_donation_received_notification(donation)
-            
-            # Update campaign current amount if applicable
-            if donation.campaign:
-                campaign = donation.campaign
-                campaign.current_amount += donation.amount
-                campaign.save()
-                
-                # Check for milestones
-                progress = campaign.progress_percentage
-                if progress >= 100:
-                    send_campaign_milestone_notification(campaign, 'target_reached')
-                elif progress >= 75:
-                    send_campaign_milestone_notification(campaign, '75_percent')
-                elif progress >= 50:
-                    send_campaign_milestone_notification(campaign, '50_percent')
-        
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class DonationCampaignViewSet(viewsets.ModelViewSet):
     queryset = DonationCampaign.objects.all()
@@ -71,7 +31,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active', 'is_featured', 'project']
-    search_fields = ['title', 'description', 'grantor']
+    search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'start_date', 'end_date', 'target_amount']
     ordering = ['-created_at']
 
@@ -111,7 +71,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         donations = campaign.donations.filter(status='completed')
         
         stats = {
-            'total_raised': donations.aggregate(total=Sum('amount'))['total'] or 0,
+            'total_raised': campaign.current_amount,  # Use property directly
             'donations_count': donations.count(),
             'average_donation': donations.aggregate(avg=Avg('amount'))['avg'] or 0,
             'progress_percentage': campaign.progress_percentage,
@@ -135,17 +95,12 @@ class DonationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         donation = serializer.save(processed_by=self.request.user)
         
-        # Send notification for completed donations
         if donation.status == 'completed':
             send_donation_received_notification(donation)
             
-            # Update campaign current amount if applicable
             if donation.campaign:
                 campaign = donation.campaign
-                campaign.current_amount += donation.amount
-                campaign.save()
                 
-                # Check for milestones
                 progress = campaign.progress_percentage
                 if progress >= 100:
                     send_campaign_milestone_notification(campaign, 'target_reached')
@@ -212,7 +167,7 @@ class DonationViewSet(viewsets.ModelViewSet):
                 total=Sum('amount')
             ),
             'monthly_trend': self._get_monthly_trend(donations),
-            'top_donors': top_donors,  # Make sure this is included
+            'top_donors': top_donors,
         }
         
         serializer = DonationStatsSerializer(stats)
@@ -617,15 +572,21 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
             count=Count('id')
         )
         
-        # Campaign performance
-        campaign_performance = DonationCampaign.objects.filter(is_active=True).annotate(
-            raised=Sum('donations__amount', filter=Q(donations__status='completed'))
-        ).values('title', 'target_amount', 'raised')[:10]
+        # Campaign performance - FIXED: Calculate in Python since current_amount is now a property
+        campaigns = DonationCampaign.objects.filter(is_active=True)[:10]
+        campaign_performance = []
+        
+        for campaign in campaigns:
+            campaign_performance.append({
+                'title': campaign.title,
+                'target_amount': float(campaign.target_amount),
+                'raised': float(campaign.current_amount)  # Use property
+            })
         
         return Response({
             'monthly_trend': list(reversed(monthly_data)),
             'donation_types': list(donation_types),
-            'campaign_performance': list(campaign_performance)
+            'campaign_performance': campaign_performance
         })
         
     @action(detail=False, methods=['get'])
@@ -729,15 +690,22 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
                 # Convert date to string for JSON serialization
                 donation['date'] = donation['donation_date'].isoformat()
                 
-            # Calculate campaign statistics
+            # Calculate campaign statistics - FIXED: Calculate in Python since current_amount is property
             active_campaigns = campaigns.count()
-            total_raised = campaigns.annotate(
-                raised=Sum('donations__amount', filter=Q(donations__status='completed'))
-            ).aggregate(total=Sum('raised'))['total'] or 0
             total_target = campaigns.aggregate(total=Sum('target_amount'))['total'] or 0
+            
+            # Calculate total raised and success rate in Python
+            total_raised = 0
+            completed_campaigns = 0
+            
+            for campaign in campaigns:
+                current_amount = campaign.current_amount
+                total_raised += current_amount
+                if current_amount >= campaign.target_amount:
+                    completed_campaigns += 1
+            
             success_rate = 0
             if active_campaigns > 0:
-                completed_campaigns = campaigns.filter(current_amount__gte=F('target_amount')).count()
                 success_rate = (completed_campaigns / active_campaigns) * 100
                 
             # Calculate expense statistics
@@ -781,8 +749,9 @@ class FinanceDashboardViewSet(viewsets.ViewSet):
                 },
                 'campaign_stats': {
                     'active_count': active_campaigns,
-                    'total_raised': total_target,
-                    'success_rate': success_rate,
+                    'total_raised': total_raised,  # Use calculated value
+                    'total_target': total_target,
+                    'success_rate': success_rate,  # Use calculated value
                 },
                 'expense_stats': {
                     'total_amount': expense_total,

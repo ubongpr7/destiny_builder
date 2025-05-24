@@ -18,12 +18,7 @@ class DonationCampaign(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
-    current_amount = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0,
-        validators=[MinValueValidator(Decimal('0.00'))]
-    )
+    
     start_date = models.DateField()
     end_date = models.DateField()
     project = models.ForeignKey(
@@ -55,6 +50,12 @@ class DonationCampaign(models.Model):
     
     def __str__(self):
         return self.title
+    
+    
+    @property
+    def current_amount(self):
+        return sum(donation.amount for donation in self.donations.all())
+    
     
     @property
     def progress_percentage(self):
