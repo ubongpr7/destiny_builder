@@ -150,6 +150,11 @@ class Donation(models.Model):
             models.Index(fields=['donor', 'status']),
             models.Index(fields=['campaign', 'status']),
         ]
+    def save(self, *args, **kwargs):
+        if self.transaction_id=='':
+            self.transaction_id = None
+        super().save(*args, **kwargs)
+    
     @property
     def donor_name_display(self):
         if self.donor and not self.is_anonymous:
