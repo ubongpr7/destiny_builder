@@ -196,6 +196,33 @@ class PartnershipLevel(models.Model):
     def __str__(self):
         return self.name
 
+class Department(models.Model):
+    """Organizational departments"""
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=10, unique=True)  # e.g., 'HR', 'FIN', 'PROG'
+    description = models.TextField(blank=True, null=True)
+    head = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='headed_departments'
+    )
+    parent_department = models.ForeignKey(
+        'self', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='sub_departments'
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['name']
+    
+    def __str__(self):
+        return f"{self.code} - {self.name}"
 
 from datetime import datetime
 
@@ -239,8 +266,16 @@ class UserProfile(models.Model):
     )
     
     membership_type = models.ForeignKey(Membership, on_delete=models.SET_NULL, null=True, blank=True)
-    
-    # Basic information
+    department = models.ForeignKey(
+        Department, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='staff_members'
+    )
+    position = models.CharField(max_length=100, blank=True, null=True)
+    is_department_head = models.BooleanField(default=False)    
+
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.OneToOneField('common.Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profile')
     bio = models.TextField(blank=True, null=True)
