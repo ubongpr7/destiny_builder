@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Avg, Q, F, Case, When, Value, DecimalField
+from django.db.models import Sum, Count, Avg, Q, F, Case, When, Value, DecimalField,FloatField
 from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -1676,10 +1676,15 @@ class DashboardViewSet(viewsets.ViewSet):
         ).order_by('day')
         
         # Payment method analysis
+        total_donations_count = donations.count()
         payment_methods = donations.values('payment_method').annotate(
             count=Count('id'),
             total=Sum('amount'),
-            percentage=Count('id') * 100.0 / donations.count()
+            percentage=Case(
+                When(count__gt=0, then=Value(100.0) * Count('id') / Value(total_donations_count)),
+                default=Value(0.0),
+                output_field=FloatField()
+            )
         ).order_by('-total')
         
         # Donor analysis
@@ -1735,34 +1740,67 @@ class DashboardViewSet(viewsets.ViewSet):
         if fiscal_year:
             budgets = budgets.filter(fiscal_year=fiscal_year)
         
-        # Budget utilization by type
-        budget_by_type = budgets.values('budget_type').annotate(
-            count=Count('id'),
-            total_allocated=Sum('total_amount'),
-            total_spent=Sum('spent_amount'),
-            avg_utilization=Avg(
-                Case(
-                    When(total_amount__gt=0, then=F('spent_amount') * 100.0 / F('total_amount')),
-                    default=Value(0),
-                    output_field=DecimalField()
-                )
-            )
-        ).order_by('-total_allocated')
+        # Budget utilization by type - Fixed calculation
+        budget_by_type = []
+        for budget_type in budgets.values_list('budget_type', flat=True).distinct():
+            type_budgets = budgets.filter(budget_type=budget_type)
+            
+            total_allocated = type_budgets.aggregate(total=Sum('total_amount'))['total'] or 0
+            total_spent = type_budgets.aggregate(total=Sum('spent_amount'))['total'] or 0
+            
+            # Calculate average utilization manually
+            utilizations = []
+            for budget in type_budgets:
+                if budget.total_amount > 0:
+                    utilization = (budget.spent_amount / budget.total_amount) * 100
+                    utilizations.append(utilization)
+            
+            avg_utilization = sum(utilizations) / len(utilizations) if utilizations else 0
+            
+            budget_by_type.append({
+                'budget_type': budget_type,
+                'count': type_budgets.count(),
+                'total_allocated': float(total_allocated),
+                'total_spent': float(total_spent),
+                'avg_utilization': float(avg_utilization)
+            })
         
-        # Department budget analysis
-        dept_budgets = budgets.filter(department__isnull=False).values(
-            'department__name'
-        ).annotate(
-            total_allocated=Sum('total_amount'),
-            total_spent=Sum('spent_amount'),
-            utilization=Sum('spent_amount') * 100.0 / Sum('total_amount')
-        ).order_by('-total_allocated')
+        # Sort by total allocated
+        budget_by_type.sort(key=lambda x: x['total_allocated'], reverse=True)
         
-        # Budget alerts
-        over_budget = budgets.filter(spent_amount__gt=F('total_amount')).count()
-        near_limit = budgets.annotate(
-            utilization=F('spent_amount') * 100.0 / F('total_amount')
-        ).filter(utilization__gte=90, utilization__lt=100).count()
+        # Department budget analysis - Fixed calculation
+        dept_budgets = []
+        dept_budget_qs = budgets.filter(department__isnull=False)
+        
+        for dept_name in dept_budget_qs.values_list('department__name', flat=True).distinct():
+            dept_budget_items = dept_budget_qs.filter(department__name=dept_name)
+            
+            total_allocated = dept_budget_items.aggregate(total=Sum('total_amount'))['total'] or 0
+            total_spent = dept_budget_items.aggregate(total=Sum('spent_amount'))['total'] or 0
+            
+            utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
+            
+            dept_budgets.append({
+                'department__name': dept_name,
+                'total_allocated': float(total_allocated),
+                'total_spent': float(total_spent),
+                'utilization': float(utilization)
+            })
+        
+        # Sort by total allocated
+        dept_budgets.sort(key=lambda x: x['total_allocated'], reverse=True)
+        
+        # Budget alerts - Fixed calculation
+        over_budget = 0
+        near_limit = 0
+        
+        for budget in budgets:
+            if budget.total_amount > 0:
+                utilization = (budget.spent_amount / budget.total_amount) * 100
+                if utilization > 100:
+                    over_budget += 1
+                elif utilization >= 90:
+                    near_limit += 1
         
         # Monthly spending trends
         monthly_spending = OrganizationalExpense.objects.filter(
@@ -1775,22 +1813,25 @@ class DashboardViewSet(viewsets.ViewSet):
             count=Count('id')
         ).order_by('month')
         
+        # Overall utilization calculation
+        total_allocated = budgets.aggregate(total=Sum('total_amount'))['total'] or 0
+        total_spent = budgets.aggregate(total=Sum('spent_amount'))['total'] or 0
+        overall_utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
+        
         performance = {
             'summary': {
                 'total_budgets': budgets.count(),
-                'total_allocated': budgets.aggregate(total=Sum('total_amount'))['total'] or 0,
-                'total_spent': budgets.aggregate(total=Sum('spent_amount'))['total'] or 0,
-                'overall_utilization': budgets.aggregate(
-                    utilization=Sum('spent_amount') * 100.0 / Sum('total_amount')
-                )['utilization'] or 0
+                'total_allocated': float(total_allocated),
+                'total_spent': float(total_spent),
+                'overall_utilization': float(overall_utilization)
             },
             'alerts': {
                 'over_budget_count': over_budget,
                 'near_limit_count': near_limit,
                 'total_alerts': over_budget + near_limit
             },
-            'by_type': list(budget_by_type),
-            'by_department': list(dept_budgets),
+            'by_type': budget_by_type,
+            'by_department': dept_budgets,
             'monthly_trends': list(monthly_spending)
         }
         
@@ -1824,14 +1865,16 @@ class DashboardViewSet(viewsets.ViewSet):
             avg_amount=Avg('amount')
         ).order_by('-total_amount')[:10]
         
-        # Disbursement tracking
+        # Disbursement tracking - Fixed calculation
         active_grants = grants.filter(status='active')
+        total_approved = active_grants.aggregate(total=Sum('amount'))['total'] or 0
+        total_received = active_grants.aggregate(total=Sum('amount_received'))['total'] or 0
+        pending_disbursement = total_approved - total_received
+        
         disbursement_summary = {
-            'total_approved': active_grants.aggregate(total=Sum('amount'))['total'] or 0,
-            'total_received': active_grants.aggregate(total=Sum('amount_received'))['total'] or 0,
-            'pending_disbursement': active_grants.aggregate(
-                pending=Sum(F('amount') - F('amount_received'))
-            )['pending'] or 0
+            'total_approved': float(total_approved),
+            'total_received': float(total_received),
+            'pending_disbursement': float(pending_disbursement)
         }
         
         # Upcoming deadlines
@@ -1882,12 +1925,11 @@ class DashboardViewSet(viewsets.ViewSet):
             next_payment_date__lte=timezone.now().date() + timedelta(days=days_ahead)
         ).aggregate(total=Sum('amount'))['total'] or 0
         
-        # Expected grant disbursements
-        expected_grants = Grant.objects.filter(
-            status='active'
-        ).aggregate(
-            pending=Sum(F('amount') - F('amount_received'))
-        )['pending'] or 0
+        # Expected grant disbursements - Fixed calculation
+        active_grants = Grant.objects.filter(status='active')
+        expected_grants = 0
+        for grant in active_grants:
+            expected_grants += grant.amount - grant.amount_received
         
         # Projected expenses
         # Approved but unpaid expenses
