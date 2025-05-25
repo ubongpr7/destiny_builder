@@ -107,38 +107,6 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
             'rate', 'effective_date', 'source', 'created_by', 'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
-class DonationCampaignSerializer(serializers.ModelSerializer):
-    target_currency = CurrencySerializer(read_only=True)
-    target_currency_id = serializers.IntegerField(write_only=True)
-    project = ProjectMinimalSerializer(read_only=True)
-    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    created_by = UserBasicSerializer(read_only=True)
-    current_amount_in_target_currency = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
-    )
-    progress_percentage = serializers.DecimalField(
-        max_digits=5, decimal_places=2, read_only=True
-    )
-    is_completed = serializers.BooleanField(read_only=True)
-    donations_count = serializers.SerializerMethodField()
-    donors_count = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = DonationCampaign
-        fields = [
-            'id', 'title', 'description', 'target_amount', 'target_currency',
-            'target_currency_id', 'start_date', 'end_date', 'project', 'project_id',
-            'is_active', 'is_featured', 'image', 'created_by', 'created_at',
-            'updated_at', 'current_amount_in_target_currency', 'progress_percentage',
-            'is_completed', 'donations_count', 'donors_count'
-        ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
-    
-    def get_donations_count(self, obj):
-        return obj.donations.filter(status='completed').count()
-    
-    def get_donors_count(self, obj):
-        return obj.donations.filter(status='completed').values('donor').distinct().count()
 
 class DonationSerializer(serializers.ModelSerializer):
     donor = UserBasicSerializer(read_only=True)
@@ -220,6 +188,185 @@ class InKindDonationSerializer(serializers.ModelSerializer):
             'image', 'created_at', 'updated_at', 'donor_name_display', 'formatted_value'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+class DonationCampaignSerializer(serializers.ModelSerializer):
+    target_currency = CurrencySerializer(read_only=True)
+    target_currency_id = serializers.IntegerField(write_only=True)
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    created_by = UserBasicSerializer(read_only=True)
+    current_amount_in_target_currency = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    progress_percentage = serializers.DecimalField(
+        max_digits=5, decimal_places=2, read_only=True
+    )
+    is_completed = serializers.BooleanField(read_only=True)
+    donations_count = serializers.SerializerMethodField()
+    donors_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DonationCampaign
+        fields = [
+            'id', 'title', 'description', 'target_amount', 'target_currency',
+            'target_currency_id', 'start_date', 'end_date', 'project', 'project_id',
+            'is_active', 'is_featured', 'image', 'created_by', 'created_at',
+            'updated_at', 'current_amount_in_target_currency', 'progress_percentage',
+            'is_completed', 'donations_count', 'donors_count'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+    
+class DonationDetailCampaignSerializer(serializers.ModelSerializer):
+    target_currency = CurrencySerializer(read_only=True)
+    target_currency_id = serializers.IntegerField(write_only=True)
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    created_by = UserBasicSerializer(read_only=True)
+    current_amount_in_target_currency = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    progress_percentage = serializers.DecimalField(
+        max_digits=5, decimal_places=2, read_only=True
+    )
+    is_completed = serializers.BooleanField(read_only=True)
+    
+    # Counts and statistics
+    donations_count = serializers.SerializerMethodField()
+    donors_count = serializers.SerializerMethodField()
+    recurring_donors_count = serializers.SerializerMethodField()
+    in_kind_donors_count = serializers.SerializerMethodField()
+    total_estimated_in_kind_value = serializers.SerializerMethodField()
+    average_donation_amount = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+    days_active = serializers.SerializerMethodField()
+    
+    # Related data
+    in_kind_donations = serializers.SerializerMethodField()
+    recurring_donations = serializers.SerializerMethodField()
+    donations = serializers.SerializerMethodField()
+    
+    # Analytics data
+    donation_trends = serializers.SerializerMethodField()
+    donor_segments = serializers.SerializerMethodField()
+    payment_method_breakdown = serializers.SerializerMethodField()
+    geographic_distribution = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DonationCampaign
+        fields = [
+            'id', 'title', 'description', 'target_amount', 'target_currency',
+            'target_currency_id', 'start_date', 'end_date', 'project', 'project_id',
+            'is_active', 'is_featured', 'image', 'created_by', 'created_at',
+            'updated_at', 'current_amount_in_target_currency', 'progress_percentage',
+            'is_completed', 'donations_count', 'donors_count', 'recurring_donors_count',
+            'in_kind_donors_count', 'total_estimated_in_kind_value', 'average_donation_amount',
+            'days_remaining', 'days_active', 'in_kind_donations', 'recurring_donations', 
+            'donations', 'donation_trends', 'donor_segments', 'payment_method_breakdown',
+            'geographic_distribution'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+    
+    def get_donations_count(self, obj):
+        return obj.donations.filter(status='completed').count()
+    
+    def get_donors_count(self, obj):
+        return obj.donations.filter(status='completed').values('donor').distinct().count()
+    
+    def get_recurring_donors_count(self, obj):
+        return obj.recurring_donations.filter(status='active').values('donor').distinct().count()
+    
+    def get_in_kind_donors_count(self, obj):
+        return obj.in_kind_donations.filter(status='received').values('donor').distinct().count()
+    
+    def get_total_estimated_in_kind_value(self, obj):
+        return obj.in_kind_donations.filter(status='received').aggregate(
+            total=Sum('estimated_value')
+        )['total'] or 0
+    
+    def get_average_donation_amount(self, obj):
+        return obj.donations.filter(status='completed').aggregate(
+            avg=Avg('amount')
+        )['avg'] or 0
+    
+    def get_days_remaining(self, obj):
+        from django.utils import timezone
+        if obj.end_date:
+            remaining = (obj.end_date - timezone.now().date()).days
+            return max(0, remaining)
+        return 0
+    
+    def get_days_active(self, obj):
+        from django.utils import timezone
+        return (timezone.now().date() - obj.start_date).days + 1
+    
+    def get_in_kind_donations(self, obj):
+        from .serializers import InKindDonationSerializer
+        in_kind = obj.in_kind_donations.select_related(
+            'donor', 'valuation_currency'
+        ).order_by('-donation_date')[:10]  # Latest 10
+        return InKindDonationSerializer(in_kind, many=True).data
+    
+    def get_recurring_donations(self, obj):
+        from .serializers import RecurringDonationSerializer
+        recurring = obj.recurring_donations.select_related(
+            'donor', 'currency'
+        ).filter(status='active').order_by('-created_at')[:10]  # Latest 10 active
+        return RecurringDonationSerializer(recurring, many=True).data
+    
+    def get_donations(self, obj):
+        from .serializers import DonationSerializer
+        donations = obj.donations.select_related(
+            'donor', 'currency'
+        ).filter(status='completed').order_by('-donation_date')[:20]  # Latest 20
+        return DonationSerializer(donations, many=True).data
+    
+    def get_donation_trends(self, obj):
+        """Get daily donation trends for the last 30 days"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=30)
+        
+        donations = obj.donations.filter(
+            status='completed',
+            donation_date__gte=start_date,
+            donation_date__lte=end_date
+        ).extra(
+            select={'day': 'date(donation_date)'}
+        ).values('day').annotate(
+            count=Count('id'),
+            total=Sum('amount')
+        ).order_by('day')
+        
+        return list(donations)
+    
+    def get_donor_segments(self, obj):
+        """Segment donors by donation amount"""
+        donations = obj.donations.filter(status='completed')
+        
+        segments = {
+            'micro': donations.filter(amount__lt=50).values('donor').distinct().count(),
+            'small': donations.filter(amount__gte=50, amount__lt=250).values('donor').distinct().count(),
+            'medium': donations.filter(amount__gte=250, amount__lt=1000).values('donor').distinct().count(),
+            'large': donations.filter(amount__gte=1000, amount__lt=5000).values('donor').distinct().count(),
+            'major': donations.filter(amount__gte=5000).values('donor').distinct().count(),
+        }
+        
+        return segments
+    
+    def get_payment_method_breakdown(self, obj):
+        """Get breakdown by payment method"""
+        return list(obj.donations.filter(status='completed').values('payment_method').annotate(
+            count=Count('id'),
+            total=Sum('amount')
+        ).order_by('-total'))
+    
+    def get_geographic_distribution(self, obj):
+        """Get geographic distribution of donors (if available)"""
+        # This would require additional user profile fields
+        # For now, return empty list
+        return []
 
 class GrantSerializer(serializers.ModelSerializer):
     currency = CurrencySerializer(read_only=True)

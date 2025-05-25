@@ -20,7 +20,7 @@ from ..models import (
 )
 from .serializers import (
     FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
-    DonationCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
+    DonationCampaignSerializer, DonationDetailCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
     InKindDonationSerializer, GrantSerializer, GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
     BudgetItemSerializer, OrganizationalExpenseSerializer, AccountTransactionSerializer,
@@ -430,7 +430,7 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
 class DonationCampaignViewSet(viewsets.ModelViewSet):
     queryset = DonationCampaign.objects.select_related(
         'target_currency', 'project', 'created_by'
-    ).prefetch_related('donations')
+    ).prefetch_related('donations', 'recurring_donations', 'in_kind_donations')
     serializer_class = DonationCampaignSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -439,8 +439,20 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
     ordering_fields = ['title', 'start_date', 'end_date', 'target_amount', 'created_at']
     ordering = ['-created_at']
     
+    def get_serializer_class(self):
+        if self.action == 'retrieve' or self.action == 'detail':
+            return DonationDetailCampaignSerializer
+        return DonationCampaignSerializer
+    
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['get'])
+    def detail(self, request, pk=None):
+        """Get comprehensive campaign details with all related data"""
+        campaign = self.get_object()
+        serializer = DonationDetailCampaignSerializer(campaign)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def donations(self, request, pk=None):
@@ -1607,6 +1619,7 @@ class DashboardViewSet(viewsets.ViewSet):
         
         # Counts
         active_campaigns = DonationCampaign.objects.filter(is_active=True).count()
+        
         active_grants = Grant.objects.filter(status='active').count()
         pending_expenses = OrganizationalExpense.objects.filter(status='pending').count()
         overdue_reports = GrantReport.objects.filter(
