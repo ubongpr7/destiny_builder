@@ -89,6 +89,10 @@ class BankAccount(models.Model):
     
     # Account status and details
     is_active = models.BooleanField(default=True)
+    accepts_donations = models.BooleanField(
+        default=True,
+        help_text="Whether this account can receive donations"
+    )
     opening_date = models.DateField()
     closing_date = models.DateField(blank=True, null=True)
     minimum_balance = models.DecimalField(
@@ -116,6 +120,7 @@ class BankAccount(models.Model):
             models.Index(fields=['account_type', 'is_active']),
             models.Index(fields=['financial_institution', 'is_active']),
             models.Index(fields=['currency', 'is_active']),
+            models.Index(fields=['accepts_donations', 'is_active']),
         ]
         verbose_name = "Bank Account"
         verbose_name_plural = "Bank Accounts"
@@ -213,6 +218,16 @@ class DonationCampaign(models.Model):
         blank=True, 
         related_name='campaigns'
     )
+    
+    # Bank accounts that can receive donations for this campaign
+    bank_accounts = models.ManyToManyField(
+        BankAccount,
+        through='CampaignBankAccount',
+        related_name='campaigns',
+        blank=True,
+        help_text="Bank accounts that can receive donations for this campaign"
+    )
+    
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     image = models.ImageField(upload_to='campaign_images/', blank=True, null=True)
@@ -241,14 +256,58 @@ class DonationCampaign(models.Model):
     
     @property
     def current_amount_in_target_currency(self):
-        """Calculate total raised in campaign's target currency"""
+        """Calculate total raised in campaign's target currency including all donation types"""
         total = Decimal('0.00')
+        
+        # Regular completed donations
         for donation in self.donations.filter(status='completed'):
             if donation.currency == self.target_currency:
                 total += donation.amount
             else:
                 converted_amount = donation.get_amount_in_currency(self.target_currency)
                 total += converted_amount
+        
+        # In-kind donations (received)
+        for in_kind in self.in_kind_donations.filter(status='received'):
+            if in_kind.valuation_currency == self.target_currency:
+                total += in_kind.estimated_value
+            else:
+                # Convert using exchange rate
+                try:
+                    exchange_rate = ExchangeRate.objects.filter(
+                        from_currency=in_kind.valuation_currency,
+                        to_currency=self.target_currency,
+                        effective_date__lte=in_kind.donation_date
+                    ).order_by('-effective_date').first()
+                    
+                    if exchange_rate:
+                        total += in_kind.estimated_value * exchange_rate.rate
+                    else:
+                        # If no exchange rate found, add original amount
+                        total += in_kind.estimated_value
+                except ExchangeRate.DoesNotExist:
+                    total += in_kind.estimated_value
+        
+        # Recurring donations (total donated so far)
+        for recurring in self.recurring_donations.filter(status__in=['active', 'completed']):
+            if recurring.currency == self.target_currency:
+                total += recurring.total_donated
+            else:
+                # Convert using latest exchange rate
+                try:
+                    exchange_rate = ExchangeRate.objects.filter(
+                        from_currency=recurring.currency,
+                        to_currency=self.target_currency
+                    ).order_by('-effective_date').first()
+                    
+                    if exchange_rate:
+                        total += recurring.total_donated * exchange_rate.rate
+                    else:
+                        # If no exchange rate found, add original amount
+                        total += recurring.total_donated
+                except ExchangeRate.DoesNotExist:
+                    total += recurring.total_donated
+        
         return total
     
     @property
@@ -261,6 +320,199 @@ class DonationCampaign(models.Model):
     @property
     def is_completed(self):
         return self.current_amount_in_target_currency >= self.target_amount
+    
+    def get_available_bank_accounts(self):
+        """Get bank accounts available for donations to this campaign"""
+        return self.bank_accounts.filter(
+            is_active=True,
+            accepts_donations=True
+        ).select_related('financial_institution', 'currency')
+    
+    def get_bank_accounts_by_currency(self):
+        """Get bank accounts grouped by currency"""
+        accounts = self.get_available_bank_accounts()
+        grouped = {}
+        for account in accounts:
+            currency_code = account.currency.code
+            if currency_code not in grouped:
+                grouped[currency_code] = []
+            grouped[currency_code].append(account)
+        return grouped
+
+class CampaignBankAccount(models.Model):
+    """Through model for campaign-bank account relationship"""
+    campaign = models.ForeignKey(
+        DonationCampaign,
+        on_delete=models.CASCADE,
+        related_name='campaign_bank_accounts'
+    )
+    bank_account = models.ForeignKey(
+        BankAccount,
+        on_delete=models.CASCADE,
+        related_name='campaign_bank_accounts'
+    )
+    
+    # Additional metadata for the relationship
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Primary account for this campaign"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this account is currently accepting donations for this campaign"
+    )
+    priority_order = models.PositiveIntegerField(
+        default=1,
+        help_text="Display order for donation options (1 = highest priority)"
+    )
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Special instructions for this account"
+    )
+    
+    # Tracking
+    added_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='added_campaign_accounts'
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['campaign', 'bank_account']
+        ordering = ['priority_order', 'bank_account__name']
+        verbose_name = "Campaign Bank Account"
+        verbose_name_plural = "Campaign Bank Accounts"
+    
+    def __str__(self):
+        return f"{self.campaign.title} - {self.bank_account.name}"
+
+class FundingSource(models.Model):
+    """Sources of funding for budgets with multi-currency support"""
+    FUNDING_TYPE_CHOICES = [
+        ('donation', 'General Donation'),
+        ('campaign', 'Campaign'),
+        ('grant', 'Grant'),
+        ('internal', 'Internal Funds'),
+        ('partnership', 'Partnership Funding'),
+        ('government', 'Government Funding'),
+        ('investment', 'Investment Returns'),
+        ('fundraising_event', 'Fundraising Event'),
+        ('corporate_sponsorship', 'Corporate Sponsorship'),
+        ('foundation_grant', 'Foundation Grant'),
+        ('crowdfunding', 'Crowdfunding'),
+        ('other', 'Other'),
+    ]
+    
+    name = models.CharField(max_length=200)
+    funding_type = models.CharField(max_length=100, choices=FUNDING_TYPE_CHOICES)
+    description = models.TextField(blank=True, null=True)
+    
+    # Link to existing models
+    donation = models.ForeignKey(
+        'Donation', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='funding_sources'
+    )
+    campaign = models.ForeignKey(
+        DonationCampaign, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='funding_sources'
+    )
+    grant = models.ForeignKey(
+        'Grant', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='funding_sources'
+    )
+    
+    # Amount and currency
+    amount_available = models.DecimalField(
+        max_digits=12, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))]
+    )
+    currency = models.ForeignKey(
+        Currency,
+        on_delete=models.PROTECT,
+        related_name='funding_sources'
+    )
+    amount_allocated = models.DecimalField(
+        max_digits=12, 
+        decimal_places=2, 
+        default=0,
+        validators=[MinValueValidator(Decimal('0.00'))]
+    )
+    
+    # Dates and restrictions
+    available_from = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Date when funds become available"
+    )
+    available_until = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Date when funds expire if not used"
+    )
+    restrictions = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Any restrictions on how these funds can be used"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='created_funding_sources',
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['funding_type', 'is_active']),
+            models.Index(fields=['currency', 'is_active']),
+            models.Index(fields=['available_from', 'available_until']),
+        ]
+        verbose_name = "Funding Source"
+        verbose_name_plural = "Funding Sources"
+    
+    @property
+    def amount_remaining(self):
+        return self.amount_available - self.amount_allocated
+    
+    @property
+    def formatted_amount(self):
+        return f"{self.currency.code} {self.amount_available:,.2f}"
+    
+    @property
+    def is_expired(self):
+        if self.available_until:
+            return timezone.now().date() > self.available_until
+        return False
+    
+    @property
+    def is_available_now(self):
+        now = timezone.now().date()
+        if self.available_from and now < self.available_from:
+            return False
+        if self.available_until and now > self.available_until:
+            return False
+        return self.is_active and self.amount_remaining > 0
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_funding_type_display()}) - {self.formatted_amount}"
 
 class Donation(models.Model):
     """One-time donations with full multi-currency support"""
@@ -316,24 +568,25 @@ class Donation(models.Model):
     
     # Amount and currency
     amount = models.DecimalField(
-        max_digits=16, 
+        max_digits=12, 
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
     currency = models.ForeignKey(
         Currency,
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name='donations',
-        help_text="Currency of the donation"
+        help_text="Currency of the donation",
+        null=True,
+        blank=True
     )
     
     # Exchange rate and conversion
     exchange_rate = models.DecimalField(
         max_digits=15,
         decimal_places=8,
-        default=1.0,
+        null=True,
+        blank=True,
         help_text="Exchange rate used if currency conversion was needed"
     )
     converted_amount = models.DecimalField(
@@ -353,7 +606,7 @@ class Donation(models.Model):
     )
     
     # Transaction details
-    donation_date = models.DateTimeField(null=True, blank=True)
+    donation_date = models.DateTimeField(null=True,blank=True)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
     transaction_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     reference_number = models.CharField(max_length=100, blank=True, null=True)
@@ -401,6 +654,14 @@ class Donation(models.Model):
         null=True,
         help_text="Bank's reference number for the deposit"
     )
+
+    # Receipt management
+    receipt_image = models.ImageField(
+        upload_to='donation_receipts/',
+        blank=True,
+        null=True,
+        help_text="Upload receipt or proof of donation"
+    )
     
     # Administrative
     notes = models.TextField(blank=True, null=True)
@@ -439,12 +700,33 @@ class Donation(models.Model):
             self.net_amount = self.amount
             
         super().save(*args, **kwargs)
+        
+        # Auto-create funding source if this is a completed donation
+        if self.status == 'completed' and not hasattr(self, '_funding_source_created'):
+            self._create_funding_source()
+    
+    def _create_funding_source(self):
+        """Create a funding source for this donation"""
+        funding_source, created = FundingSource.objects.get_or_create(
+            donation=self,
+            defaults={
+                'name': f"Donation from {self.donor_name_display}",
+                'funding_type': 'donation',
+                'description': f"Individual donation of {self.formatted_amount}",
+                'amount_available': self.net_amount or self.amount,
+                'currency': self.currency,
+                'created_by': self.processed_by or self.donor,
+            }
+        )
+        self._funding_source_created = True
+        return funding_source
     
     def get_amount_in_currency(self, target_currency):
         """Convert donation amount to specified currency"""
         if self.currency == target_currency:
             return self.amount
         
+        # Try to find exchange rate
         try:
             exchange_rate = ExchangeRate.objects.filter(
                 from_currency=self.currency,
@@ -525,7 +807,6 @@ class RecurringDonation(models.Model):
         related_name='recurring_donations',
         null=True,
         blank=True
-
     )
     
     # Subscription details
@@ -546,6 +827,15 @@ class RecurringDonation(models.Model):
     )
     payment_count = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True, null=True)
+
+    # Receipt management
+    receipt_image = models.ImageField(
+        upload_to='recurring_donation_receipts/',
+        blank=True,
+        null=True,
+        help_text="Upload receipt or proof of recurring donation setup"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -558,6 +848,41 @@ class RecurringDonation(models.Model):
         ]
         verbose_name = "Recurring Donation"
         verbose_name_plural = "Recurring Donations"
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        # Auto-create funding source for active recurring donations
+        if self.status == 'active' and not hasattr(self, '_funding_source_created'):
+            self._create_funding_source()
+    
+    def _create_funding_source(self):
+        """Create a funding source for this recurring donation"""
+        # Calculate projected annual amount
+        multiplier = {
+            'weekly': 52,
+            'monthly': 12,
+            'quarterly': 4,
+            'biannually': 2,
+            'annually': 1
+        }
+        
+        projected_annual = self.amount * multiplier.get(self.frequency, 12)
+        
+        funding_source, created = FundingSource.objects.get_or_create(
+            name=f"Recurring Donation - {self.donor.get_full_name() or self.donor.username}",
+            funding_type='donation',
+            defaults={
+                'description': f"Recurring {self.frequency} donation of {self.currency.code} {self.amount}",
+                'amount_available': projected_annual,
+                'currency': self.currency,
+                'available_from': self.start_date,
+                'available_until': self.end_date,
+                'created_by': self.donor,
+            }
+        )
+        self._funding_source_created = True
+        return funding_source
     
     @property
     def formatted_amount(self):
@@ -638,7 +963,12 @@ class InKindDonation(models.Model):
     notes = models.TextField(blank=True, null=True)
     receipt_sent = models.BooleanField(default=False)
     receipt_number = models.CharField(max_length=100, blank=True, null=True, unique=True)
-    image = models.ImageField(upload_to='in_kind_donations/', blank=True, null=True)
+    receipt_image = models.ImageField(
+        upload_to='in_kind_donation_receipts/', 
+        blank=True, 
+        null=True,
+        help_text="Upload receipt or photo of in-kind donation"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -651,6 +981,28 @@ class InKindDonation(models.Model):
         ]
         verbose_name = "In-Kind Donation"
         verbose_name_plural = "In-Kind Donations"
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        # Auto-create funding source for received in-kind donations
+        if self.status == 'received' and not hasattr(self, '_funding_source_created'):
+            self._create_funding_source()
+    
+    def _create_funding_source(self):
+        """Create a funding source for this in-kind donation"""
+        funding_source, created = FundingSource.objects.get_or_create(
+            name=f"In-Kind: {self.item_description[:50]}...",
+            funding_type='donation',
+            defaults={
+                'description': f"In-kind donation: {self.item_description}",
+                'amount_available': self.estimated_value,
+                'currency': self.valuation_currency,
+                'created_by': self.received_by or self.donor,
+            }
+        )
+        self._funding_source_created = True
+        return funding_source
     
     @property
     def donor_name_display(self):
@@ -707,7 +1059,6 @@ class Grant(models.Model):
         related_name='grants',
         null=True,
         blank=True
-
     )
     amount_received = models.DecimalField(
         max_digits=12, 
@@ -784,6 +1135,32 @@ class Grant(models.Model):
         verbose_name = "Grant"
         verbose_name_plural = "Grants"
     
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        # Auto-create funding source for approved/active grants
+        if self.status in ['approved', 'active'] and not hasattr(self, '_funding_source_created'):
+            self._create_funding_source()
+    
+    def _create_funding_source(self):
+        """Create a funding source for this grant"""
+        funding_source, created = FundingSource.objects.get_or_create(
+            grant=self,
+            defaults={
+                'name': f"Grant: {self.title}",
+                'funding_type': 'grant',
+                'description': f"Grant from {self.grantor}",
+                'amount_available': self.amount,
+                'currency': self.currency,
+                'available_from': self.start_date,
+                'available_until': self.end_date,
+                'restrictions': self.requirements,
+                'created_by': self.created_by,
+            }
+        )
+        self._funding_source_created = True
+        return funding_source
+    
     @property
     def remaining_amount(self):
         return self.amount - self.amount_received
@@ -848,85 +1225,6 @@ class GrantReport(models.Model):
     def __str__(self):
         return f"{self.grant.title} - {self.title}"
 
-class FundingSource(models.Model):
-    """Sources of funding for budgets with multi-currency support"""
-    FUNDING_TYPE_CHOICES = [
-        ('donation', 'General Donation'),
-        ('campaign', 'Campaign'),
-        ('grant', 'Grant'),
-        ('internal', 'Internal Funds'),
-        ('partnership', 'Partnership Funding'),
-        ('government', 'Government Funding'),
-        ('investment', 'Investment Returns'),
-    ]
-    
-    name = models.CharField(max_length=200)
-    funding_type = models.CharField(max_length=20, choices=FUNDING_TYPE_CHOICES)
-    
-    # Link to existing models
-    donation = models.ForeignKey(
-        Donation, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='funding_sources'
-    )
-    campaign = models.ForeignKey(
-        DonationCampaign, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='funding_sources'
-    )
-    grant = models.ForeignKey(
-        Grant, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='funding_sources'
-    )
-    
-    # Amount and currency
-    amount_available = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.00'))]
-    )
-    currency = models.ForeignKey(
-        Currency,
-        on_delete=models.PROTECT,
-        related_name='funding_sources'
-    )
-    amount_allocated = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0,
-        validators=[MinValueValidator(Decimal('0.00'))]
-    )
-    
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['name']
-        indexes = [
-            models.Index(fields=['funding_type', 'is_active']),
-            models.Index(fields=['currency', 'is_active']),
-        ]
-        verbose_name = "Funding Source"
-        verbose_name_plural = "Funding Sources"
-    
-    @property
-    def amount_remaining(self):
-        return self.amount_available - self.amount_allocated
-    
-    @property
-    def formatted_amount(self):
-        return f"{self.currency.code} {self.amount_available:,.2f}"
-    
-    def __str__(self):
-        return f"{self.name} ({self.get_funding_type_display()}) - {self.formatted_amount}"
-
 class Budget(models.Model):
     """Budget for projects or the organization with multi-currency support"""
     BUDGET_TYPE_CHOICES = [
@@ -984,7 +1282,8 @@ class Budget(models.Model):
         on_delete=models.PROTECT,
         related_name='budgets',
         null=True,
-        blank=True
+        blank=True,
+        
     )
     spent_amount = models.DecimalField(
         max_digits=12, 
@@ -1220,8 +1519,7 @@ class OrganizationalExpense(models.Model):
         on_delete=models.PROTECT,
         related_name='organizational_expenses',
         null=True,
-        blank=True
-
+        blank=True,
     )
     
     expense_date = models.DateField()

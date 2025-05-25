@@ -47,12 +47,13 @@ from .notification_utils import (
 )
 
 class FinancialInstitutionViewSet(viewsets.ModelViewSet):
+    """Enhanced Financial Institution ViewSet with comprehensive management"""
     queryset = FinancialInstitution.objects.all()
     serializer_class = FinancialInstitutionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active']
-    search_fields = ['name', 'code', 'branch_name']
+    search_fields = ['name', 'code', 'branch_name', 'contact_person']
     ordering_fields = ['name', 'created_at']
     ordering = ['name']
 
@@ -88,15 +89,39 @@ class FinancialInstitutionViewSet(viewsets.ModelViewSet):
             'status': 'inactive'
         })
 
+    @action(detail=True, methods=['get'])
+    def accounts_summary(self, request, pk=None):
+        """Get summary of all accounts for this institution"""
+        institution = self.get_object()
+        accounts = institution.accounts.all()
+        
+        summary = {
+            'institution_name': institution.name,
+            'total_accounts': accounts.count(),
+            'active_accounts': accounts.filter(is_active=True).count(),
+            'total_balance': sum(account.current_balance for account in accounts.filter(is_active=True)),
+            'accounts_by_type': list(accounts.values('account_type').annotate(
+                count=Count('id'),
+                total_balance=Sum('current_balance')
+            ).order_by('account_type')),
+            'accounts_by_currency': list(accounts.values('currency__code').annotate(
+                count=Count('id'),
+                total_balance=Sum('current_balance')
+            ).order_by('currency__code'))
+        }
+        
+        return Response(summary)
+
 class BankAccountViewSet(viewsets.ModelViewSet):
+    """Enhanced Bank Account ViewSet with comprehensive transaction management"""
     queryset = BankAccount.objects.select_related(
         'financial_institution', 'currency', 'primary_signatory', 'created_by'
     ).prefetch_related('secondary_signatories')
     serializer_class = BankAccountSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['account_type', 'currency', 'is_active', 'is_restricted']
-    search_fields = ['name', 'account_number']
+    filterset_fields = ['account_type', 'currency', 'is_active', 'is_restricted', 'accepts_donations']
+    search_fields = ['name', 'account_number', 'purpose']
     ordering_fields = ['name', 'created_at', 'current_balance']
     ordering = ['name']
     
@@ -116,6 +141,8 @@ class BankAccountViewSet(viewsets.ModelViewSet):
         end_date = request.query_params.get('end_date')
         transaction_type = request.query_params.get('type')
         status_filter = request.query_params.get('status')
+        min_amount = request.query_params.get('min_amount')
+        max_amount = request.query_params.get('max_amount')
         
         if start_date:
             transactions = transactions.filter(transaction_date__gte=start_date)
@@ -125,15 +152,37 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             transactions = transactions.filter(transaction_type=transaction_type)
         if status_filter:
             transactions = transactions.filter(status=status_filter)
+        if min_amount:
+            transactions = transactions.filter(amount__gte=min_amount)
+        if max_amount:
+            transactions = transactions.filter(amount__lte=max_amount)
+        
+        # Calculate summary
+        summary = {
+            'total_transactions': transactions.count(),
+            'total_credits': transactions.filter(
+                transaction_type__in=['credit', 'transfer_in']
+            ).aggregate(total=Sum('amount'))['total'] or 0,
+            'total_debits': transactions.filter(
+                transaction_type__in=['debit', 'transfer_out']
+            ).aggregate(total=Sum('amount'))['total'] or 0,
+            'unreconciled_count': transactions.filter(is_reconciled=False).count()
+        }
         
         # Pagination
         page = self.paginate_queryset(transactions)
         if page is not None:
             serializer = AccountTransactionSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+            return self.get_paginated_response({
+                'results': serializer.data,
+                'summary': summary
+            })
         
         serializer = AccountTransactionSerializer(transactions, many=True)
-        return Response(serializer.data)
+        return Response({
+            'results': serializer.data,
+            'summary': summary
+        })
     
     @action(detail=True, methods=['get'])
     def balance_history(self, request, pk=None):
@@ -195,46 +244,58 @@ class BankAccountViewSet(viewsets.ModelViewSet):
                 'formatted_balance': f"{account.currency.code} {balance:,.2f}"
             })
         
-        return Response(balance_history)
+        return Response({
+            'account_name': account.name,
+            'currency': account.currency.code,
+            'period_days': days,
+            'current_balance': float(account.current_balance),
+            'balance_history': balance_history
+        })
     
     @action(detail=True, methods=['post'])
     def check_low_balance(self, request, pk=None):
         """Check and alert for low balance"""
         account = self.get_object()
-        threshold = Decimal(request.data.get('threshold', '1000.00'))
+        threshold = Decimal(request.data.get('threshold', account.minimum_balance or '1000.00'))
         
         if account.current_balance < threshold:
             send_account_notification(account, 'low_balance', threshold=threshold)
             return Response({
                 'alert': True,
                 'message': f'Low balance alert sent for {account.name}',
-                'balance': account.current_balance,
-                'threshold': threshold
+                'balance': float(account.current_balance),
+                'threshold': float(threshold),
+                'severity': 'critical' if account.current_balance < threshold * Decimal('0.5') else 'warning'
             })
         
         return Response({
             'alert': False,
             'message': 'Balance is above threshold',
-            'balance': account.current_balance,
-            'threshold': threshold
+            'balance': float(account.current_balance),
+            'threshold': float(threshold)
         })
     
     @action(detail=True, methods=['post'])
     def freeze(self, request, pk=None):
         """Freeze account (prevent new transactions)"""
         account = self.get_object()
+        freeze_reason = request.data.get('reason', 'Administrative freeze')
+        
         account.is_active = False
+        account.notes = f"Frozen: {freeze_reason}\n{account.notes or ''}"
         account.save()
         
         return Response({
             'message': f'Account {account.name} has been frozen',
-            'status': 'frozen'
+            'status': 'frozen',
+            'reason': freeze_reason
         })
     
     @action(detail=True, methods=['post'])
     def unfreeze(self, request, pk=None):
         """Unfreeze account"""
         account = self.get_object()
+        
         account.is_active = True
         account.save()
         
@@ -243,13 +304,49 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'status': 'active'
         })
 
+    @action(detail=True, methods=['get'])
+    def reconciliation_status(self, request, pk=None):
+        """Get reconciliation status for account"""
+        account = self.get_object()
+        
+        total_transactions = account.transactions.filter(status='completed').count()
+        reconciled_transactions = account.transactions.filter(
+            status='completed', 
+            is_reconciled=True
+        ).count()
+        unreconciled_transactions = total_transactions - reconciled_transactions
+        
+        # Get oldest unreconciled transaction
+        oldest_unreconciled = account.transactions.filter(
+            status='completed',
+            is_reconciled=False
+        ).order_by('transaction_date').first()
+        
+        reconciliation_percentage = (reconciled_transactions / total_transactions * 100) if total_transactions > 0 else 100
+        
+        return Response({
+            'account_name': account.name,
+            'total_transactions': total_transactions,
+            'reconciled_transactions': reconciled_transactions,
+            'unreconciled_transactions': unreconciled_transactions,
+            'reconciliation_percentage': float(reconciliation_percentage),
+            'oldest_unreconciled_date': oldest_unreconciled.transaction_date if oldest_unreconciled else None,
+            'reconciliation_health': (
+                'excellent' if reconciliation_percentage >= 95
+                else 'good' if reconciliation_percentage >= 85
+                else 'needs_attention' if reconciliation_percentage >= 70
+                else 'critical'
+            )
+        })
+
 class ExchangeRateViewSet(viewsets.ModelViewSet):
+    """Enhanced Exchange Rate ViewSet with comprehensive currency management"""
     queryset = ExchangeRate.objects.select_related('from_currency', 'to_currency', 'created_by')
     serializer_class = ExchangeRateSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['from_currency', 'to_currency', 'is_active']
-    search_fields = ['from_currency__code', 'to_currency__code']
+    filterset_fields = ['from_currency', 'to_currency']
+    search_fields = ['from_currency__code', 'to_currency__code', 'source']
     ordering_fields = ['effective_date', 'rate', 'created_at']
     ordering = ['-effective_date']
     
@@ -260,9 +357,7 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
     def latest_rates(self, request):
         """Get latest exchange rates for all currency pairs"""
         # Get the most recent rate for each currency pair
-        latest_rates = ExchangeRate.objects.filter(
-            is_active=True
-        ).values(
+        latest_rates = ExchangeRate.objects.values(
             'from_currency__code', 'to_currency__code'
         ).annotate(
             latest_date=Max('effective_date')
@@ -275,15 +370,18 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
                 rate = ExchangeRate.objects.get(
                     from_currency__code=rate_info['from_currency__code'],
                     to_currency__code=rate_info['to_currency__code'],
-                    effective_date=rate_info['latest_date'],
-                    is_active=True
+                    effective_date=rate_info['latest_date']
                 )
                 rates.append(rate)
             except ExchangeRate.DoesNotExist:
                 continue
         
         serializer = self.get_serializer(rates, many=True)
-        return Response(serializer.data)
+        return Response({
+            'count': len(rates),
+            'last_updated': max(rate.effective_date for rate in rates) if rates else None,
+            'rates': serializer.data
+        })
     
     @action(detail=False, methods=['get'])
     def convert(self, request):
@@ -291,6 +389,7 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
         from_currency = request.query_params.get('from_currency')
         to_currency = request.query_params.get('to_currency')
         amount = request.query_params.get('amount')
+        date = request.query_params.get('date')  # Optional historical date
         
         if not all([from_currency, to_currency, amount]):
             return Response({
@@ -312,26 +411,53 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
                 'original_amount': float(amount),
                 'converted_amount': float(amount),
                 'exchange_rate': 1.0,
-                'rate_date': timezone.now().date()
+                'rate_date': date or timezone.now().date(),
+                'conversion_type': 'same_currency'
             })
         
-        # Find latest exchange rate
+        # Find exchange rate
+        rate_filter = {
+            'from_currency__code': from_currency,
+            'to_currency__code': to_currency
+        }
+        
+        if date:
+            try:
+                target_date = datetime.strptime(date, '%Y-%m-%d').date()
+                rate_filter['effective_date__lte'] = target_date
+            except ValueError:
+                return Response({
+                    'error': 'Invalid date format. Use YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            exchange_rate = ExchangeRate.objects.filter(
-                from_currency__code=from_currency,
-                to_currency__code=to_currency,
-                is_active=True
-            ).latest('effective_date')
+            exchange_rate = ExchangeRate.objects.filter(**rate_filter).latest('effective_date')
+            converted_amount = amount * exchange_rate.rate
+            
+            return Response({
+                'from_currency': from_currency,
+                'to_currency': to_currency,
+                'original_amount': float(amount),
+                'converted_amount': float(converted_amount),
+                'exchange_rate': float(exchange_rate.rate),
+                'rate_date': exchange_rate.effective_date,
+                'rate_source': exchange_rate.source,
+                'conversion_type': 'direct'
+            })
+            
         except ExchangeRate.DoesNotExist:
             # Try reverse rate
+            reverse_filter = {
+                'from_currency__code': to_currency,
+                'to_currency__code': from_currency
+            }
+            if date:
+                reverse_filter['effective_date__lte'] = target_date
+            
             try:
-                reverse_rate = ExchangeRate.objects.filter(
-                    from_currency__code=to_currency,
-                    to_currency__code=from_currency,
-                    is_active=True
-                ).latest('effective_date')
-                
+                reverse_rate = ExchangeRate.objects.filter(**reverse_filter).latest('effective_date')
                 converted_amount = amount / reverse_rate.rate
+                
                 return Response({
                     'from_currency': from_currency,
                     'to_currency': to_currency,
@@ -339,23 +465,15 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
                     'converted_amount': float(converted_amount),
                     'exchange_rate': float(1 / reverse_rate.rate),
                     'rate_date': reverse_rate.effective_date,
+                    'rate_source': reverse_rate.source,
+                    'conversion_type': 'reverse',
                     'note': 'Used reverse exchange rate'
                 })
             except ExchangeRate.DoesNotExist:
                 return Response({
-                    'error': f'No exchange rate found for {from_currency} to {to_currency}'
+                    'error': f'No exchange rate found for {from_currency} to {to_currency}',
+                    'suggestion': 'Please add exchange rates for this currency pair'
                 }, status=status.HTTP_404_NOT_FOUND)
-        
-        converted_amount = amount * exchange_rate.rate
-        
-        return Response({
-            'from_currency': from_currency,
-            'to_currency': to_currency,
-            'original_amount': float(amount),
-            'converted_amount': float(converted_amount),
-            'exchange_rate': float(exchange_rate.rate),
-            'rate_date': exchange_rate.effective_date
-        })
     
     @action(detail=False, methods=['get'])
     def historical_rates(self, request):
@@ -376,14 +494,20 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
             from_currency__code=from_currency,
             to_currency__code=to_currency,
             effective_date__gte=start_date,
-            effective_date__lte=end_date,
-            is_active=True
+            effective_date__lte=end_date
         ).order_by('effective_date')
         
         if not rates.exists():
             return Response({
-                'error': f'No historical rates found for {from_currency} to {to_currency}'
+                'error': f'No historical rates found for {from_currency} to {to_currency}',
+                'suggestion': 'Try a longer time period or check if exchange rates exist for this pair'
             }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Calculate statistics
+        rate_values = [rate.rate for rate in rates]
+        min_rate = min(rate_values)
+        max_rate = max(rate_values)
+        avg_rate = sum(rate_values) / len(rate_values)
         
         # Format for chart display
         historical_data = []
@@ -391,7 +515,8 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
             historical_data.append({
                 'date': rate.effective_date.isoformat(),
                 'rate': float(rate.rate),
-                'formatted_rate': f"1 {from_currency} = {rate.rate} {to_currency}"
+                'formatted_rate': f"1 {from_currency} = {rate.rate} {to_currency}",
+                'source': rate.source
             })
         
         return Response({
@@ -400,37 +525,24 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
             'start_date': start_date.isoformat(),
             'end_date': end_date.isoformat(),
             'rates_count': len(historical_data),
+            'statistics': {
+                'min_rate': float(min_rate),
+                'max_rate': float(max_rate),
+                'avg_rate': float(avg_rate),
+                'volatility': float((max_rate - min_rate) / avg_rate * 100)
+            },
             'historical_rates': historical_data
-        })
-    
-    @action(detail=True, methods=['post'])
-    def activate(self, request, pk=None):
-        """Activate exchange rate"""
-        exchange_rate = self.get_object()
-        exchange_rate.is_active = True
-        exchange_rate.save()
-        
-        return Response({
-            'message': f'Exchange rate {exchange_rate.from_currency.code}/{exchange_rate.to_currency.code} activated',
-            'status': 'active'
-        })
-    
-    @action(detail=True, methods=['post'])
-    def deactivate(self, request, pk=None):
-        """Deactivate exchange rate"""
-        exchange_rate = self.get_object()
-        exchange_rate.is_active = False
-        exchange_rate.save()
-        
-        return Response({
-            'message': f'Exchange rate {exchange_rate.from_currency.code}/{exchange_rate.to_currency.code} deactivated',
-            'status': 'inactive'
         })
 
 class DonationCampaignViewSet(viewsets.ModelViewSet):
+    """Enhanced Campaign ViewSet with comprehensive donation type support and bank account management"""
     queryset = DonationCampaign.objects.select_related(
         'target_currency', 'project', 'created_by'
-    ).prefetch_related('donations', 'recurring_donations', 'in_kind_donations')
+    ).prefetch_related(
+        'donations', 'recurring_donations', 'in_kind_donations',
+        'campaign_bank_accounts__bank_account__financial_institution',
+        'campaign_bank_accounts__bank_account__currency'
+    )
     serializer_class = DonationCampaignSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -455,120 +567,315 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
-    def donations(self, request, pk=None):
-        """Get donations for a specific campaign"""
+    def comprehensive_analytics(self, request, pk=None):
+        """Get comprehensive analytics including all donation types"""
         campaign = self.get_object()
-        donations = campaign.donations.filter(status='completed').order_by('-donation_date')
         
-        # Apply filters
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
-        min_amount = request.query_params.get('min_amount')
-        max_amount = request.query_params.get('max_amount')
-        
-        if start_date:
-            donations = donations.filter(donation_date__gte=start_date)
-        if end_date:
-            donations = donations.filter(donation_date__lte=end_date)
-        if min_amount:
-            donations = donations.filter(amount__gte=min_amount)
-        if max_amount:
-            donations = donations.filter(amount__lte=max_amount)
-        
-        page = self.paginate_queryset(donations)
-        if page is not None:
-            serializer = DonationSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = DonationSerializer(donations, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['get'])
-    def detailed_statistics(self, request, pk=None):
-        """Get comprehensive statistics for a campaign"""
-        campaign = self.get_object()
-        donations = campaign.donations.filter(status='completed')
-        
-        # Basic stats
-        total_donations = donations.count()
-        total_raised = campaign.current_amount_in_target_currency
-        unique_donors = donations.values('donor').distinct().count()
-        anonymous_donations = donations.filter(is_anonymous=True).count()
-        
-        # Payment method breakdown
-        payment_methods = donations.values('payment_method').annotate(
-            count=Count('id'),
-            total=Sum('amount')
-        ).order_by('-total')
-        
-        # Daily donation trends (last 30 days)
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        daily_donations = donations.filter(
-            donation_date__gte=thirty_days_ago
-        ).extra(
-            select={'day': 'date(donation_date)'}
-        ).values('day').annotate(
-            count=Count('id'),
-            total=Sum('amount')
-        ).order_by('day')
-        
-        # Donor segments
-        donor_segments = {
-            'small': donations.filter(amount__lt=100).count(),
-            'medium': donations.filter(amount__gte=100, amount__lt=1000).count(),
-            'large': donations.filter(amount__gte=1000, amount__lt=5000).count(),
-            'major': donations.filter(amount__gte=5000).count(),
+        # Regular donations
+        regular_donations = campaign.donations.filter(status='completed')
+        regular_stats = {
+            'count': regular_donations.count(),
+            'total': regular_donations.aggregate(total=Sum('amount'))['total'] or 0,
+            'average': regular_donations.aggregate(avg=Avg('amount'))['avg'] or 0,
+            'unique_donors': regular_donations.values('donor').distinct().count(),
+            'largest_donation': regular_donations.aggregate(max=Max('amount'))['max'] or 0,
+            'payment_methods': list(regular_donations.values('payment_method').annotate(
+                count=Count('id'),
+                total=Sum('amount')
+            ).order_by('-total'))
         }
         
-        # Time-based analysis
-        days_active = (timezone.now().date() - campaign.start_date).days + 1
-        days_remaining = (campaign.end_date - timezone.now().date()).days
-        avg_daily_raised = total_raised / days_active if days_active > 0 else 0
-        projected_total = avg_daily_raised * (days_active + max(days_remaining, 0))
+        # Recurring donations
+        recurring_donations = campaign.recurring_donations.filter(status__in=['active', 'completed'])
+        recurring_stats = {
+            'count': recurring_donations.count(),
+            'total_donated': recurring_donations.aggregate(total=Sum('total_donated'))['total'] or 0,
+            'monthly_value': recurring_donations.filter(frequency='monthly').aggregate(total=Sum('amount'))['total'] or 0,
+            'unique_donors': recurring_donations.values('donor').distinct().count(),
+            'frequency_breakdown': list(recurring_donations.values('frequency').annotate(
+                count=Count('id'),
+                total_amount=Sum('amount')
+            ).order_by('frequency'))
+        }
         
-        stats = {
+        # In-kind donations
+        in_kind_donations = campaign.in_kind_donations.filter(status='received')
+        in_kind_stats = {
+            'count': in_kind_donations.count(),
+            'total_value': in_kind_donations.aggregate(total=Sum('estimated_value'))['total'] or 0,
+            'unique_donors': in_kind_donations.values('donor').distinct().count(),
+            'categories': list(in_kind_donations.values('category').annotate(
+                count=Count('id'),
+                total_value=Sum('estimated_value')
+            ).order_by('-total_value'))
+        }
+        
+        # Combined analytics
+        all_donor_ids = set()
+        all_donor_ids.update(regular_donations.values_list('donor', flat=True))
+        all_donor_ids.update(recurring_donations.values_list('donor', flat=True))
+        all_donor_ids.update(in_kind_donations.values_list('donor', flat=True))
+        all_donor_ids.discard(None)
+        
+        # Financial breakdown
+        total_monetary = regular_stats['total'] + recurring_stats['total_donated']
+        total_with_in_kind = total_monetary + in_kind_stats['total_value']
+        
+        # Performance metrics
+        days_active = (timezone.now().date() - campaign.start_date).days + 1
+        days_remaining = max(0, (campaign.end_date - timezone.now().date()).days)
+        avg_daily_raised = total_monetary / days_active if days_active > 0 else 0
+        target_daily_needed = (campaign.target_amount - total_monetary) / max(days_remaining, 1) if days_remaining > 0 else 0
+        
+        analytics = {
             'campaign_info': {
                 'id': campaign.id,
                 'title': campaign.title,
-                'target_amount': campaign.target_amount,
+                'target_amount': float(campaign.target_amount),
                 'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
-                'start_date': campaign.start_date,
-                'end_date': campaign.end_date,
+                'progress_percentage': float(campaign.progress_percentage),
                 'days_active': days_active,
                 'days_remaining': days_remaining,
                 'is_active': campaign.is_active
             },
-            'financial_summary': {
-                'total_raised': total_raised,
-                'target_amount': campaign.target_amount,
-                'progress_percentage': campaign.progress_percentage,
-                'amount_remaining': campaign.target_amount - total_raised,
-                'avg_daily_raised': avg_daily_raised,
-                'projected_total': projected_total,
-                'is_on_track': projected_total >= campaign.target_amount
+            'donation_breakdown': {
+                'regular_donations': regular_stats,
+                'recurring_donations': recurring_stats,
+                'in_kind_donations': in_kind_stats
             },
-            'donation_summary': {
-                'total_donations': total_donations,
-                'unique_donors': unique_donors,
-                'anonymous_donations': anonymous_donations,
-                'repeat_donors': total_donations - unique_donors,
-                'average_donation': donations.aggregate(avg=Avg('amount'))['avg'] or 0,
-                'largest_donation': donations.aggregate(max=Sum('amount'))['max'] or 0,
-                'smallest_donation': donations.aggregate(min=Sum('amount'))['min'] or 0
+            'summary': {
+                'total_monetary_raised': float(total_monetary),
+                'total_with_in_kind': float(total_with_in_kind),
+                'unique_donors_all_types': len(all_donor_ids),
+                'total_contributions': (
+                    regular_stats['count'] + 
+                    recurring_stats['count'] + 
+                    in_kind_stats['count']
+                )
             },
-            'donor_segments': donor_segments,
-            'payment_methods': list(payment_methods),
-            'daily_trends': list(daily_donations),
-            'milestones': {
-                '25_percent': total_raised >= (campaign.target_amount * Decimal('0.25')),
-                '50_percent': total_raised >= (campaign.target_amount * Decimal('0.50')),
-                '75_percent': total_raised >= (campaign.target_amount * Decimal('0.75')),
-                '100_percent': total_raised >= campaign.target_amount
+            'performance_indicators': {
+                'monetary_progress': (total_monetary / campaign.target_amount * 100) if campaign.target_amount > 0 else 0,
+                'total_progress_with_in_kind': (total_with_in_kind / campaign.target_amount * 100) if campaign.target_amount > 0 else 0,
+                'avg_daily_raised': float(avg_daily_raised),
+                'target_daily_needed': float(target_daily_needed),
+                'is_on_track': avg_daily_raised >= target_daily_needed if days_remaining > 0 else total_monetary >= campaign.target_amount,
+                'donor_retention': self._calculate_donor_retention(campaign),
+                'average_per_donor': float(total_monetary / len(all_donor_ids)) if all_donor_ids else 0
             }
         }
         
-        return Response(stats)
+        return Response(analytics)
     
+    def _calculate_donor_retention(self, campaign):
+        """Calculate donor retention across donation types"""
+        # Get donors who have made multiple contributions
+        all_contributions = []
+        
+        # Add regular donations
+        for donation in campaign.donations.filter(status='completed'):
+            all_contributions.append({
+                'donor': donation.donor,
+                'date': donation.donation_date,
+                'type': 'regular'
+            })
+        
+        # Add recurring donations (count as multiple contributions)
+        for recurring in campaign.recurring_donations.filter(status__in=['active', 'completed']):
+            all_contributions.append({
+                'donor': recurring.donor,
+                'date': recurring.start_date,
+                'type': 'recurring'
+            })
+        
+        # Add in-kind donations
+        for in_kind in campaign.in_kind_donations.filter(status='received'):
+            all_contributions.append({
+                'donor': in_kind.donor,
+                'date': in_kind.donation_date,
+                'type': 'in_kind'
+            })
+        
+        # Calculate retention
+        donor_contribution_counts = {}
+        for contrib in all_contributions:
+            if contrib['donor']:
+                donor_contribution_counts[contrib['donor']] = donor_contribution_counts.get(contrib['donor'], 0) + 1
+        
+        total_donors = len(donor_contribution_counts)
+        repeat_donors = len([count for count in donor_contribution_counts.values() if count > 1])
+        
+        return (repeat_donors / total_donors * 100) if total_donors > 0 else 0
+    
+    @action(detail=True, methods=['get'])
+    def bank_accounts(self, request, pk=None):
+        """Get bank accounts for a campaign"""
+        campaign = self.get_object()
+        campaign_accounts = campaign.campaign_bank_accounts.filter(
+            is_active=True
+        ).select_related(
+            'bank_account__financial_institution',
+            'bank_account__currency',
+            'added_by'
+        ).order_by('priority_order')
+        
+        serializer = CampaignBankAccountSerializer(campaign_accounts, many=True)
+        return Response({
+            'campaign_title': campaign.title,
+            'total_accounts': campaign_accounts.count(),
+            'accounts': serializer.data
+        })
+
+    @action(detail=True, methods=['post'])
+    def add_bank_account(self, request, pk=None):
+        """Add a bank account to a campaign"""
+        campaign = self.get_object()
+        bank_account_id = request.data.get('bank_account_id')
+        
+        if not bank_account_id:
+            return Response({
+                'error': 'bank_account_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            bank_account = BankAccount.objects.get(
+                id=bank_account_id,
+                is_active=True,
+                accepts_donations=True
+            )
+        except BankAccount.DoesNotExist:
+            return Response({
+                'error': 'Invalid or unavailable bank account'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if already added
+        if CampaignBankAccount.objects.filter(
+            campaign=campaign,
+            bank_account=bank_account
+        ).exists():
+            return Response({
+                'error': 'Bank account already added to this campaign'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create the relationship
+        campaign_account = CampaignBankAccount.objects.create(
+            campaign=campaign,
+            bank_account=bank_account,
+            is_primary=request.data.get('is_primary', False),
+            priority_order=request.data.get('priority_order', 1),
+            notes=request.data.get('notes'),
+            added_by=request.user
+        )
+        
+        # If this is set as primary, remove primary status from others
+        if campaign_account.is_primary:
+            CampaignBankAccount.objects.filter(
+                campaign=campaign
+            ).exclude(id=campaign_account.id).update(is_primary=False)
+        
+        serializer = CampaignBankAccountSerializer(campaign_account)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def set_primary_bank_account(self, request, pk=None):
+        """Set primary bank account for campaign"""
+        campaign = self.get_object()
+        bank_account_id = request.data.get('bank_account_id')
+        
+        if not bank_account_id:
+            return Response({
+                'error': 'bank_account_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                # Remove primary status from all accounts
+                campaign.campaign_bank_accounts.update(is_primary=False)
+                
+                # Set new primary
+                campaign_account = campaign.campaign_bank_accounts.get(
+                    bank_account_id=bank_account_id,
+                    is_active=True
+                )
+                campaign_account.is_primary = True
+                campaign_account.save()
+                
+        except CampaignBankAccount.DoesNotExist:
+            return Response({
+                'error': 'Bank account not found in campaign'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'message': 'Primary bank account updated successfully',
+            'primary_account': campaign_account.bank_account.name
+        })
+
+    @action(detail=True, methods=['get'])
+    def donation_options(self, request, pk=None):
+        """Get formatted donation options for public display"""
+        campaign = self.get_object()
+        
+        # Get active bank accounts
+        active_accounts = campaign.campaign_bank_accounts.filter(
+            is_active=True,
+            bank_account__is_active=True,
+            bank_account__accepts_donations=True
+        ).select_related(
+            'bank_account__financial_institution',
+            'bank_account__currency'
+        ).order_by('priority_order')
+        
+        # Group by currency
+        accounts_by_currency = {}
+        primary_account = None
+        
+        for campaign_account in active_accounts:
+            account = campaign_account.bank_account
+            currency_code = account.currency.code
+            
+            if currency_code not in accounts_by_currency:
+                accounts_by_currency[currency_code] = []
+            
+            account_data = {
+                'id': account.id,
+                'name': account.name,
+                'account_number': account.account_number,
+                'account_type': account.get_account_type_display(),
+                'financial_institution': {
+                    'name': account.financial_institution.name,
+                    'code': account.financial_institution.code,
+                    'branch_name': account.financial_institution.branch_name
+                },
+                'currency': {
+                    'code': account.currency.code,
+                    'symbol': account.currency.symbol
+                },
+                'is_primary': campaign_account.is_primary,
+                'priority_order': campaign_account.priority_order,
+                'notes': campaign_account.notes
+            }
+            
+            accounts_by_currency[currency_code].append(account_data)
+            
+            if campaign_account.is_primary:
+                primary_account = account_data
+        
+        return Response({
+            'campaign_title': campaign.title,
+            'campaign_description': campaign.description,
+            'target_amount': float(campaign.target_amount),
+            'current_amount': float(campaign.current_amount_in_target_currency),
+            'progress_percentage': float(campaign.progress_percentage),
+            'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
+            'primary_account': primary_account,
+            'accounts_by_currency': accounts_by_currency,
+            'total_accounts': active_accounts.count(),
+            'campaign_status': {
+                'is_active': campaign.is_active,
+                'days_remaining': max(0, (campaign.end_date - timezone.now().date()).days),
+                'end_date': campaign.end_date
+            }
+        })
+
     @action(detail=True, methods=['post'])
     def check_milestones(self, request, pk=None):
         """Check and send milestone notifications"""
@@ -584,9 +891,10 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 send_campaign_milestone_notification(campaign, milestone)
         
         return Response({
-            'progress_percentage': progress,
+            'progress_percentage': float(progress),
             'milestones_reached': milestones_reached,
-            'notifications_sent': len(milestones_reached)
+            'notifications_sent': len(milestones_reached),
+            'next_milestone': next((m for m in [25, 50, 75, 100] if m > progress), None)
         })
     
     @action(detail=True, methods=['post'])
@@ -594,6 +902,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         """Extend campaign deadline"""
         campaign = self.get_object()
         new_end_date = request.data.get('new_end_date')
+        reason = request.data.get('reason', '')
         
         if not new_end_date:
             return Response({
@@ -609,12 +918,15 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
             
             old_date = campaign.end_date
             campaign.end_date = new_date
+            campaign.notes = f"Deadline extended: {reason}\n{campaign.notes or ''}"
             campaign.save()
             
             return Response({
                 'message': f'Campaign deadline extended from {old_date} to {new_date}',
                 'old_end_date': old_date,
-                'new_end_date': new_date
+                'new_end_date': new_date,
+                'reason': reason,
+                'new_days_remaining': (new_date - timezone.now().date()).days
             })
             
         except ValueError:

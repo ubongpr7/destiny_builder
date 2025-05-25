@@ -6,7 +6,7 @@ from ..models import (
     FinancialInstitution, BankAccount, ExchangeRate, DonationCampaign,
     Donation, RecurringDonation, InKindDonation, Grant, GrantReport,
     FundingSource, Budget, BudgetFunding, BudgetItem, OrganizationalExpense,
-    AccountTransaction, FundAllocation
+    AccountTransaction, FundAllocation, CampaignBankAccount
 )
 from mainapps.common.models import Currency
 from mainapps.accounts.models import Department
@@ -27,7 +27,7 @@ class UserBasicSerializer(serializers.ModelSerializer):
 class CurrencySerializer(serializers.ModelSerializer):
     class Meta:
         model = Currency
-        fields = ['id', 'code', 'name', ]
+        fields = ['id', 'code', 'name', 'symbol']
 
 class FinancialInstitutionSerializer(serializers.ModelSerializer):
     accounts_count = serializers.SerializerMethodField()
@@ -43,6 +43,19 @@ class FinancialInstitutionSerializer(serializers.ModelSerializer):
     
     def get_accounts_count(self, obj):
         return obj.accounts.filter(is_active=True).count()
+
+class BankAccountMinimalSerializer(serializers.ModelSerializer):
+    """Minimal bank account info for campaign bank accounts"""
+    financial_institution = serializers.StringRelatedField(read_only=True)
+    currency = CurrencySerializer(read_only=True)
+    formatted_balance = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = BankAccount
+        fields = [
+            'id', 'name', 'account_number', 'account_type', 'financial_institution',
+            'currency', 'purpose', 'is_active', 'accepts_donations', 'formatted_balance'
+        ]
 
 class BankAccountSerializer(serializers.ModelSerializer):
     financial_institution = FinancialInstitutionSerializer(read_only=True)
@@ -93,6 +106,20 @@ class BankAccountSerializer(serializers.ModelSerializer):
             account.secondary_signatories.set(secondary_signatory_ids)
         return account
 
+class CampaignBankAccountSerializer(serializers.ModelSerializer):
+    """Serializer for campaign-bank account relationship"""
+    bank_account = BankAccountMinimalSerializer(read_only=True)
+    bank_account_id = serializers.IntegerField(write_only=True)
+    added_by = UserBasicSerializer(read_only=True)
+    
+    class Meta:
+        model = CampaignBankAccount
+        fields = [
+            'id', 'bank_account', 'bank_account_id', 'is_primary', 'is_active',
+            'priority_order', 'notes', 'added_by', 'added_at'
+        ]
+        read_only_fields = ['id', 'added_by', 'added_at']
+
 class ExchangeRateSerializer(serializers.ModelSerializer):
     from_currency = CurrencySerializer(read_only=True)
     from_currency_id = serializers.IntegerField(write_only=True)
@@ -136,14 +163,15 @@ class DonationSerializer(serializers.ModelSerializer):
             'converted_currency_id', 'donation_date', 'payment_method', 'transaction_id',
             'reference_number', 'status', 'processor_fee', 'processor_fee_currency',
             'processor_fee_currency_id', 'net_amount', 'deposited_to_account',
-            'deposited_to_account_id', 'deposit_date', 'bank_reference', 'notes',
-            'receipt_sent', 'receipt_number', 'tax_deductible', 'processed_by',
+            'deposited_to_account_id', 'deposit_date', 'bank_reference', 'receipt_image',
+            'notes', 'receipt_sent', 'receipt_number', 'tax_deductible', 'processed_by',
             'created_at', 'updated_at', 'donor_name_display', 'formatted_amount'
         ]
         read_only_fields = ['id', 'processed_by', 'created_at', 'updated_at']
 
 class RecurringDonationSerializer(serializers.ModelSerializer):
     donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True)
     campaign = serializers.StringRelatedField(read_only=True)
     campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     project = serializers.StringRelatedField(read_only=True)
@@ -155,11 +183,11 @@ class RecurringDonationSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecurringDonation
         fields = [
-            'id', 'donor', 'is_anonymous', 'campaign', 'campaign_id', 'project',
+            'id', 'donor', 'donor_id', 'is_anonymous', 'campaign', 'campaign_id', 'project',
             'project_id', 'amount', 'currency', 'currency_id', 'frequency',
             'start_date', 'end_date', 'next_payment_date', 'payment_method',
             'subscription_id', 'status', 'total_donated', 'payment_count',
-            'notes', 'created_at', 'updated_at', 'formatted_amount'
+            'notes', 'receipt_image', 'created_at', 'updated_at', 'formatted_amount'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -185,7 +213,7 @@ class InKindDonationSerializer(serializers.ModelSerializer):
             'category', 'quantity', 'estimated_value', 'valuation_currency',
             'valuation_currency_id', 'donation_date', 'received_date', 'received_by',
             'received_by_id', 'status', 'notes', 'receipt_sent', 'receipt_number',
-            'image', 'created_at', 'updated_at', 'donor_name_display', 'formatted_value'
+            'receipt_image', 'created_at', 'updated_at', 'donor_name_display', 'formatted_value'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -216,6 +244,19 @@ class DonationCampaignSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
     
+    def get_donations_count(self, obj):
+        return obj.donations.filter(status='completed').count()
+    
+    def get_donors_count(self, obj):
+        """Get unique donors across all donation types"""
+        regular_donors = set(obj.donations.filter(status='completed').values_list('donor', flat=True))
+        recurring_donors = set(obj.recurring_donations.filter(status__in=['active', 'completed']).values_list('donor', flat=True))
+        in_kind_donors = set(obj.in_kind_donations.filter(status='received').values_list('donor', flat=True))
+        
+        # Remove None values and combine
+        all_donors = (regular_donors | recurring_donors | in_kind_donors) - {None}
+        return len(all_donors)
+
 class DonationDetailCampaignSerializer(serializers.ModelSerializer):
     target_currency = CurrencySerializer(read_only=True)
     target_currency_id = serializers.IntegerField(write_only=True)
@@ -230,12 +271,18 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
     )
     is_completed = serializers.BooleanField(read_only=True)
     
-    # Counts and statistics
+    # Bank accounts for donations
+    campaign_bank_accounts = CampaignBankAccountSerializer(many=True, read_only=True)
+    available_bank_accounts = serializers.SerializerMethodField()
+    bank_accounts_by_currency = serializers.SerializerMethodField()
+    
+    # Enhanced counts and statistics including all donation types
     donations_count = serializers.SerializerMethodField()
     donors_count = serializers.SerializerMethodField()
     recurring_donors_count = serializers.SerializerMethodField()
     in_kind_donors_count = serializers.SerializerMethodField()
     total_estimated_in_kind_value = serializers.SerializerMethodField()
+    total_recurring_donated = serializers.SerializerMethodField()
     average_donation_amount = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
     days_active = serializers.SerializerMethodField()
@@ -251,6 +298,9 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
     payment_method_breakdown = serializers.SerializerMethodField()
     geographic_distribution = serializers.SerializerMethodField()
     
+    # Comprehensive donation breakdown
+    donation_breakdown = serializers.SerializerMethodField()
+    
     class Meta:
         model = DonationCampaign
         fields = [
@@ -258,30 +308,64 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
             'target_currency_id', 'start_date', 'end_date', 'project', 'project_id',
             'is_active', 'is_featured', 'image', 'created_by', 'created_at',
             'updated_at', 'current_amount_in_target_currency', 'progress_percentage',
-            'is_completed', 'donations_count', 'donors_count', 'recurring_donors_count',
-            'in_kind_donors_count', 'total_estimated_in_kind_value', 'average_donation_amount',
-            'days_remaining', 'days_active', 'in_kind_donations', 'recurring_donations', 
-            'donations', 'donation_trends', 'donor_segments', 'payment_method_breakdown',
-            'geographic_distribution'
+            'is_completed', 'campaign_bank_accounts', 'available_bank_accounts',
+            'bank_accounts_by_currency', 'donations_count', 'donors_count', 'recurring_donors_count',
+            'in_kind_donors_count', 'total_estimated_in_kind_value', 'total_recurring_donated', 
+            'average_donation_amount', 'days_remaining', 'days_active', 'in_kind_donations', 
+            'recurring_donations', 'donations', 'donation_trends', 'donor_segments', 
+            'payment_method_breakdown', 'geographic_distribution', 'donation_breakdown'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+    
+    def get_available_bank_accounts(self, obj):
+        """Get available bank accounts for donations"""
+        accounts = obj.get_available_bank_accounts()
+        return BankAccountMinimalSerializer(accounts, many=True).data
+    
+    def get_bank_accounts_by_currency(self, obj):
+        """Get bank accounts grouped by currency"""
+        return obj.get_bank_accounts_by_currency()
     
     def get_donations_count(self, obj):
         return obj.donations.filter(status='completed').count()
     
     def get_donors_count(self, obj):
-        return obj.donations.filter(status='completed').values('donor').distinct().count()
+        """Get unique donors across all donation types"""
+        regular_donors = set(obj.donations.filter(status='completed').values_list('donor', flat=True))
+        recurring_donors = set(obj.recurring_donations.filter(status__in=['active', 'completed']).values_list('donor', flat=True))
+        in_kind_donors = set(obj.in_kind_donations.filter(status='received').values_list('donor', flat=True))
+        
+        # Remove None values and combine
+        all_donors = (regular_donors | recurring_donors | in_kind_donors) - {None}
+        return len(all_donors)
     
     def get_recurring_donors_count(self, obj):
-        return obj.recurring_donations.filter(status='active').values('donor').distinct().count()
+        return obj.recurring_donations.filter(status__in=['active', 'completed']).values('donor').distinct().count()
     
     def get_in_kind_donors_count(self, obj):
         return obj.in_kind_donations.filter(status='received').values('donor').distinct().count()
     
     def get_total_estimated_in_kind_value(self, obj):
-        return obj.in_kind_donations.filter(status='received').aggregate(
-            total=Sum('estimated_value')
-        )['total'] or 0
+        """Get total in-kind value in target currency"""
+        total = 0
+        for in_kind in obj.in_kind_donations.filter(status='received'):
+            if in_kind.valuation_currency == obj.target_currency:
+                total += in_kind.estimated_value
+            else:
+                # Convert using exchange rate (simplified)
+                total += in_kind.estimated_value  # Would need proper conversion
+        return total
+    
+    def get_total_recurring_donated(self, obj):
+        """Get total from recurring donations in target currency"""
+        total = 0
+        for recurring in obj.recurring_donations.filter(status__in=['active', 'completed']):
+            if recurring.currency == obj.target_currency:
+                total += recurring.total_donated
+            else:
+                # Convert using exchange rate (simplified)
+                total += recurring.total_donated  # Would need proper conversion
+        return total
     
     def get_average_donation_amount(self, obj):
         return obj.donations.filter(status='completed').aggregate(
@@ -300,21 +384,18 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
         return (timezone.now().date() - obj.start_date).days + 1
     
     def get_in_kind_donations(self, obj):
-        from .serializers import InKindDonationSerializer
         in_kind = obj.in_kind_donations.select_related(
             'donor', 'valuation_currency'
         ).order_by('-donation_date')[:10]  # Latest 10
         return InKindDonationSerializer(in_kind, many=True).data
     
     def get_recurring_donations(self, obj):
-        from .serializers import RecurringDonationSerializer
         recurring = obj.recurring_donations.select_related(
             'donor', 'currency'
-        ).filter(status='active').order_by('-created_at')[:10]  # Latest 10 active
+        ).filter(status__in=['active', 'completed']).order_by('-created_at')[:10]  # Latest 10
         return RecurringDonationSerializer(recurring, many=True).data
     
     def get_donations(self, obj):
-        from .serializers import DonationSerializer
         donations = obj.donations.select_related(
             'donor', 'currency'
         ).filter(status='completed').order_by('-donation_date')[:20]  # Latest 20
@@ -367,6 +448,43 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
         # This would require additional user profile fields
         # For now, return empty list
         return []
+    
+    def get_donation_breakdown(self, obj):
+        """Get comprehensive breakdown of all donation types"""
+        # Regular donations
+        regular_total = obj.donations.filter(status='completed').aggregate(
+            total=Sum('amount'), count=Count('id')
+        )
+        
+        # In-kind donations
+        in_kind_total = obj.in_kind_donations.filter(status='received').aggregate(
+            total=Sum('estimated_value'), count=Count('id')
+        )
+        
+        # Recurring donations
+        recurring_total = obj.recurring_donations.filter(
+            status__in=['active', 'completed']
+        ).aggregate(
+            total=Sum('total_donated'), count=Count('id')
+        )
+        
+        return {
+            'regular_donations': {
+                'count': regular_total['count'] or 0,
+                'total': float(regular_total['total'] or 0),
+                'percentage': 0  # Will be calculated on frontend
+            },
+            'in_kind_donations': {
+                'count': in_kind_total['count'] or 0,
+                'total': float(in_kind_total['total'] or 0),
+                'percentage': 0  # Will be calculated on frontend
+            },
+            'recurring_donations': {
+                'count': recurring_total['count'] or 0,
+                'total': float(recurring_total['total'] or 0),
+                'percentage': 0  # Will be calculated on frontend
+            }
+        }
 
 class GrantSerializer(serializers.ModelSerializer):
     currency = CurrencySerializer(read_only=True)
@@ -423,18 +541,22 @@ class FundingSourceSerializer(serializers.ModelSerializer):
     campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     grant = serializers.StringRelatedField(read_only=True)
     grant_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    created_by = UserBasicSerializer(read_only=True)
     amount_remaining = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+    is_available_now = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = FundingSource
         fields = [
-            'id', 'name', 'funding_type', 'donation', 'donation_id', 'campaign',
+            'id', 'name', 'funding_type', 'description', 'donation', 'donation_id', 'campaign',
             'campaign_id', 'grant', 'grant_id', 'amount_available', 'currency',
-            'currency_id', 'amount_allocated', 'is_active', 'created_at',
-            'amount_remaining', 'formatted_amount'
+            'currency_id', 'amount_allocated', 'available_from', 'available_until', 
+            'restrictions', 'is_active', 'created_by', 'created_at', 'updated_at',
+            'amount_remaining', 'formatted_amount', 'is_expired', 'is_available_now'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
 class BudgetItemSerializer(serializers.ModelSerializer):
     budget = serializers.StringRelatedField(read_only=True)
