@@ -37,15 +37,4 @@ urlpatterns = [
     # API routes
     path('', include(router.urls)),
     
-    # Additional custom endpoints (if needed)
-    path('api/finance/reports/', include([
-        # Custom report endpoints can go here
-    ])),
-]
-
-# Optional: Add API documentation endpoints
-from rest_framework.documentation import include_docs_urls
-
-urlpatterns += [
-    path('api/finance/docs/', include_docs_urls(title='Finance API Documentation')),
 ]
