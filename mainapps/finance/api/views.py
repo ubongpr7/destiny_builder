@@ -1732,6 +1732,116 @@ class DashboardViewSet(viewsets.ViewSet):
         return Response(analytics)
     
     @action(detail=False, methods=['get'])
+    def campaign_performance(self, request):
+        """Get campaign performance analytics"""
+        days = int(request.query_params.get('days', 30))
+        limit = int(request.query_params.get('limit', 10))
+        
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Get active campaigns with their performance metrics
+        campaigns = DonationCampaign.objects.filter(
+            is_active=True
+        ).prefetch_related('donations')
+        
+        campaign_data = []
+        
+        for campaign in campaigns:
+            # Get donations for this campaign in the time period
+            campaign_donations = campaign.donations.filter(
+                status='completed',
+                donation_date__gte=start_date
+            )
+            
+            # Calculate metrics
+            total_raised = campaign.current_amount_in_target_currency
+            period_raised = campaign_donations.aggregate(total=Sum('amount'))['total'] or 0
+            donation_count = campaign_donations.count()
+            unique_donors = campaign_donations.values('donor').distinct().count()
+            avg_donation = campaign_donations.aggregate(avg=Avg('amount'))['avg'] or 0
+            
+            # Progress metrics
+            progress_percentage = campaign.progress_percentage
+            days_remaining = (campaign.end_date - timezone.now().date()).days
+            days_active = (timezone.now().date() - campaign.start_date).days + 1
+            
+            # Performance indicators
+            daily_avg = period_raised / days if days > 0 else 0
+            target_daily_needed = (campaign.target_amount - total_raised) / max(days_remaining, 1) if days_remaining > 0 else 0
+            
+            campaign_data.append({
+                'id': campaign.id,
+                'title': campaign.title,
+                'target_amount': float(campaign.target_amount),
+                'total_raised': float(total_raised),
+                'period_raised': float(period_raised),
+                'progress_percentage': float(progress_percentage),
+                'days_remaining': days_remaining,
+                'days_active': days_active,
+                'donation_count': donation_count,
+                'unique_donors': unique_donors,
+                'avg_donation': float(avg_donation),
+                'daily_avg_period': float(daily_avg),
+                'target_daily_needed': float(target_daily_needed),
+                'is_on_track': daily_avg >= target_daily_needed if days_remaining > 0 else progress_percentage >= 100,
+                'performance_score': min(100, (daily_avg / max(target_daily_needed, 1)) * 100) if target_daily_needed > 0 else 100,
+                'currency': campaign.target_currency.code,
+                'start_date': campaign.start_date,
+                'end_date': campaign.end_date,
+                'is_featured': campaign.is_featured
+            })
+        
+        # Sort by performance score or total raised
+        sort_by = request.query_params.get('sort', 'performance_score')
+        if sort_by == 'total_raised':
+            campaign_data.sort(key=lambda x: x['total_raised'], reverse=True)
+        elif sort_by == 'progress_percentage':
+            campaign_data.sort(key=lambda x: x['progress_percentage'], reverse=True)
+        elif sort_by == 'period_raised':
+            campaign_data.sort(key=lambda x: x['period_raised'], reverse=True)
+        else:  # performance_score
+            campaign_data.sort(key=lambda x: x['performance_score'], reverse=True)
+        
+        # Limit results
+        campaign_data = campaign_data[:limit]
+        
+        # Calculate summary statistics
+        total_campaigns = len(campaigns)
+        active_campaigns = len([c for c in campaign_data if c['days_remaining'] > 0])
+        successful_campaigns = len([c for c in campaign_data if c['progress_percentage'] >= 100])
+        on_track_campaigns = len([c for c in campaign_data if c['is_on_track']])
+        
+        # Overall performance metrics
+        total_target = sum(c['target_amount'] for c in campaign_data)
+        total_raised_all = sum(c['total_raised'] for c in campaign_data)
+        total_period_raised = sum(c['period_raised'] for c in campaign_data)
+        
+        performance = {
+            'period_days': days,
+            'summary': {
+                'total_campaigns': total_campaigns,
+                'active_campaigns': active_campaigns,
+                'successful_campaigns': successful_campaigns,
+                'on_track_campaigns': on_track_campaigns,
+                'success_rate': (successful_campaigns / max(total_campaigns, 1)) * 100,
+                'on_track_rate': (on_track_campaigns / max(active_campaigns, 1)) * 100,
+                'total_target_amount': float(total_target),
+                'total_raised': float(total_raised_all),
+                'period_raised': float(total_period_raised),
+                'overall_progress': (total_raised_all / max(total_target, 1)) * 100
+            },
+            'campaigns': campaign_data,
+            'top_performers': campaign_data[:5],  # Top 5 performers
+            'needs_attention': [
+                c for c in campaign_data 
+                if c['days_remaining'] > 0 and c['performance_score'] < 50
+            ][:5]  # Campaigns that need attention
+        }
+        
+        return Response(performance)
+    
+    @action(detail=False, methods=['get'])
     def budget_performance(self, request):
         """Get budget performance analytics"""
         fiscal_year = request.query_params.get('fiscal_year')
