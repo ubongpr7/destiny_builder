@@ -11,6 +11,7 @@ from ..models import (
 from mainapps.common.models import Currency
 from mainapps.accounts.models import Department
 from mainapps.project.models import Project
+from mainapps.project.api.serializers import ProjectMinimalSerializer
 
 User = get_user_model()
 
@@ -26,7 +27,7 @@ class UserBasicSerializer(serializers.ModelSerializer):
 class CurrencySerializer(serializers.ModelSerializer):
     class Meta:
         model = Currency
-        fields = ['id', 'code', 'name', 'symbol']
+        fields = ['id', 'code', 'name', ]
 
 class FinancialInstitutionSerializer(serializers.ModelSerializer):
     accounts_count = serializers.SerializerMethodField()
@@ -106,11 +107,10 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
             'rate', 'effective_date', 'source', 'created_by', 'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
-
 class DonationCampaignSerializer(serializers.ModelSerializer):
     target_currency = CurrencySerializer(read_only=True)
     target_currency_id = serializers.IntegerField(write_only=True)
-    project = serializers.StringRelatedField(read_only=True)
+    project = ProjectMinimalSerializer(read_only=True)
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserBasicSerializer(read_only=True)
     current_amount_in_target_currency = serializers.DecimalField(
