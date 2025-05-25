@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    FinancialInstitutionViewSet, BankAccountViewSet, ExchangeRateViewSet,
+    FinancialInstitutionViewSet, BankAccountViewSet, 
     DonationCampaignViewSet, DonationViewSet, RecurringDonationViewSet,
     InKindDonationViewSet, GrantViewSet, GrantReportViewSet,
     FundingSourceViewSet, BudgetViewSet, BudgetItemViewSet,
@@ -12,7 +12,6 @@ from .views import (
 router = DefaultRouter()
 router.register(r'financial-institutions', FinancialInstitutionViewSet)
 router.register(r'bank-accounts', BankAccountViewSet)
-router.register(r'exchange-rates', ExchangeRateViewSet)
 router.register(r'donation-campaigns', DonationCampaignViewSet)
 router.register(r'donations', DonationViewSet)
 router.register(r'recurring-donations', RecurringDonationViewSet)
