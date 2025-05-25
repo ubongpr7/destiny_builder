@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Avg, Q, F, Case, When, Value, DecimalField,FloatField
+from django.db.models import Sum, Count, Avg, Q, F, Case, When, Value, DecimalField, FloatField
 from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -519,7 +519,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 'id': campaign.id,
                 'title': campaign.title,
                 'target_amount': campaign.target_amount,
-                'currency': campaign.target_currency.code,
+                'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
                 'start_date': campaign.start_date,
                 'end_date': campaign.end_date,
                 'days_active': days_active,
@@ -1786,7 +1786,7 @@ class DashboardViewSet(viewsets.ViewSet):
                 'target_daily_needed': float(target_daily_needed),
                 'is_on_track': daily_avg >= target_daily_needed if days_remaining > 0 else progress_percentage >= 100,
                 'performance_score': min(100, (daily_avg / max(target_daily_needed, 1)) * 100) if target_daily_needed > 0 else 100,
-                'currency': campaign.target_currency.code,
+                'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
                 'start_date': campaign.start_date,
                 'end_date': campaign.end_date,
                 'is_featured': campaign.is_featured
