@@ -734,7 +734,6 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
     transfer_to_account = serializers.StringRelatedField(read_only=True)
     transfer_to_account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     authorized_by = UserBasicSerializer(read_only=True)
-    authorized_by_id = serializers.IntegerField(write_only=True)
     reconciled_by = UserBasicSerializer(read_only=True)
     reconciled_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     formatted_amount = serializers.CharField(read_only=True)
@@ -747,7 +746,7 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
             'exchange_rate_used', 'donation', 'donation_id', 'grant', 'grant_id',
             'expense', 'expense_id', 'transfer_to_account', 'transfer_to_account_id',
             'reference_number', 'bank_reference', 'transaction_date', 'description',
-            'status', 'processor_fee', 'net_amount', 'authorized_by', 'authorized_by_id',
+            'status', 'processor_fee', 'net_amount', 'authorized_by',
             'is_reconciled', 'reconciled_date', 'reconciled_by', 'reconciled_by_id',
             'created_at', 'updated_at', 'formatted_amount'
         ]
