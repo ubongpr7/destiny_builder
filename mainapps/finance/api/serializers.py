@@ -188,19 +188,13 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
     financial_institution_id = serializers.IntegerField()
     currency_id = serializers.IntegerField()
     primary_signatory_id = serializers.IntegerField()
-    secondary_signatory_ids = serializers.ListField(
-        child=serializers.IntegerField(), 
-        required=False, 
-        allow_empty=True,
-        default=list
-    )
     
     class Meta:
         model = BankAccount
         fields = [
             'name', 'account_number', 'account_type', 'financial_institution_id',
             'currency_id', 'purpose', 'is_restricted', 'restrictions',
-            'primary_signatory_id', 'secondary_signatory_ids', 'is_active',
+            'primary_signatory_id', 'is_active',
             'account_status', 'accepts_donations', 'opening_date', 'closing_date',
             'minimum_balance', 'online_banking_enabled', 'mobile_banking_enabled',
             'debit_card_enabled', 'routing_number', 'swift_code', 'iban',
@@ -251,33 +245,8 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("Invalid or inactive primary signatory")
     
-    def validate_secondary_signatory_ids(self, value):
-        """Validate secondary signatories exist and are active"""
-        if not value:
-            return []
-        
-        try:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            existing_users = User.objects.filter(id__in=value, is_active=True)
-            if len(existing_users) != len(value):
-                invalid_ids = set(value) - set(existing_users.values_list('id', flat=True))
-                raise serializers.ValidationError(f"Invalid or inactive user IDs: {list(invalid_ids)}")
-            return value
-        except Exception as e:
-            raise serializers.ValidationError(f"Error validating secondary signatories: {str(e)}")
-    
     def validate(self, attrs):
         """Cross-field validation"""
-        # Ensure primary signatory is not in secondary signatories
-        primary_id = attrs.get('primary_signatory_id')
-        secondary_ids = attrs.get('secondary_signatory_ids', [])
-        
-        if primary_id and primary_id in secondary_ids:
-            raise serializers.ValidationError({
-                'secondary_signatory_ids': 'Primary signatory cannot be listed as a secondary signatory'
-            })
-        
         # Validate overdraft settings
         if attrs.get('overdraft_protection') and not attrs.get('overdraft_limit'):
             raise serializers.ValidationError({
@@ -294,35 +263,23 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
         return attrs
     
     def create(self, validated_data):
-        """Create bank account with proper relationship handling"""
-        secondary_signatory_ids = validated_data.pop('secondary_signatory_ids', [])
-    
+        """Create bank account"""
         # Set created_by from request context
         if 'request' in self.context:
             validated_data['created_by'] = self.context['request'].user
-    
-        # Create and save the bank account first
+
+        # Create and save the bank account
         bank_account = BankAccount.objects.create(**validated_data)
-    
-        # Now set secondary signatories after the account has an ID
-        if secondary_signatory_ids:
-            bank_account.secondary_signatories.set(secondary_signatory_ids)
-    
+
         return bank_account
     
     def update(self, instance, validated_data):
-        """Update bank account with proper relationship handling"""
-        secondary_signatory_ids = validated_data.pop('secondary_signatory_ids', None)
-        
-        # Update all other fields
+        """Update bank account"""
+        # Update all fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         
         instance.save()
-        
-        # Update secondary signatories if provided
-        if secondary_signatory_ids is not None:
-            instance.secondary_signatories.set(secondary_signatory_ids)
         
         return instance
     
@@ -336,7 +293,6 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
             'is_active': instance.is_active,
             'message': 'Bank account saved successfully'
         }
-
 
 class CampaignBankAccountSerializer(serializers.ModelSerializer):
     """Serializer for campaign-bank account relationship"""
