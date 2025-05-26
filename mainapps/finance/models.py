@@ -416,10 +416,10 @@ class BankAccount(models.Model):
         self.is_active = False
         self.closing_date = closing_date or timezone.now().date()
         self.save(update_fields=['account_status', 'is_active', 'closing_date'])
-    def save(self, *args, **kwargs):
-        if not self.currency:
-            currency = Currency.objects.filter(code='USD').first()
-            self.currency = currency or Currency.objects.first()           
+    # def save(self, *args, **kwargs):
+    #     if not self.currency:
+    #         currency = Currency.objects.filter(code='USD').first()
+    #         self.currency = currency or Currency.objects.first()           
     def __str__(self):
         return f"{self.name} ({self.currency.code}) - {self.account_number[-4:]}"
 
