@@ -259,25 +259,25 @@ class BankAccount(models.Model):
         verbose_name = "Bank Account"
         verbose_name_plural = "Bank Accounts"
     
-    def clean(self):
-        """Validate account data"""
-        super().clean()
+    # def clean(self):
+    #     """Validate account data"""
+    #     super().clean()
         
-        # Validate overdraft limit only if overdraft protection is enabled
-        if self.overdraft_protection and not self.overdraft_limit:
-            raise ValidationError("Overdraft limit is required when overdraft protection is enabled")
+    #     # Validate overdraft limit only if overdraft protection is enabled
+    #     if self.overdraft_protection and not self.overdraft_limit:
+    #         raise ValidationError("Overdraft limit is required when overdraft protection is enabled")
         
-        # Validate closing date is after opening date
-        if self.closing_date and self.closing_date <= self.opening_date:
-            raise ValidationError("Closing date must be after opening date")
+    #     # Validate closing date is after opening date
+    #     if self.closing_date and self.closing_date <= self.opening_date:
+    #         raise ValidationError("Closing date must be after opening date")
         
-        # Validate IBAN format (basic check)
-        if self.iban and len(self.iban) < 15:
-            raise ValidationError("IBAN must be at least 15 characters long")
+    #     # Validate IBAN format (basic check)
+    #     if self.iban and len(self.iban) < 15:
+    #         raise ValidationError("IBAN must be at least 15 characters long")
         
-        # Validate SWIFT code format (basic check)
-        if self.swift_code and len(self.swift_code) not in [8, 11]:
-            raise ValidationError("SWIFT code must be 8 or 11 characters long")
+    #     # Validate SWIFT code format (basic check)
+    #     if self.swift_code and len(self.swift_code) not in [8, 11]:
+    #         raise ValidationError("SWIFT code must be 8 or 11 characters long")
     
     @property
     def current_balance(self):
