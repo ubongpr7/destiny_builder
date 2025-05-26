@@ -33,7 +33,7 @@ class FinancialInstitution(models.Model):
         return f"{self.name} - {self.branch_name or 'Main Branch'}"
 
 class BankAccount(models.Model):
-    """Organization's bank accounts with multi-currency support"""
+    """Organization's bank accounts with multi-currency support and enhanced features"""
     ACCOUNT_TYPE_CHOICES = [
         ('checking', 'Checking Account'),
         ('savings', 'Savings Account'),
@@ -48,11 +48,33 @@ class BankAccount(models.Model):
         ('mobile_money', 'Mobile Money Account'),
     ]
     
+    ACCOUNT_STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('frozen', 'Frozen'),
+        ('closed', 'Closed'),
+        ('pending', 'Pending Activation'),
+        ('suspended', 'Suspended'),
+    ]
+    
+    RISK_LEVEL_CHOICES = [
+        ('low', 'Low Risk'),
+        ('medium', 'Medium Risk'),
+        ('high', 'High Risk'),
+    ]
+    
+    COMPLIANCE_STATUS_CHOICES = [
+        ('compliant', 'Compliant'),
+        ('pending_review', 'Pending Review'),
+        ('non_compliant', 'Non-Compliant'),
+        ('under_investigation', 'Under Investigation'),
+    ]
+    
+    # Basic Account Information
     name = models.CharField(max_length=200)
     account_number = models.CharField(max_length=50, unique=True)
     account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPE_CHOICES)
     financial_institution = models.ForeignKey(
-        FinancialInstitution, 
+        'FinancialInstitution', 
         on_delete=models.PROTECT,
         related_name='accounts'
     )
@@ -89,6 +111,12 @@ class BankAccount(models.Model):
     
     # Account status and details
     is_active = models.BooleanField(default=True)
+    account_status = models.CharField(
+        max_length=20, 
+        choices=ACCOUNT_STATUS_CHOICES, 
+        default='active',
+        help_text="Current status of the account"
+    )
     accepts_donations = models.BooleanField(
         default=True,
         help_text="Whether this account can receive donations"
@@ -101,9 +129,112 @@ class BankAccount(models.Model):
         default=0
     )
     
+    # Enhanced Banking Features
+    online_banking_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether online banking is enabled for this account"
+    )
+    mobile_banking_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether mobile banking is enabled for this account"
+    )
+    debit_card_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether a debit card is available for this account"
+    )
+    
+    # Account Details and Identifiers
+    routing_number = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True,
+        help_text="Bank routing number (for US accounts)"
+    )
+    swift_code = models.CharField(
+        max_length=11, 
+        blank=True, 
+        null=True,
+        help_text="SWIFT/BIC code for international transfers"
+    )
+    iban = models.CharField(
+        max_length=34, 
+        blank=True, 
+        null=True,
+        help_text="International Bank Account Number"
+    )
+    branch_address = models.TextField(
+        blank=True, 
+        null=True,
+        help_text="Physical address of the bank branch"
+    )
+    
+    # Financial Features
+    overdraft_protection = models.BooleanField(
+        default=False,
+        help_text="Whether overdraft protection is enabled"
+    )
+    overdraft_limit = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Maximum overdraft amount allowed"
+    )
+    interest_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Annual interest rate (as decimal, e.g., 0.0250 for 2.5%)"
+    )
+    monthly_maintenance_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Monthly maintenance fee charged by the bank"
+    )
+    
+    # Risk and Compliance
+    risk_level = models.CharField(
+        max_length=10,
+        choices=RISK_LEVEL_CHOICES,
+        default='low',
+        help_text="Risk assessment level for this account"
+    )
+    compliance_status = models.CharField(
+        max_length=20,
+        choices=COMPLIANCE_STATUS_CHOICES,
+        default='compliant',
+        help_text="Compliance status with banking regulations"
+    )
+    
+    # Reconciliation and Tracking
+    last_reconciled_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Date when account was last reconciled"
+    )
+    auto_reconciliation_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether automatic reconciliation is enabled"
+    )
+    last_transaction_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Date of the most recent transaction"
+    )
+    
     # Online account details (for digital payment platforms)
     api_key = models.CharField(max_length=255, blank=True, null=True)
     webhook_url = models.URLField(blank=True, null=True)
+    
+    # Additional Information
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Additional notes about this account"
+    )
     
     # Tracking
     created_by = models.ForeignKey(
@@ -121,22 +252,45 @@ class BankAccount(models.Model):
             models.Index(fields=['financial_institution', 'is_active']),
             models.Index(fields=['currency', 'is_active']),
             models.Index(fields=['accepts_donations', 'is_active']),
+            models.Index(fields=['account_status']),
+            models.Index(fields=['compliance_status']),
+            models.Index(fields=['risk_level']),
         ]
         verbose_name = "Bank Account"
         verbose_name_plural = "Bank Accounts"
     
+    def clean(self):
+        """Validate account data"""
+        super().clean()
+        
+        # Validate overdraft limit only if overdraft protection is enabled
+        if self.overdraft_protection and not self.overdraft_limit:
+            raise ValidationError("Overdraft limit is required when overdraft protection is enabled")
+        
+        # Validate closing date is after opening date
+        if self.closing_date and self.closing_date <= self.opening_date:
+            raise ValidationError("Closing date must be after opening date")
+        
+        # Validate IBAN format (basic check)
+        if self.iban and len(self.iban) < 15:
+            raise ValidationError("IBAN must be at least 15 characters long")
+        
+        # Validate SWIFT code format (basic check)
+        if self.swift_code and len(self.swift_code) not in [8, 11]:
+            raise ValidationError("SWIFT code must be 8 or 11 characters long")
+    
     @property
     def current_balance(self):
         """Calculate current balance from transactions"""
-        from django.db.models import Sum
+        from django.db.models import Sum, Q
         
         credits = self.transactions.filter(
-            transaction_type='credit',
+            transaction_type__in=['credit', 'transfer_in'],
             status='completed'
         ).aggregate(total=Sum('amount'))['total'] or 0
         
         debits = self.transactions.filter(
-            transaction_type='debit',
+            transaction_type__in=['debit', 'transfer_out'],
             status='completed'
         ).aggregate(total=Sum('amount'))['total'] or 0
         
@@ -147,6 +301,123 @@ class BankAccount(models.Model):
         """Return balance formatted with currency"""
         return f"{self.currency.code} {self.current_balance:,.2f}"
     
+    @property
+    def is_overdrawn(self):
+        """Check if account is overdrawn"""
+        return self.current_balance < 0
+    
+    @property
+    def available_balance(self):
+        """Calculate available balance including overdraft"""
+        balance = self.current_balance
+        if self.overdraft_protection and self.overdraft_limit:
+            return balance + self.overdraft_limit
+        return balance
+    
+    @property
+    def is_low_balance(self):
+        """Check if account has low balance (below minimum)"""
+        return self.current_balance < self.minimum_balance
+    
+    @property
+    def days_since_last_reconciliation(self):
+        """Calculate days since last reconciliation"""
+        if not self.last_reconciled_date:
+            return None
+        return (timezone.now() - self.last_reconciled_date).days
+    
+    @property
+    def needs_reconciliation(self):
+        """Check if account needs reconciliation (more than 30 days)"""
+        days = self.days_since_last_reconciliation
+        return days is None or days > 30
+    
+    @property
+    def monthly_fee_due_date(self):
+        """Calculate next monthly fee due date"""
+        if not self.monthly_maintenance_fee:
+            return None
+        
+        from datetime import datetime
+        today = timezone.now().date()
+        # Assume fee is due on the same day each month as opening date
+        try:
+            next_due = today.replace(day=self.opening_date.day)
+            if next_due <= today:
+                # Move to next month
+                if next_due.month == 12:
+                    next_due = next_due.replace(year=next_due.year + 1, month=1)
+                else:
+                    next_due = next_due.replace(month=next_due.month + 1)
+            return next_due
+        except ValueError:
+            # Handle cases where opening day doesn't exist in current month (e.g., Feb 30)
+            return None
+    
+    @property
+    def transaction_volume_30_days(self):
+        """Calculate transaction volume for last 30 days"""
+        from datetime import timedelta
+        from django.db.models import Sum
+        
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        volume = self.transactions.filter(
+            transaction_date__gte=thirty_days_ago,
+            status='completed'
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        return volume
+    
+    @property
+    def average_monthly_balance(self):
+        """Calculate average balance over the last 3 months (simplified)"""
+        # This is a simplified calculation - in practice, you'd want daily balance snapshots
+        return self.current_balance  # Placeholder - implement proper calculation
+    
+    def update_last_transaction_date(self):
+        """Update the last transaction date"""
+        latest_transaction = self.transactions.filter(
+            status='completed'
+        ).order_by('-transaction_date').first()
+        
+        if latest_transaction:
+            self.last_transaction_date = latest_transaction.transaction_date
+            self.save(update_fields=['last_transaction_date'])
+    
+    def mark_reconciled(self, reconciled_by=None):
+        """Mark account as reconciled"""
+        self.last_reconciled_date = timezone.now()
+        if reconciled_by:
+            # You might want to add a reconciled_by field to track who reconciled
+            pass
+        self.save(update_fields=['last_reconciled_date'])
+    
+    def freeze_account(self, reason=None):
+        """Freeze the account"""
+        self.account_status = 'frozen'
+        self.is_active = False
+        if reason and self.notes:
+            self.notes = f"FROZEN: {reason}\n{self.notes}"
+        elif reason:
+            self.notes = f"FROZEN: {reason}"
+        self.save(update_fields=['account_status', 'is_active', 'notes'])
+    
+    def unfreeze_account(self):
+        """Unfreeze the account"""
+        self.account_status = 'active'
+        self.is_active = True
+        self.save(update_fields=['account_status', 'is_active'])
+    
+    def close_account(self, closing_date=None):
+        """Close the account"""
+        self.account_status = 'closed'
+        self.is_active = False
+        self.closing_date = closing_date or timezone.now().date()
+        self.save(update_fields=['account_status', 'is_active', 'closing_date'])
+    def save(self, *args, **kwargs):
+        if not self.currency:
+            currency = Currency.objects.filter(code='USD').first()
+            self.currency = currency or Currency.objects.first()           
     def __str__(self):
         return f"{self.name} ({self.currency.code}) - {self.account_number[-4:]}"
 

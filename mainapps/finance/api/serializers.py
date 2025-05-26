@@ -69,20 +69,67 @@ class BankAccountSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(), write_only=True, required=False
     )
     created_by = UserBasicSerializer(read_only=True)
+    
+    # Existing computed fields
     current_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     formatted_balance = serializers.CharField(read_only=True)
     transactions_count = serializers.SerializerMethodField()
     
+    # New computed properties
+    is_overdrawn = serializers.BooleanField(read_only=True)
+    available_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    is_low_balance = serializers.BooleanField(read_only=True)
+    days_since_last_reconciliation = serializers.IntegerField(read_only=True)
+    needs_reconciliation = serializers.BooleanField(read_only=True)
+    monthly_fee_due_date = serializers.DateField(read_only=True)
+    transaction_volume_30_days = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    average_monthly_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
     class Meta:
         model = BankAccount
         fields = [
+            # Basic Information
             'id', 'name', 'account_number', 'account_type', 'financial_institution',
             'financial_institution_id', 'currency', 'currency_id', 'purpose',
+            
+            # Restrictions and Management
             'is_restricted', 'restrictions', 'primary_signatory', 'primary_signatory_id',
-            'secondary_signatories', 'secondary_signatory_ids', 'is_active',
-            'opening_date', 'closing_date', 'minimum_balance', 'api_key',
-            'webhook_url', 'created_by', 'created_at', 'updated_at',
-            'current_balance', 'formatted_balance', 'transactions_count'
+            'secondary_signatories', 'secondary_signatory_ids',
+            
+            # Status and Dates
+            'is_active', 'account_status', 'accepts_donations', 'opening_date', 
+            'closing_date', 'minimum_balance',
+            
+            # Enhanced Banking Features
+            'online_banking_enabled', 'mobile_banking_enabled', 'debit_card_enabled',
+            
+            # Account Identifiers
+            'routing_number', 'swift_code', 'iban', 'branch_address',
+            
+            # Financial Features
+            'overdraft_protection', 'overdraft_limit', 'interest_rate', 
+            'monthly_maintenance_fee',
+            
+            # Risk and Compliance
+            'risk_level', 'compliance_status',
+            
+            # Reconciliation and Tracking
+            'last_reconciled_date', 'auto_reconciliation_enabled', 'last_transaction_date',
+            
+            # Digital Platform Details
+            'api_key', 'webhook_url',
+            
+            # Additional Information
+            'notes',
+            
+            # Tracking
+            'created_by', 'created_at', 'updated_at',
+            
+            # Computed Properties
+            'current_balance', 'formatted_balance', 'is_overdrawn', 'available_balance',
+            'is_low_balance', 'days_since_last_reconciliation', 'needs_reconciliation',
+            'monthly_fee_due_date', 'transaction_volume_30_days', 'average_monthly_balance',
+            'transactions_count'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
         extra_kwargs = {
@@ -91,6 +138,36 @@ class BankAccountSerializer(serializers.ModelSerializer):
     
     def get_transactions_count(self, obj):
         return obj.transactions.count()
+    
+    def validate(self, attrs):
+        # Validate overdraft settings
+        if attrs.get('overdraft_protection') and not attrs.get('overdraft_limit'):
+            raise serializers.ValidationError(
+                "Overdraft limit is required when overdraft protection is enabled"
+            )
+        
+        # Validate closing date
+        if attrs.get('closing_date') and attrs.get('opening_date'):
+            if attrs['closing_date'] <= attrs['opening_date']:
+                raise serializers.ValidationError(
+                    "Closing date must be after opening date"
+                )
+        
+        # Validate SWIFT code
+        swift_code = attrs.get('swift_code')
+        if swift_code and len(swift_code) not in [8, 11]:
+            raise serializers.ValidationError(
+                "SWIFT code must be 8 or 11 characters long"
+            )
+        
+        # Validate IBAN
+        iban = attrs.get('iban')
+        if iban and len(iban) < 15:
+            raise serializers.ValidationError(
+                "IBAN must be at least 15 characters long"
+            )
+        
+        return attrs
     
     def create(self, validated_data):
         secondary_signatory_ids = validated_data.pop('secondary_signatory_ids', [])
@@ -105,6 +182,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
         if secondary_signatory_ids is not None:
             account.secondary_signatories.set(secondary_signatory_ids)
         return account
+
 
 class CampaignBankAccountSerializer(serializers.ModelSerializer):
     """Serializer for campaign-bank account relationship"""
