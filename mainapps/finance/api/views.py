@@ -19,7 +19,7 @@ from ..models import (
     AccountTransaction, FundAllocation
 )
 from .serializers import (
-    BankAccountCreateUpdateSerializer, FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
+    FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
     DonationCampaignSerializer, DonationDetailCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
     InKindDonationSerializer, GrantSerializer, GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
@@ -290,11 +290,7 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'status': 'frozen',
             'reason': freeze_reason
         })
-    def get_serializer(self, *args, **kwargs):
-        BankAccountCreateUpdateSerializer
-        if self.action == 'create' or self.action == 'update':
-            return BankAccountCreateUpdateSerializer(*args, **kwargs)
-        return super().get_serializer(*args, **kwargs)
+    
     @action(detail=True, methods=['post'])
     def unfreeze(self, request, pk=None):
         """Unfreeze account"""
@@ -307,10 +303,7 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'message': f'Account {account.name} has been unfrozen',
             'status': 'active'
         })
-    def update(self, request, *args, **kwargs):
-        print("old data: ",self.get_serializer(self.get_object()).data)
-        print('request.data: ',request.data)
-        return super().update(request, *args, **kwargs)
+    
     @action(detail=True, methods=['get'])
     def reconciliation_status(self, request, pk=None):
         """Get reconciliation status for account"""
