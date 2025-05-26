@@ -1987,8 +1987,8 @@ class AccountTransaction(models.Model):
     def formatted_amount(self):
         currency_info = ""
         if self.original_currency and self.original_currency != self.account.currency:
-            currency_info = f" (from {self.original_currency.code} {self.original_amount:,.2f})"
-        
+            if self.original_amount:
+                currency_info = f" (from {self.original_currency.code} {self.original_amount:,.2f})"
         return f"{self.account.currency.code} {self.amount:,.2f}{currency_info}"
     
     def __str__(self):
