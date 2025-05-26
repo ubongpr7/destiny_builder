@@ -847,7 +847,6 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 },
                 'currency': {
                     'code': account.currency.code,
-                    'symbol': account.currency.symbol
                 },
                 'is_primary': campaign_account.is_primary,
                 'priority_order': campaign_account.priority_order,

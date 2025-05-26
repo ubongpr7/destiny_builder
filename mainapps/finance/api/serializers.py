@@ -27,7 +27,7 @@ class UserBasicSerializer(serializers.ModelSerializer):
 class CurrencySerializer(serializers.ModelSerializer):
     class Meta:
         model = Currency
-        fields = ['id', 'code', 'name', 'symbol']
+        fields = ['id', 'code', 'name',]
 
 class FinancialInstitutionSerializer(serializers.ModelSerializer):
     accounts_count = serializers.SerializerMethodField()
