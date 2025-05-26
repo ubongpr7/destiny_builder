@@ -304,7 +304,8 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'status': 'active'
         })
     def update(self, request, *args, **kwargs):
-        print(request.data)
+        print("old data: ",self.get_object())
+        print('request.data: ',request.data)
         return super().update(request, *args, **kwargs)
     @action(detail=True, methods=['get'])
     def reconciliation_status(self, request, pk=None):
