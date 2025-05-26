@@ -226,7 +226,7 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
     def validate_financial_institution_id(self, value):
         """Validate financial institution exists and is active"""
         try:
-            from ..models import FinancialInstitution
+            from .models import FinancialInstitution
             FinancialInstitution.objects.get(id=value, is_active=True)
             return value
         except FinancialInstitution.DoesNotExist:
@@ -296,18 +296,18 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Create bank account with proper relationship handling"""
         secondary_signatory_ids = validated_data.pop('secondary_signatory_ids', [])
-        
+    
         # Set created_by from request context
         if 'request' in self.context:
             validated_data['created_by'] = self.context['request'].user
-        
-        # Create the bank account
+    
+        # Create and save the bank account first
         bank_account = BankAccount.objects.create(**validated_data)
-        
-        # Set secondary signatories
+    
+        # Now set secondary signatories after the account has an ID
         if secondary_signatory_ids:
             bank_account.secondary_signatories.set(secondary_signatory_ids)
-        
+    
         return bank_account
     
     def update(self, instance, validated_data):
@@ -336,7 +336,6 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
             'is_active': instance.is_active,
             'message': 'Bank account saved successfully'
         }
-
 
 
 class CampaignBankAccountSerializer(serializers.ModelSerializer):
