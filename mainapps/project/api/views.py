@@ -69,9 +69,14 @@ class CEOUserViewSet(BaseUserViewSet):
     profile_filters = {'profile__is_ceo': True}
 
     
+class DBAdminserViewSet(BaseUserViewSet):
+    serializer_class = ProjectUserSerializer
+    profile_filters = {'profile__is_DB_admin': True}
+
+    
 class TeambleUserViewSet(BaseUserViewSet):
     serializer_class = ProjectUserSerializer
-    profile_filters = {'profile__is_ceo': False,'profile__is_DB_admin': False,'profile__is_DB_executive': False,}
+    profile_filters = {}
 
     
 
