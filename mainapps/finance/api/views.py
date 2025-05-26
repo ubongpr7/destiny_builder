@@ -304,7 +304,7 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'status': 'active'
         })
     def update(self, request, *args, **kwargs):
-        print("old data: ",self.getserializer(self.get_object()).data)
+        print("old data: ",self.get_serializer(self.get_object()).data)
         print('request.data: ',request.data)
         return super().update(request, *args, **kwargs)
     @action(detail=True, methods=['get'])
