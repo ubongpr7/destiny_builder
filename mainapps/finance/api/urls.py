@@ -37,17 +37,13 @@ router.register(r'organizational-expenses', OrganizationalExpenseViewSet)
 router.register(r'account-transactions', AccountTransactionViewSet)
 router.register(r'fund-allocations', FundAllocationViewSet)
 
-# Dashboard & Analytics
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 
-# URL patterns
 urlpatterns = [
     # API routes
     path('', include(router.urls)),
     
-    # Additional custom endpoints (if needed)
     path('api/finance/reports/', include([
-        # Custom report endpoints can go here
     ])),
 ]
 

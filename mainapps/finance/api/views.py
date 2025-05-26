@@ -303,7 +303,9 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'message': f'Account {account.name} has been unfrozen',
             'status': 'active'
         })
-
+    def update(self, request, *args, **kwargs):
+        print(request.data)
+        return super().update(request, *args, **kwargs)
     @action(detail=True, methods=['get'])
     def reconciliation_status(self, request, pk=None):
         """Get reconciliation status for account"""
