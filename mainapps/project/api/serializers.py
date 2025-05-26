@@ -10,14 +10,17 @@ User = get_user_model()
 
 class ProjectUserSerializer(serializers.ModelSerializer):
     profile_image = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'profile_image']
+        fields = ['id', 'username','full_name',  'first_name', 'last_name', 'email', 'profile_image']
         read_only_fields = ['profile_image']
     def get_profile_image(self, obj):
         if obj.profile:
             return obj.profile.profile_image.url if obj.profile.profile_image else None
-
+    def get_full_name(self, obj):
+        """Return the full name of the user"""
+        return obj.get_full_name
 class ProjectCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectCategory
