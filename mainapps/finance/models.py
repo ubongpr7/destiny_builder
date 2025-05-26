@@ -1947,7 +1947,9 @@ class AccountTransaction(models.Model):
     authorized_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
-        related_name='authorized_transactions'
+        related_name='authorized_transactions',
+        null=True,
+        blank=True,
     )
     
     # Reconciliation

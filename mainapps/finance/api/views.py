@@ -2763,7 +2763,12 @@ class AccountTransactionViewSet(viewsets.ModelViewSet):
     ordering = ['-transaction_date']
     
     def perform_create(self, serializer):
-        serializer.save(authorized_by=self.request.user)
+        print(serializer)
+        try:
+            serializer.is_valid(raise_exception=True)
+            serializer.save(authorized_by=self.request.user)
+        except ValidationError as e:
+            print(f"Validation error: {e}")
     
     @action(detail=True, methods=['post'])
     def reconcile(self, request, pk=None):
