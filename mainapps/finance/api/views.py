@@ -19,7 +19,7 @@ from ..models import (
     AccountTransaction, FundAllocation
 )
 from .serializers import (
-    FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
+    BankAccountCreateUpdateSerializer, FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
     DonationCampaignSerializer, DonationDetailCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
     InKindDonationSerializer, GrantSerializer, GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
@@ -290,7 +290,11 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             'status': 'frozen',
             'reason': freeze_reason
         })
-    
+    def get_serializer(self, *args, **kwargs):
+        BankAccountCreateUpdateSerializer
+        if self.action == 'create' or self.action == 'update':
+            return BankAccountCreateUpdateSerializer(*args, **kwargs)
+        return super().get_serializer(*args, **kwargs)
     @action(detail=True, methods=['post'])
     def unfreeze(self, request, pk=None):
         """Unfreeze account"""
