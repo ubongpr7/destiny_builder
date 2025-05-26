@@ -163,7 +163,7 @@ def send_recurring_donation_notification(recurring_donation, event_type):
             'currency': recurring_donation.currency.code,
             'frequency': recurring_donation.frequency,
             'status': recurring_donation.status,
-            'donor_name': recurring_donation.donor.get_full_name() if recurring_donation.donor else 'Unknown'
+            'donor_name': recurring_donation.donor.get_full_name if recurring_donation.donor else 'Unknown'
         }
     )
 
@@ -400,7 +400,7 @@ def send_expense_notification(expense, notification_type, approved_by=None):
     if notification_type == 'submitted':
         recipients = get_finance_notification_recipients('finance_managers')
         title = "New Expense Submitted"
-        body = f"Expense '{expense.title}' for {expense.currency.code} {expense.amount:,.2f} submitted by {expense.submitted_by.get_full_name()}"
+        body = f"Expense '{expense.title}' for {expense.currency.code} {expense.amount:,.2f} submitted by {expense.submitted_by.get_full_name}"
         nt_name = 'expense_submitted'
         priority = 'normal'
         
@@ -416,7 +416,7 @@ def send_expense_notification(expense, notification_type, approved_by=None):
                     'expense_id': expense.id,
                     'amount': str(expense.amount),
                     'currency': expense.currency.code,
-                    'submitted_by': expense.submitted_by.get_full_name()
+                    'submitted_by': expense.submitted_by.get_full_name
                 },
                 priority='high'
             )
@@ -450,8 +450,8 @@ def send_expense_notification(expense, notification_type, approved_by=None):
             'amount': str(expense.amount),
             'currency': expense.currency.code,
             'status': expense.status,
-            'submitted_by': expense.submitted_by.get_full_name(),
-            'approved_by': approved_by.get_full_name() if approved_by else None
+            'submitted_by': expense.submitted_by.get_full_name,
+            'approved_by': approved_by.get_full_name if approved_by else None
         },
         priority=priority
     )

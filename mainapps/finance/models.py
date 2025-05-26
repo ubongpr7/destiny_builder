@@ -747,7 +747,7 @@ class Donation(models.Model):
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name() or self.donor.username
+            return self.donor.get_full_name or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
@@ -870,7 +870,7 @@ class RecurringDonation(models.Model):
         projected_annual = self.amount * multiplier.get(self.frequency, 12)
         
         funding_source, created = FundingSource.objects.get_or_create(
-            name=f"Recurring Donation - {self.donor.get_full_name() or self.donor.username}",
+            name=f"Recurring Donation - {self.donor.get_full_name or self.donor.username}",
             funding_type='donation',
             defaults={
                 'description': f"Recurring {self.frequency} donation of {self.currency.code} {self.amount}",
@@ -889,7 +889,7 @@ class RecurringDonation(models.Model):
         return f"{self.currency.code} {self.amount:,.2f}"
     
     def __str__(self):
-        return f"{self.donor.get_full_name() or self.donor.username} - {self.formatted_amount} {self.frequency}"
+        return f"{self.donor.get_full_name or self.donor.username} - {self.formatted_amount} {self.frequency}"
 
 class InKindDonation(models.Model):
     """Non-monetary donations with valuation in multiple currencies"""
@@ -1009,7 +1009,7 @@ class InKindDonation(models.Model):
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name() or self.donor.username
+            return self.donor.get_full_name or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
