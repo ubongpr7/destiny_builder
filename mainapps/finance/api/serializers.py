@@ -226,7 +226,7 @@ class BankAccountCreateUpdateSerializer(serializers.ModelSerializer):
     def validate_financial_institution_id(self, value):
         """Validate financial institution exists and is active"""
         try:
-            from .models import FinancialInstitution
+            from ..models import FinancialInstitution
             FinancialInstitution.objects.get(id=value, is_active=True)
             return value
         except FinancialInstitution.DoesNotExist:
