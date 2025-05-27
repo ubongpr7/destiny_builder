@@ -307,6 +307,18 @@ class Command(BaseCommand):
                 'color': 'success',
                 'send_email': True
             },
+                {
+        'name': 'transaction_created',
+        'title_template': 'New Transaction: {transaction_type}',
+        'body_template': 'A new {transaction_type} of {amount} has been created for account {account_name}',
+        'description': 'Notification when a new transaction is created',
+        'category': 'payment',
+        'icon': 'credit-card',
+        'color': 'blue',
+        'send_email': True,
+        'send_push': True,
+        'is_active': True,
+    },
         ]
 
         created_count = 0
