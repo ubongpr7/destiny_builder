@@ -516,6 +516,11 @@ def send_transaction_notification(transaction, notification_type):
         body = f"Large {transaction.get_transaction_type_display().lower()} of {transaction.account.currency.code} {transaction.amount:,.2f} in account '{transaction.account.name}'"
         nt_name = 'large_transaction'
         priority = 'normal'
+    elif notification_type == 'created':
+        title = "New Transaction Created"
+        body = f"A new {transaction.get_transaction_type_display().lower()} of {transaction.formatted_amount} has been created for account '{transaction.account.name}'"
+        nt_name = 'transaction_created'
+        priority = 'high' if transaction.amount >= 10000 else 'normal'
     
     elif notification_type == 'failed':
         title = "Transaction Failed"
