@@ -1030,8 +1030,9 @@ class Donation(models.Model):
     
     @property
     def formatted_amount(self):
-        return f"{self.currency.code} {self.amount:,.2f}"
-    
+        if self.currency:
+            return f"{self.currency.code} {self.amount:,.2f}"
+        return ''
     def __str__(self):
         return f"{self.donor_name_display} - {self.formatted_amount}"
 
