@@ -1952,7 +1952,27 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 'resource_risk': safe_percentage(near_limit_count, max(total_budgets, 1), 0.0),
                 'compliance_risk': safe_percentage(pending_approval, max(total_budgets, 1), 0.0),
             }
+            print(
+                 Response({
+                'summary': summary,
+                'by_type': by_type,
+                'by_status': by_status,
+                'utilization_summary': utilization_summary,
+                'by_department': by_department,
+                'monthly_trends': monthly_trends,
+                'alerts': alerts,
+                'performance_metrics': performance_metrics,
+                'risk_analysis': risk_analysis,
+                'generated_at': timezone.now().isoformat(),
+                'filters_applied': {
+                    'fiscal_year': fiscal_year,
+                    'department': department_id,
+                    'budget_type': budget_type,
+                    'status': status_filter,
+                }
+            })
             
+            )
             return Response({
                 'summary': summary,
                 'by_type': by_type,
