@@ -559,7 +559,7 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
             'recurring_donations': {
                 'count': recurring_total['count'] or 0,
                 'total': float(recurring_total['total'] or 0),
-                'percentage': 0  # Will be calculated on frontend
+                'percentage': 0  
             }
         }
 
@@ -635,8 +635,14 @@ class FundingSourceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
+class MinimalBudgetSerializer(serializers.ModelSerializer): 
+    """Minimal budget info for dropdowns and simple listings"""
+    class Meta:
+        model = Budget
+        fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
+        read_only_fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
 class BudgetItemSerializer(serializers.ModelSerializer):
-    budget = serializers.StringRelatedField(read_only=True)
+    budget = MinimalBudgetSerializer(read_only=True)
     responsible_person = UserBasicSerializer(read_only=True)
     responsible_person_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
@@ -664,11 +670,17 @@ class BudgetFundingSerializer(serializers.ModelSerializer):
             'allocation_date', 'notes'
         ]
         read_only_fields = ['id', 'allocation_date']
+class DepartmentSerializer(serializers.ModelSerializer):
+    """Serializer for Department model"""
+    class Meta:
+        model = Department
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 class BudgetSerializer(serializers.ModelSerializer):
-    project = serializers.StringRelatedField(read_only=True)
+    project = ProjectMinimalSerializer(read_only=True)
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    department = serializers.StringRelatedField(read_only=True)
+    department = DepartmentSerializer
     department_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
@@ -699,7 +711,7 @@ class BudgetSerializer(serializers.ModelSerializer):
         return obj.get_funding_breakdown()
 
 class OrganizationalExpenseSerializer(serializers.ModelSerializer):
-    budget_item = serializers.StringRelatedField(read_only=True)
+    budget_item = BudgetItemSerializer
     budget_item_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
