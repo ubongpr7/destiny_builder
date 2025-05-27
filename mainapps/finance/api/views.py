@@ -2344,42 +2344,50 @@ class DashboardViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def cash_flow_forecast(self, request):
         """Get cash flow forecast"""
+        from decimal import Decimal
+        
         days_ahead = int(request.query_params.get('days', 90))
         
-        # Current balance
+        # Current balance - ensure Decimal
         current_balance = sum(
             account.current_balance 
             for account in BankAccount.objects.filter(is_active=True)
         )
+        if not isinstance(current_balance, Decimal):
+            current_balance = Decimal(str(current_balance))
         
         # Projected income
-        # Recurring donations
-        recurring_income = RecurringDonation.objects.filter(
+        # Recurring donations - ensure Decimal
+        recurring_income_raw = RecurringDonation.objects.filter(
             status='active',
             next_payment_date__lte=timezone.now().date() + timedelta(days=days_ahead)
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        ).aggregate(total=Sum('amount'))['total']
+        recurring_income = Decimal(str(recurring_income_raw)) if recurring_income_raw else Decimal('0')
         
-        # Expected grant disbursements - Fixed calculation
+        # Expected grant disbursements - ensure Decimal
         active_grants = Grant.objects.filter(status='active')
-        expected_grants = 0
+        expected_grants = Decimal('0')
         for grant in active_grants:
-            expected_grants += grant.amount - grant.amount_received
+            remaining = grant.amount - grant.amount_received
+            expected_grants += remaining
         
         # Projected expenses
-        # Approved but unpaid expenses
-        pending_expenses = OrganizationalExpense.objects.filter(
+        # Approved but unpaid expenses - ensure Decimal
+        pending_expenses_raw = OrganizationalExpense.objects.filter(
             status='approved'
-        ).aggregate(total=Sum('amount'))['total'] or 0
+        ).aggregate(total=Sum('amount'))['total']
+        pending_expenses = Decimal(str(pending_expenses_raw)) if pending_expenses_raw else Decimal('0')
         
-        # Monthly recurring expenses (estimate based on last 3 months)
-        avg_monthly_expenses = OrganizationalExpense.objects.filter(
+        # Monthly recurring expenses (estimate based on last 3 months) - ensure Decimal
+        avg_monthly_expenses_raw = OrganizationalExpense.objects.filter(
             status='paid',
             expense_date__gte=timezone.now().date() - timedelta(days=90)
-        ).aggregate(avg=Avg('amount'))['avg'] or 0
+        ).aggregate(avg=Avg('amount'))['avg']
+        avg_monthly_expenses = Decimal(str(avg_monthly_expenses_raw)) if avg_monthly_expenses_raw else Decimal('0')
         
-        projected_monthly_expenses = avg_monthly_expenses * (days_ahead / 30)
+        projected_monthly_expenses = avg_monthly_expenses * Decimal(str(days_ahead / 30))
         
-        # Calculate forecast
+        # Calculate forecast - all Decimal operations
         projected_balance = (
             current_balance + 
             recurring_income + 
@@ -2403,8 +2411,8 @@ class DashboardViewSet(viewsets.ViewSet):
             },
             'projected_balance': float(projected_balance),
             'cash_flow_health': (
-                'healthy' if projected_balance > current_balance * 0.5 
-                else 'concerning' if projected_balance > 0 
+                'healthy' if projected_balance > current_balance * Decimal('0.5')
+                else 'concerning' if projected_balance > Decimal('0')
                 else 'critical'
             )
         }
