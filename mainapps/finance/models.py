@@ -1738,12 +1738,15 @@ class BudgetItem(models.Model):
     
     @property
     def remaining_amount(self):
-        return self.budgeted_amount - self.spent_amount
+        if self.budgeted_amount:
+            return self.budgeted_amount - self.spent_amount
+        return 0
     
     @property
     def spent_percentage(self):
-        if self.budgeted_amount > 0:
-            return (self.spent_amount / self.budgeted_amount) * 100
+        if self.budgeted_amount and self.spent_amount:
+            if self.budgeted_amount > 0:
+                return (self.spent_amount / self.budgeted_amount) * 100
         return 0
     
     @property
