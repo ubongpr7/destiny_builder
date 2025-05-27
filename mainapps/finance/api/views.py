@@ -19,7 +19,7 @@ from ..models import (
     AccountTransaction, FundAllocation
 )
 from .serializers import (
-    FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
+    BudgetDetailSerializer, FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
     DonationCampaignSerializer, DonationDetailCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
     InKindDonationSerializer, GrantSerializer, GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
@@ -1615,7 +1615,12 @@ class BudgetViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
-    
+    def get_serializer_class(self):
+        """Use detailed serializer for retrieve action"""
+        if self.action == 'retrieve':
+            return BudgetDetailSerializer
+        return BudgetSerializer
+
     @action(detail=False, methods=['get'])
     def statistics(self, request):
         """Get comprehensive budget statistics for dashboard"""

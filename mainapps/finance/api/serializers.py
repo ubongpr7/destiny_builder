@@ -659,6 +659,44 @@ class BudgetItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'budget', 'created_at', 'updated_at']
 
+
+
+class OrganizationalExpenseMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer for organizational expenses in budget detail"""
+    formatted_amount = serializers.CharField(read_only=True)
+    submitted_by = UserBasicSerializer(read_only=True)
+    approved_by = UserBasicSerializer(read_only=True)
+    
+    class Meta:
+        model = OrganizationalExpense
+        fields = [
+            'id', 'title', 'description', 'expense_type', 'amount', 
+            'currency', 'expense_date', 'vendor', 'status', 
+            'formatted_amount', 'submitted_by', 'approved_by', 'approved_at'
+        ]
+
+
+class BudgetItemDetailSerializer(serializers.ModelSerializer):
+    """Enhanced budget item serializer for detail view"""
+    remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    formatted_amount = serializers.CharField(read_only=True)
+    responsible_person = UserBasicSerializer(read_only=True)
+    organizational_expenses = OrganizationalExpenseMinimalSerializer(many=True, read_only=True)
+    expenses_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = BudgetItem
+        fields = [
+            'id', 'category', 'subcategory', 'description', 'budgeted_amount',
+            'spent_amount', 'remaining_amount', 'spent_percentage', 'formatted_amount',
+            'is_locked', 'approval_required_threshold', 'responsible_person',
+            'notes', 'created_at', 'updated_at', 'organizational_expenses', 'expenses_count'
+        ]
+    
+    def get_expenses_count(self, obj):
+        return obj.organizational_expenses.count()
+
 class BudgetFundingSerializer(serializers.ModelSerializer):
     funding_source = FundingSourceSerializer(read_only=True)
     funding_source_id = serializers.IntegerField(write_only=True)
@@ -676,6 +714,33 @@ class DepartmentSerializer(serializers.ModelSerializer):
         model = Department
         fields = ['id', 'name', 'description', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+class FundingSourceMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer for funding sources"""
+    currency = CurrencySerializer(read_only=True)
+    formatted_amount = serializers.CharField(read_only=True)
+    amount_remaining = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    is_available_now = serializers.BooleanField(read_only=True)
+    created_by = UserBasicSerializer(read_only=True)
+    
+    class Meta:
+        model = FundingSource
+        fields = [
+            'id', 'name', 'funding_type', 'description', 'amount_available',
+            'currency', 'amount_allocated', 'amount_remaining', 'formatted_amount',
+            'available_from', 'available_until', 'restrictions', 'is_active',
+            'is_available_now', 'created_by'
+        ]
+
+class BudgetFundingDetailSerializer(serializers.ModelSerializer):
+    """Enhanced budget funding serializer for detail view"""
+    funding_source = FundingSourceMinimalSerializer(read_only=True)
+    
+    class Meta:
+        model = BudgetFunding
+        fields = [
+            'id', 'funding_source', 'amount_allocated', 'allocation_date', 'notes'
+        ]
 
 class BudgetSerializer(serializers.ModelSerializer):
     project = ProjectMinimalSerializer(read_only=True)
@@ -709,6 +774,208 @@ class BudgetSerializer(serializers.ModelSerializer):
     
     def get_funding_breakdown(self, obj):
         return obj.get_funding_breakdown()
+
+class FundAllocationDetailSerializer(serializers.ModelSerializer):
+    """Enhanced fund allocation serializer for detail view"""
+    source_account = BankAccountMinimalSerializer(read_only=True)
+    allocated_by = UserBasicSerializer(read_only=True)
+    approved_by = UserBasicSerializer(read_only=True)
+    formatted_amount = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = FundAllocation
+        fields = [
+            'id', 'source_account', 'amount_allocated', 'formatted_amount',
+            'allocation_date', 'purpose', 'allocated_by', 'approved_by',
+            'is_active', 'created_at'
+        ]
+
+
+class BudgetDetailSerializer(serializers.ModelSerializer):
+    """Enhanced Budget serializer for detail view with all relationships"""
+    
+    # Basic relationships
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    department = DepartmentSerializer(read_only=True)
+    department_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    currency = CurrencySerializer(read_only=True)
+    currency_id = serializers.IntegerField(write_only=True)
+    created_by = UserBasicSerializer(read_only=True)
+    approved_by = UserBasicSerializer(read_only=True)
+    approved_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
+    # Computed properties
+    remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    formatted_amount = serializers.CharField(read_only=True)
+    total_funding_allocated = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
+    # Enhanced relationships
+    items = BudgetItemDetailSerializer(many=True, read_only=True)
+    budget_funding = BudgetFundingDetailSerializer(many=True, read_only=True)
+    fund_allocations = FundAllocationDetailSerializer(many=True, read_only=True)
+    
+    # Summary data
+    funding_breakdown = serializers.SerializerMethodField()
+    expense_summary = serializers.SerializerMethodField()
+    budget_health = serializers.SerializerMethodField()
+    recent_expenses = serializers.SerializerMethodField()
+    funding_sources_summary = serializers.SerializerMethodField()
+    allocation_summary = serializers.SerializerMethodField()
+    
+    # Statistics
+    items_count = serializers.SerializerMethodField()
+    expenses_count = serializers.SerializerMethodField()
+    funding_sources_count = serializers.SerializerMethodField()
+    allocations_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Budget
+        fields = [
+            # Basic fields
+            'id', 'title', 'budget_type', 'project', 'project_id', 'department',
+            'department_id', 'total_amount', 'currency', 'currency_id', 'spent_amount',
+            'fiscal_year', 'start_date', 'end_date', 'status', 'notes', 'created_by',
+            'approved_by', 'approved_by_id', 'approved_at', 'created_at', 'updated_at',
+            
+            # Computed properties
+            'remaining_amount', 'spent_percentage', 'formatted_amount', 'total_funding_allocated',
+            
+            # Relationships
+            'items', 'budget_funding', 'fund_allocations',
+            
+            # Summary data
+            'funding_breakdown', 'expense_summary', 'budget_health', 'recent_expenses',
+            'funding_sources_summary', 'allocation_summary',
+            
+            # Statistics
+            'items_count', 'expenses_count', 'funding_sources_count', 'allocations_count'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+    
+    def get_funding_breakdown(self, obj):
+        """Get detailed funding breakdown"""
+        return obj.get_funding_breakdown()
+    
+    def get_expense_summary(self, obj):
+        """Get expense summary by category"""
+        from django.db.models import Sum
+        
+        expenses = OrganizationalExpense.objects.filter(
+            budget_item__budget=obj,
+            status='paid'
+        ).values('expense_type').annotate(
+            total_amount=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total_amount')
+        
+        return [
+            {
+                'expense_type': exp['expense_type'],
+                'expense_type_display': dict(OrganizationalExpense.EXPENSE_TYPE_CHOICES).get(exp['expense_type'], exp['expense_type']),
+                'total_amount': float(exp['total_amount']) if exp['total_amount'] else 0.0,
+                'count': exp['count'],
+                'formatted_amount': f"{obj.currency.code} {exp['total_amount']:,.2f}" if exp['total_amount'] else f"{obj.currency.code} 0.00"
+            }
+            for exp in expenses
+        ]
+    
+    def get_budget_health(self, obj):
+        """Calculate budget health indicators"""
+        spent_pct = float(obj.spent_percentage) if obj.spent_percentage else 0.0
+        
+        # Determine health status
+        if spent_pct > 100:
+            health_status = 'critical'
+            health_color = 'red'
+        elif spent_pct > 90:
+            health_status = 'warning'
+            health_color = 'orange'
+        elif spent_pct < 50:
+            health_status = 'underutilized'
+            health_color = 'blue'
+        else:
+            health_status = 'healthy'
+            health_color = 'green'
+        
+        # Calculate days remaining
+        from django.utils import timezone
+        days_remaining = None
+        if obj.end_date:
+            days_remaining = (obj.end_date - timezone.now().date()).days
+        
+        return {
+            'health_status': health_status,
+            'health_color': health_color,
+            'spent_percentage': spent_pct,
+            'days_remaining': days_remaining,
+            'is_overbudget': spent_pct > 100,
+            'is_near_limit': 90 <= spent_pct <= 100,
+            'is_underutilized': spent_pct < 50,
+            'funding_gap': float(obj.total_amount - obj.total_funding_allocated) if obj.total_funding_allocated else float(obj.total_amount)
+        }
+    
+    def get_recent_expenses(self, obj):
+        """Get recent expenses for this budget"""
+        recent_expenses = OrganizationalExpense.objects.filter(
+            budget_item__budget=obj
+        ).select_related(
+            'budget_item', 'currency', 'submitted_by'
+        ).order_by('-expense_date')[:10]
+        
+        return OrganizationalExpenseMinimalSerializer(recent_expenses, many=True).data
+    
+    def get_funding_sources_summary(self, obj):
+        """Get summary of funding sources"""
+        funding_sources = []
+        for budget_funding in obj.budget_funding.select_related('funding_source', 'funding_source__currency'):
+            source = budget_funding.funding_source
+            funding_sources.append({
+                'id': source.id,
+                'name': source.name,
+                'funding_type': source.funding_type,
+                'funding_type_display': source.get_funding_type_display(),
+                'amount_allocated': float(budget_funding.amount_allocated),
+                'currency_code': source.currency.code,
+                'formatted_amount': f"{source.currency.code} {budget_funding.amount_allocated:,.2f}",
+                'is_active': source.is_active,
+                'allocation_date': budget_funding.allocation_date.isoformat() if budget_funding.allocation_date else None
+            })
+        
+        return funding_sources
+    
+    def get_allocation_summary(self, obj):
+        """Get summary of fund allocations"""
+        allocations = []
+        for allocation in obj.fund_allocations.select_related('source_account', 'source_account__currency', 'allocated_by'):
+            allocations.append({
+                'id': allocation.id,
+                'account_name': allocation.source_account.name,
+                'account_type': allocation.source_account.account_type,
+                'amount_allocated': float(allocation.amount_allocated),
+                'currency_code': allocation.source_account.currency.code,
+                'formatted_amount': f"{allocation.source_account.currency.code} {allocation.amount_allocated:,.2f}",
+                'allocation_date': allocation.allocation_date.isoformat(),
+                'allocated_by': allocation.allocated_by.get_full_name() if allocation.allocated_by else 'Unknown',
+                'purpose': allocation.purpose,
+                'is_active': allocation.is_active
+            })
+        
+        return allocations
+    
+    def get_items_count(self, obj):
+        return obj.items.count()
+    
+    def get_expenses_count(self, obj):
+        return OrganizationalExpense.objects.filter(budget_item__budget=obj).count()
+    
+    def get_funding_sources_count(self, obj):
+        return obj.budget_funding.count()
+    
+    def get_allocations_count(self, obj):
+        return obj.fund_allocations.count()
+
 
 class OrganizationalExpenseSerializer(serializers.ModelSerializer):
     budget_item = BudgetItemSerializer
