@@ -1650,11 +1650,11 @@ class BudgetViewSet(viewsets.ModelViewSet):
             ).values('budget_item__budget_id').annotate(
                 total_spent=Sum('amount')
             )
-        
-        for item in expense_data:
-            budget_id = item['budget_item__budget_id']
-            budget_expenses[budget_id] = float(item['total_spent'] or 0)
-        
+            
+            for item in expense_data:
+                budget_id = item['budget_item__budget_id']
+                budget_expenses[budget_id] = float(item['total_spent'] or 0)
+            
         # Overall Summary
         total_budgets = budgets.count()
         total_allocated = budgets.aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
