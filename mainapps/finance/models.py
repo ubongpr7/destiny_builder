@@ -764,11 +764,15 @@ class FundingSource(models.Model):
     
     @property
     def amount_remaining(self):
-        return self.amount_available - self.amount_allocated
-    
+        if self.amount_available is not None:
+            return self.amount_available - self.amount_allocated
+        return 0
     @property
     def formatted_amount(self):
-        return f"{self.currency.code} {self.amount_available:,.2f}"
+        if self.currency:
+            return f"{self.currency.code} {self.amount_available:,.2f}"
+        else:
+            return "N/A"
     
     @property
     def is_expired(self):
