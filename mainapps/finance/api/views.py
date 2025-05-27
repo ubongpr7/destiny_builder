@@ -1953,7 +1953,7 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 'compliance_risk': safe_percentage(pending_approval, max(total_budgets, 1), 0.0),
             }
             print(
-                 Response({
+                 {
                 'summary': summary,
                 'by_type': by_type,
                 'by_status': by_status,
@@ -1970,8 +1970,8 @@ class BudgetViewSet(viewsets.ModelViewSet):
                     'budget_type': budget_type,
                     'status': status_filter,
                 }
-            })
             
+                 }
             )
             return Response({
                 'summary': summary,
