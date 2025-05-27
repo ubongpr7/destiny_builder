@@ -1619,16 +1619,20 @@ class Budget(models.Model):
     def remaining_amount(self):
         if self.total_amount:
             return self.total_amount - self.spent_amount
+        return 0
     
     @property
     def spent_percentage(self):
-        if self.total_amount > 0:
-            return (self.spent_amount / self.total_amount) * 100
+        if self.total_amount and self.spent_amount:
+            if self.total_amount > 0:
+                return (self.spent_amount / self.total_amount) * 100
         return 0
     
     @property
     def formatted_amount(self):
-        return f"{self.currency.code} {self.total_amount:,.2f}"
+        if self.currency:
+            return f"{self.currency.code} {self.total_amount:,.2f}"
+        return ''
     
     def get_funding_breakdown(self):
         """Get breakdown of funding sources for this budget"""
