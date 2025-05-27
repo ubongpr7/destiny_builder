@@ -720,7 +720,7 @@ class OrganizationalExpenseSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'submitted_by', 'created_at', 'updated_at']
 
 class AccountTransactionSerializer(serializers.ModelSerializer):
-    account = serializers.StringRelatedField(read_only=True)
+    account = BankAccountMinimalSerializer(read_only=True)
     account_id = serializers.IntegerField(write_only=True)
     original_currency = CurrencySerializer(read_only=True)
     original_currency_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
