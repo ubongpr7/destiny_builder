@@ -1618,7 +1618,7 @@ class Budget(models.Model):
     @property
     def remaining_amount(self):
         if self.total_amount:
-        return self.total_amount - self.spent_amount
+            return self.total_amount - self.spent_amount
     
     @property
     def spent_percentage(self):
