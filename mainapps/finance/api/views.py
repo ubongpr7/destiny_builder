@@ -1600,7 +1600,6 @@ class GrantViewSet(viewsets.ModelViewSet):
             'status': grant.status
         })
 
-
 class BudgetViewSet(viewsets.ModelViewSet):
     queryset = Budget.objects.select_related(
         'project', 'department', 'currency', 'created_by', 'approved_by'
@@ -1638,15 +1637,33 @@ class BudgetViewSet(viewsets.ModelViewSet):
         if status_filter:
             budgets = budgets.filter(status=status_filter)
         
+        # Calculate spent amounts by aggregating from OrganizationalExpense
+        # Get all budget items for our budgets
+        budget_ids = list(budgets.values_list('id', flat=True))
+        
+        # Calculate total spent per budget
+        budget_expenses = {}
+        if budget_ids:
+            expense_data = OrganizationalExpense.objects.filter(
+                budget_item__budget_id__in=budget_ids,
+                status='paid'
+            ).values('budget_item__budget_id').annotate(
+                total_spent=Sum('amount')
+            )
+        
+        for item in expense_data:
+            budget_id = item['budget_item__budget_id']
+            budget_expenses[budget_id] = float(item['total_spent'] or 0)
+        
         # Overall Summary
         total_budgets = budgets.count()
         total_allocated = budgets.aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
-        total_spent = budgets.aggregate(total=Sum('spent_amount'))['total'] or Decimal('0')
-        total_remaining = total_allocated - total_spent
+        total_spent = sum(budget_expenses.values())
+        total_remaining = float(total_allocated) - total_spent
         avg_utilization = 0
         
         if total_allocated > 0:
-            avg_utilization = float((total_spent / total_allocated) * 100)
+            avg_utilization = (total_spent / float(total_allocated)) * 100
         
         # Active budgets
         active_budgets = budgets.filter(status='active').count()
@@ -1656,8 +1673,9 @@ class BudgetViewSet(viewsets.ModelViewSet):
         
         # Calculate over-budget and near-limit counts
         for budget in budgets:
+            spent_amount = budget_expenses.get(budget.id, 0)
             if budget.total_amount > 0:
-                utilization = (budget.spent_amount / budget.total_amount) * 100
+                utilization = (spent_amount / float(budget.total_amount)) * 100
                 if utilization > 100:
                     over_budget_count += 1
                 elif utilization >= 90:
@@ -1666,8 +1684,8 @@ class BudgetViewSet(viewsets.ModelViewSet):
         summary = {
             'total_budgets': total_budgets,
             'total_allocated': float(total_allocated),
-            'total_spent': float(total_spent),
-            'total_remaining': float(total_remaining),
+            'total_spent': total_spent,
+            'total_remaining': total_remaining,
             'avg_utilization': round(avg_utilization, 2),
             'active_budgets': active_budgets,
             'pending_approval': pending_approval,
@@ -1676,31 +1694,63 @@ class BudgetViewSet(viewsets.ModelViewSet):
             'efficiency_score': min(100, max(0, 100 - abs(avg_utilization - 85))),  # Optimal around 85%
         }
         
-        # Budget by Type
-        by_type = list(budgets.values('budget_type').annotate(
-            count=Count('id'),
-            total_amount=Sum('total_amount'),
-            spent_amount=Sum('spent_amount'),
-            avg_utilization=Case(
-                When(total_amount__gt=0, then=(Sum('spent_amount') / Sum('total_amount')) * 100),
-                default=Value(0),
-                output_field=FloatField()
-            )
-        ).order_by('-total_amount'))
+        # Budget by Type - Calculate manually
+        by_type = {}
+        for budget in budgets.select_related('currency'):
+            budget_type = budget.budget_type
+            spent_amount = budget_expenses.get(budget.id, 0)
+            
+            if budget_type not in by_type:
+                by_type[budget_type] = {
+                    'budget_type': budget_type,
+                    'count': 0,
+                    'total_amount': 0,
+                    'spent_amount': 0,
+                    'avg_utilization': 0
+                }
+            
+            by_type[budget_type]['count'] += 1
+            by_type[budget_type]['total_amount'] += float(budget.total_amount)
+            by_type[budget_type]['spent_amount'] += spent_amount
         
-        # Budget by Status
-        by_status = list(budgets.values('status').annotate(
-            count=Count('id'),
-            total_amount=Sum('total_amount'),
-            spent_amount=Sum('spent_amount')
-        ).order_by('-total_amount'))
+        # Calculate utilization for each type
+        for type_data in by_type.values():
+            if type_data['total_amount'] > 0:
+                type_data['avg_utilization'] = round(
+                    (type_data['spent_amount'] / type_data['total_amount']) * 100, 2
+                )
+        
+        by_type = list(by_type.values())
+        by_type.sort(key=lambda x: x['total_amount'], reverse=True)
+        
+        # Budget by Status - Calculate manually
+        by_status = {}
+        for budget in budgets:
+            status = budget.status
+            spent_amount = budget_expenses.get(budget.id, 0)
+            
+            if status not in by_status:
+                by_status[status] = {
+                    'status': status,
+                    'count': 0,
+                    'total_amount': 0,
+                    'spent_amount': 0
+                }
+            
+            by_status[status]['count'] += 1
+            by_status[status]['total_amount'] += float(budget.total_amount)
+            by_status[status]['spent_amount'] += spent_amount
+        
+        by_status = list(by_status.values())
+        by_status.sort(key=lambda x: x['total_amount'], reverse=True)
         
         # Individual Budget Utilization Summary
         utilization_summary = []
         for budget in budgets.select_related('currency', 'department'):
+            spent_amount = budget_expenses.get(budget.id, 0)
             utilization_percentage = 0
             if budget.total_amount > 0:
-                utilization_percentage = (budget.spent_amount / budget.total_amount) * 100
+                utilization_percentage = (spent_amount / float(budget.total_amount)) * 100
             
             # Determine health status
             if utilization_percentage > 100:
@@ -1718,8 +1768,8 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 'budget_type': budget.get_budget_type_display(),
                 'department_name': budget.department.name if budget.department else 'No Department',
                 'total_amount': float(budget.total_amount),
-                'spent_amount': float(budget.spent_amount),
-                'remaining_amount': float(budget.total_amount - budget.spent_amount),
+                'spent_amount': spent_amount,
+                'remaining_amount': float(budget.total_amount) - spent_amount,
                 'utilization_percentage': round(utilization_percentage, 2),
                 'currency_code': budget.currency.code if budget.currency else 'USD',
                 'status': budget.status,
@@ -1733,23 +1783,36 @@ class BudgetViewSet(viewsets.ModelViewSet):
         # Sort by utilization percentage descending
         utilization_summary.sort(key=lambda x: x['utilization_percentage'], reverse=True)
         
-        # Budget by Department
-        by_department = []
-        if budgets.filter(department__isnull=False).exists():
-            dept_data = budgets.filter(department__isnull=False).values(
-                'department__name', 'department__id'
-            ).annotate(
-                count=Count('id'),
-                total_amount=Sum('total_amount'),
-                spent_amount=Sum('spent_amount'),
-                avg_utilization=Case(
-                    When(total_amount__gt=0, then=(Sum('spent_amount') / Sum('total_amount')) * 100),
-                    default=Value(0),
-                    output_field=FloatField()
-                )
-            ).order_by('-total_amount')
+        # Budget by Department - Calculate manually
+        by_department = {}
+        for budget in budgets.filter(department__isnull=False).select_related('department'):
+            dept_name = budget.department.name
+            dept_id = budget.department.id
+            spent_amount = budget_expenses.get(budget.id, 0)
             
-            by_department = list(dept_data)
+            if dept_id not in by_department:
+                by_department[dept_id] = {
+                    'department__name': dept_name,
+                    'department__id': dept_id,
+                    'count': 0,
+                    'total_amount': 0,
+                    'spent_amount': 0,
+                    'avg_utilization': 0
+                }
+            
+            by_department[dept_id]['count'] += 1
+            by_department[dept_id]['total_amount'] += float(budget.total_amount)
+            by_department[dept_id]['spent_amount'] += spent_amount
+        
+        # Calculate utilization for each department
+        for dept_data in by_department.values():
+            if dept_data['total_amount'] > 0:
+                dept_data['avg_utilization'] = round(
+                    (dept_data['spent_amount'] / dept_data['total_amount']) * 100, 2
+                )
+        
+        by_department = list(by_department.values())
+        by_department.sort(key=lambda x: x['total_amount'], reverse=True)
         
         # Monthly Trends (last 12 months)
         monthly_trends = []
@@ -1758,31 +1821,31 @@ class BudgetViewSet(viewsets.ModelViewSet):
         for i in range(12):
             month_start = (end_date.replace(day=1) - timedelta(days=i*30)).replace(day=1)
             month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-            
-            # Get expenses for this month
-            month_expenses = OrganizationalExpense.objects.filter(
-                expense_date__gte=month_start,
-                expense_date__lte=month_end,
-                status='paid'
-            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-            
-            # Get budgets created in this month
-            month_budgets = budgets.filter(
-                created_at__date__gte=month_start,
-                created_at__date__lte=month_end
-            ).aggregate(
-                count=Count('id'),
-                total_amount=Sum('total_amount')
-            )
-            
-            monthly_trends.append({
-                'month': month_start.strftime('%Y-%m'),
-                'month_name': month_start.strftime('%B %Y'),
-                'budgets_created': month_budgets['count'] or 0,
-                'total_allocated': float(month_budgets['total_amount'] or 0),
-                'total_spent': float(month_expenses),
-                'net_position': float((month_budgets['total_amount'] or 0) - month_expenses)
-            })
+        
+        # Get expenses for this month
+        month_expenses = OrganizationalExpense.objects.filter(
+            expense_date__gte=month_start,
+            expense_date__lte=month_end,
+            status='paid'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        # Get budgets created in this month
+        month_budgets = budgets.filter(
+            created_at__date__gte=month_start,
+            created_at__date__lte=month_end
+        ).aggregate(
+            count=Count('id'),
+            total_amount=Sum('total_amount')
+        )
+        
+        monthly_trends.append({
+            'month': month_start.strftime('%Y-%m'),
+            'month_name': month_start.strftime('%B %Y'),
+            'budgets_created': month_budgets['count'] or 0,
+            'total_allocated': float(month_budgets['total_amount'] or 0),
+            'total_spent': float(month_expenses),
+            'net_position': float((month_budgets['total_amount'] or 0) - month_expenses)
+        })
         
         # Reverse to get chronological order
         monthly_trends.reverse()
@@ -1792,14 +1855,15 @@ class BudgetViewSet(viewsets.ModelViewSet):
         
         # Critical alerts (over budget)
         for budget in budgets:
+            spent_amount = budget_expenses.get(budget.id, 0)
             if budget.total_amount > 0:
-                utilization = (budget.spent_amount / budget.total_amount) * 100
+                utilization = (spent_amount / float(budget.total_amount)) * 100
                 
                 if utilization > 100:
                     alerts.append({
                         'type': 'critical',
                         'title': f'Budget Exceeded: {budget.title}',
-                        'message': f'Budget has exceeded limit by {budget.currency.code if budget.currency else "USD"} {float(budget.spent_amount - budget.total_amount):,.2f}',
+                        'message': f'Budget has exceeded limit by {budget.currency.code if budget.currency else "USD"} {spent_amount - float(budget.total_amount):,.2f}',
                         'budget_id': budget.id,
                         'budget_title': budget.title,
                         'severity': 'high',
@@ -2010,6 +2074,7 @@ class BudgetViewSet(viewsets.ModelViewSet):
             'message': f'Added {funding_source.currency.code} {amount:,.2f} from {funding_source.name}',
             'total_funding': budget.total_funding_allocated
         })
+
 
 
 class OrganizationalExpenseViewSet(viewsets.ModelViewSet):
