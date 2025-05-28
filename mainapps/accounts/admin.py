@@ -1,6 +1,6 @@
 
 from django.contrib import admin
-from .models import UserProfile, Industry, Expertise, PartnershipType, PartnershipLevel, Disability,User
+from .models import UserProfile, Industry, Expertise, PartnershipType, PartnershipLevel, Disability,User,Department
 
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('get_user_email', 'get_user_name', 'is_kyc_verified', 'kyc_submission_date', 'kyc_verification_date')
@@ -27,3 +27,4 @@ admin.site.register(PartnershipType)
 admin.site.register(PartnershipLevel)
 admin.site.register(Disability)
 admin.site.register(User)
+admin.site.register(Department)

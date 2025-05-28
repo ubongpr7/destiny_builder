@@ -198,8 +198,8 @@ class PartnershipLevel(models.Model):
 
 class Department(models.Model):
     """Organizational departments"""
-    name = models.CharField(max_length=100, unique=True)
-    code = models.CharField(max_length=10, unique=True)  # e.g., 'HR', 'FIN', 'PROG'
+    name = models.CharField(max_length=200, unique=True)
+    code = models.CharField(max_length=25, unique=True)  # e.g., 'HR', 'FIN', 'PROG'
     description = models.TextField(blank=True, null=True)
     head = models.ForeignKey(
         User, 
