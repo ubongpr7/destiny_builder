@@ -648,6 +648,7 @@ class BudgetItemSerializer(serializers.ModelSerializer):
     remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
+    budget_id=serializers.ImageField(write_only=True)
     
     class Meta:
         model = BudgetItem
@@ -655,7 +656,7 @@ class BudgetItemSerializer(serializers.ModelSerializer):
             'id', 'budget', 'category', 'subcategory', 'description', 'budgeted_amount',
             'spent_amount', 'is_locked', 'approval_required_threshold', 'responsible_person',
             'responsible_person_id', 'notes', 'created_at', 'updated_at',
-            'remaining_amount', 'spent_percentage', 'formatted_amount'
+            'remaining_amount', 'spent_percentage', 'formatted_amount', 'budget_id'
         ]
         read_only_fields = ['id', 'budget', 'created_at', 'updated_at']
 
