@@ -1096,7 +1096,7 @@ class DepartmentListView(generics.ListAPIView):
     """
     queryset = Department.objects.select_related('parent_department', 'head').prefetch_related('sub_departments')
     serializer_class = DepartmentSerializer 
-    pagination_class = DepartmentPagination
+    # pagination_class = DepartmentPagination
     filterset_class = DepartmentFilter
     ordering_fields = ['name', 'code', 'created_at']
     ordering = ['name']
