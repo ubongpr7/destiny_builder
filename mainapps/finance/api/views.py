@@ -2594,48 +2594,50 @@ class DashboardViewSet(viewsets.ViewSet):
         """Get budget performance analytics"""
         fiscal_year = request.query_params.get('fiscal_year')
         
-        budgets = Budget.objects.filter(status__in=['active', 'completed'])
+        # Fetch budgets and convert to list to reuse evaluated objects
+        budgets_qs = Budget.objects.filter(status__in=['active', 'completed'])
         if fiscal_year:
-            budgets = budgets.filter(fiscal_year=fiscal_year)
+            budgets_qs = budgets_qs.filter(fiscal_year=fiscal_year)
         
-        # Budget utilization by type - Fixed calculation
-        budget_by_type = []
-        for budget_type in budgets.values_list('budget_type', flat=True).distinct():
-            type_budgets = budgets.filter(budget_type=budget_type)
-            
-            total_allocated = type_budgets.aggregate(total=Sum('total_amount'))['total'] or 0
-            total_spent = type_budgets.aggregate(total=Sum('spent_amount'))['total'] or 0
-            
-            # Calculate average utilization manually
-            utilizations = []
-            for budget in type_budgets:
-                if budget.total_amount > 0:
-                    utilization = (budget.spent_amount / budget.total_amount) * 100
-                    utilizations.append(utilization)
-            
+        # Prefetch related data if needed for spent_amount property
+        budgets_qs = budgets_qs.prefetch_related('items')  # Uncomment if needed
+        budgets = list(budgets_qs)
+
+        # Helper function for budget group calculations
+        def calculate_group_stats(group):
+            total_allocated = sum(b.total_amount for b in group)
+            total_spent = sum(b.spent_amount for b in group)
+            utilizations = [
+                (b.spent_amount / b.total_amount) * 100 
+                for b in group 
+                if b.total_amount > 0
+            ]
             avg_utilization = sum(utilizations) / len(utilizations) if utilizations else 0
+            return total_allocated, total_spent, avg_utilization
+
+        # Budget utilization by type
+        budget_by_type = []
+        for budget_type in set(b.budget_type for b in budgets):
+            type_budgets = [b for b in budgets if b.budget_type == budget_type]
+            total_allocated, total_spent, avg_utilization = calculate_group_stats(type_budgets)
             
             budget_by_type.append({
                 'budget_type': budget_type,
-                'count': type_budgets.count(),
+                'count': len(type_budgets),
                 'total_allocated': float(total_allocated),
                 'total_spent': float(total_spent),
                 'avg_utilization': float(avg_utilization)
             })
-        
+
         # Sort by total allocated
         budget_by_type.sort(key=lambda x: x['total_allocated'], reverse=True)
         
-        # Department budget analysis - Fixed calculation
+        # Department budget analysis
         dept_budgets = []
-        dept_budget_qs = budgets.filter(department__isnull=False)
-        
-        for dept_name in dept_budget_qs.values_list('department__name', flat=True).distinct():
-            dept_budget_items = dept_budget_qs.filter(department__name=dept_name)
-            
-            total_allocated = dept_budget_items.aggregate(total=Sum('total_amount'))['total'] or 0
-            total_spent = dept_budget_items.aggregate(total=Sum('spent_amount'))['total'] or 0
-            
+        departments = {b.department: b.department.name for b in budgets if b.department}
+        for dept_id, dept_name in departments.items():
+            dept_budgets_group = [b for b in budgets if b.department == dept_id]
+            total_allocated, total_spent, _ = calculate_group_stats(dept_budgets_group)
             utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
             
             dept_budgets.append({
@@ -2644,14 +2646,13 @@ class DashboardViewSet(viewsets.ViewSet):
                 'total_spent': float(total_spent),
                 'utilization': float(utilization)
             })
-        
+
         # Sort by total allocated
         dept_budgets.sort(key=lambda x: x['total_allocated'], reverse=True)
         
-        # Budget alerts - Fixed calculation
+        # Budget alerts
         over_budget = 0
         near_limit = 0
-        
         for budget in budgets:
             if budget.total_amount > 0:
                 utilization = (budget.spent_amount / budget.total_amount) * 100
@@ -2660,7 +2661,7 @@ class DashboardViewSet(viewsets.ViewSet):
                 elif utilization >= 90:
                     near_limit += 1
         
-        # Monthly spending trends
+        # Monthly spending trends (unchanged)
         monthly_spending = OrganizationalExpense.objects.filter(
             status='paid',
             expense_date__gte=timezone.now() - timedelta(days=365)
@@ -2672,13 +2673,13 @@ class DashboardViewSet(viewsets.ViewSet):
         ).order_by('month')
         
         # Overall utilization calculation
-        total_allocated = budgets.aggregate(total=Sum('total_amount'))['total'] or 0
-        total_spent = budgets.aggregate(total=Sum('spent_amount'))['total'] or 0
+        total_allocated = sum(b.total_amount for b in budgets)
+        total_spent = sum(b.spent_amount for b in budgets)
         overall_utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
         
         performance = {
             'summary': {
-                'total_budgets': budgets.count(),
+                'total_budgets': len(budgets),
                 'total_allocated': float(total_allocated),
                 'total_spent': float(total_spent),
                 'overall_utilization': float(overall_utilization)
@@ -2694,7 +2695,6 @@ class DashboardViewSet(viewsets.ViewSet):
         }
         
         return Response(performance)
-    
     @action(detail=False, methods=['get'])
     def grant_pipeline(self, request):
         """Get grant pipeline analytics"""
