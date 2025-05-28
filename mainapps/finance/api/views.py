@@ -3126,7 +3126,11 @@ class BudgetItemViewSet(viewsets.ModelViewSet):
         return BudgetItemSerializer(*args, **kwargs)
     
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        try:
+            serializer.is_valid(raise_exception=True)
+            serializer.save(created_by=self.request.user)
+        except ValidationError as e:
+            print(f"Validation error: {e}")
     
     @action(detail=True, methods=['get'])
     def expenses(self, request, pk=None):
