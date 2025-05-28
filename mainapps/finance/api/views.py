@@ -2334,7 +2334,7 @@ class DashboardViewSet(viewsets.ViewSet):
         donations_qs = Donation.objects.filter(status='completed')
         grants_qs = Grant.objects.filter(status__in=['active', 'completed'])
         expenses_qs = OrganizationalExpense.objects.filter(status='paid')
-        budgets_qs = Budget.objects.filter(status='active')
+        budgets_qs = Budget.objects.filter(status='active').prefetch_related('items')  # Prefetch items
         
         # Apply date filters
         if start_date:
@@ -2345,8 +2345,11 @@ class DashboardViewSet(viewsets.ViewSet):
         total_donations = donations_qs.aggregate(total=Sum('amount'))['total'] or 0
         total_grants_received = grants_qs.aggregate(total=Sum('amount_received'))['total'] or 0
         total_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or 0
-        total_budget_allocated = budgets_qs.aggregate(total=Sum('total_amount'))['total'] or 0
-        total_budget_spent = budgets_qs.aggregate(total=Sum('spent_amount'))['total'] or 0
+        
+        # Evaluate budgets and calculate spent amount in memory
+        budgets = list(budgets_qs)
+        total_budget_allocated = sum(b.total_amount for b in budgets)
+        total_budget_spent = sum(b.spent_amount for b in budgets)
         
         # Account balances
         active_accounts = BankAccount.objects.filter(is_active=True)
@@ -2354,7 +2357,6 @@ class DashboardViewSet(viewsets.ViewSet):
         
         # Counts
         active_campaigns = DonationCampaign.objects.filter(is_active=True).count()
-        
         active_grants = Grant.objects.filter(status='active').count()
         pending_expenses = OrganizationalExpense.objects.filter(status='pending').count()
         overdue_reports = GrantReport.objects.filter(
@@ -2600,7 +2602,7 @@ class DashboardViewSet(viewsets.ViewSet):
             budgets_qs = budgets_qs.filter(fiscal_year=fiscal_year)
         
         # Prefetch related data if needed for spent_amount property
-        budgets_qs = budgets_qs.prefetch_related('items')  # Uncomment if needed
+        budgets_qs = budgets_qs.prefetch_related('items')  
         budgets = list(budgets_qs)
 
         # Helper function for budget group calculations
