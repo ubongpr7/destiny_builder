@@ -1642,6 +1642,174 @@ class Budget(models.Model):
             'currency': self.currency.code if self.currency else None
         }
     
+    # RESTORED METHODS - These were missing and causing the error
+    def get_funding_breakdown(self):
+        """Get detailed funding breakdown by source"""
+        try:
+            funding_data = []
+            for funding in self.budget_funding.select_related('funding_source', 'funding_source__currency'):
+                funding_data.append({
+                    'source_name': funding.funding_source.name,
+                    'source_type': funding.funding_source.get_funding_type_display(),
+                    'amount_allocated': str(funding.amount_allocated),
+                    'currency': funding.funding_source.currency.code if funding.funding_source.currency else None,
+                    'allocation_date': funding.allocation_date.isoformat() if funding.allocation_date else None,
+                    'percentage_of_budget': float((funding.amount_allocated / self.total_amount) * 100) if self.total_amount > 0 else 0
+                })
+            return funding_data
+        except Exception:
+            return []
+    
+    def get_spending_by_category(self):
+        """Get spending breakdown by budget item category"""
+        try:
+            from django.db.models import Sum
+            categories = self.items.values('category').annotate(
+                total_budgeted=Sum('budgeted_amount'),
+                total_spent=Sum('spent_amount')
+            ).order_by('category')
+            
+            category_data = []
+            for category in categories:
+                category_data.append({
+                    'category': category['category'],
+                    'budgeted_amount': str(category['total_budgeted'] or Decimal('0.00')),
+                    'spent_amount': str(category['total_spent'] or Decimal('0.00')),
+                    'remaining_amount': str((category['total_budgeted'] or Decimal('0.00')) - (category['total_spent'] or Decimal('0.00'))),
+                    'spent_percentage': float(((category['total_spent'] or Decimal('0.00')) / (category['total_budgeted'] or Decimal('1.00'))) * 100) if category['total_budgeted'] and category['total_budgeted'] > 0 else 0
+                })
+            return category_data
+        except Exception:
+            return []
+    
+    def get_monthly_spending_trend(self):
+        """Get monthly spending trend for this budget"""
+        try:
+            from django.db.models import Sum
+            from django.db.models.functions import TruncMonth
+            from datetime import datetime, timedelta
+            
+            # Get spending data for the last 12 months or budget period
+            start_date = max(
+                self.start_date,
+                (timezone.now().date() - timedelta(days=365))
+            )
+            
+            monthly_data = self.items.filter(
+                project_expenses__expense_date__gte=start_date,
+                project_expenses__expense_date__lte=self.end_date
+            ).annotate(
+                month=TruncMonth('project_expenses__expense_date')
+            ).values('month').annotate(
+                total_spent=Sum('project_expenses__amount')
+            ).order_by('month')
+            
+            trend_data = []
+            for month_data in monthly_data:
+                if month_data['month']:
+                    trend_data.append({
+                        'month': month_data['month'].strftime('%Y-%m'),
+                        'spent_amount': str(month_data['total_spent'] or Decimal('0.00')),
+                        'currency': self.currency.code if self.currency else None
+                    })
+            return trend_data
+        except Exception:
+            return []
+    
+    def get_budget_utilization_by_item(self):
+        """Get utilization percentage for each budget item"""
+        try:
+            items_data = []
+            for item in self.items.all():
+                utilization = 0
+                if item.budgeted_amount and item.budgeted_amount > 0:
+                    utilization = float((item.spent_amount / item.budgeted_amount) * 100)
+                
+                items_data.append({
+                    'id': item.id,
+                    'category': item.category,
+                    'subcategory': item.subcategory or '',
+                    'description': item.description,
+                    'budgeted_amount': str(item.budgeted_amount),
+                    'spent_amount': str(item.spent_amount),
+                    'remaining_amount': str(item.remaining_amount),
+                    'utilization_percentage': utilization,
+                    'status': item.utilization_status,
+                    'is_locked': item.is_locked,
+                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
+                })
+            return items_data
+        except Exception:
+            return []
+    
+    def get_funding_vs_spending_analysis(self):
+        """Compare funding received vs actual spending"""
+        try:
+            return {
+                'total_budget': str(self.total_amount),
+                'total_funded': str(self.total_funding_allocated),
+                'total_spent': str(self.spent_amount),
+                'funding_gap': str(self.funding_gap),
+                'spending_vs_funding_ratio': float((self.spent_amount / self.total_funding_allocated) * 100) if self.total_funding_allocated > 0 else 0,
+                'budget_utilization': self.spent_percentage,
+                'funding_utilization': float((self.total_funding_allocated / self.total_amount) * 100) if self.total_amount > 0 else 0,
+                'is_overspent': self.is_over_budget,
+                'is_underfunded': not self.is_fully_funded,
+                'currency': self.currency.code if self.currency else None
+            }
+        except Exception:
+            return {}
+    
+    def get_budget_alerts(self):
+        """Get budget alerts and warnings"""
+        alerts = []
+        
+        try:
+            # Over budget alert
+            if self.is_over_budget:
+                alerts.append({
+                    'type': 'error',
+                    'message': f'Budget is over spent by {self.currency.code if self.currency else ""} {abs(self.variance):,.2f}',
+                    'severity': 'high'
+                })
+            
+            # High utilization warning
+            elif self.spent_percentage >= 90:
+                alerts.append({
+                    'type': 'warning',
+                    'message': f'Budget is {self.spent_percentage:.1f}% utilized - approaching limit',
+                    'severity': 'medium'
+                })
+            
+            # Funding gap alert
+            if self.funding_gap > 0:
+                alerts.append({
+                    'type': 'warning',
+                    'message': f'Funding gap of {self.currency.code if self.currency else ""} {self.funding_gap:,.2f}',
+                    'severity': 'medium'
+                })
+            
+            # Expiring budget
+            if self.days_remaining <= 30 and self.days_remaining > 0:
+                alerts.append({
+                    'type': 'info',
+                    'message': f'Budget expires in {self.days_remaining} days',
+                    'severity': 'low'
+                })
+            
+            # Expired budget
+            if self.is_expired:
+                alerts.append({
+                    'type': 'error',
+                    'message': 'Budget period has expired',
+                    'severity': 'high'
+                })
+            
+        except Exception:
+            pass
+        
+        return alerts
+    
     def __str__(self):
         return f"{self.title} - {self.get_budget_type_display()} ({self.formatted_amount})"
 
