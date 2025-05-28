@@ -15,7 +15,8 @@ router.register(r'users', UserViewSet)
 router.register(r'user-profiles', UserProfileViewSet,basename='user-profiles')
 
 
-
+urlpatterns = [
+]
 urlpatterns = [
     path('', include(router.urls)),
     path('profile-roles/', UserProfileRoleView.as_view(), name='profile-role'),
@@ -27,6 +28,18 @@ urlpatterns = [
          name='profile-addresses-detail'),
 
 
+    # List and detail views
+    path('departments/', DepartmentListView.as_view(), name='department-list'),
+    path('departments/<int:id>/', DepartmentDetailView.as_view(), name='department-detail'),
+    
+    # Tree and hierarchy views
+    path('departments/tree/', DepartmentTreeView.as_view(), name='department-tree'),
+    path('departments/hierarchy/', department_hierarchy, name='department-hierarchy'),
+    path('departments/hierarchy/<int:department_id>/', department_hierarchy, name='department-hierarchy-detail'),
+    
+    # Utility views
+    path('departments/statistics/', department_statistics, name='department-statistics'),
+    path('departments/search/', department_search, name='department-search'),
          
 ]
 

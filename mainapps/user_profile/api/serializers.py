@@ -1,4 +1,4 @@
-from mainapps.accounts.models import Disability, Membership, Industry, Expertise, PartnershipType, PartnershipLevel, Skill, UserProfile
+from mainapps.accounts.models import Department, Disability, Membership, Industry, Expertise, PartnershipType, PartnershipLevel, Skill, UserProfile
 from rest_framework import serializers
 
 from mainapps.common.api.serializers import CitySerializer, CountrySerializer, RegionSerializer, SubRegionSerializer
@@ -322,3 +322,89 @@ class CAddressSerializer(serializers.ModelSerializer):
             'country_details', 'region_details', 'subregion_details', 'city_details'
         ]
         read_only_fields = ['id']
+
+
+class DepartmentHeadSerializer(serializers.ModelSerializer):
+    """Serializer for department head (User)"""
+    full_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User  # Replace with your User model
+        fields = ['id', 'first_name', 'last_name', 'full_name', 'email']
+    
+    def get_full_name(self, obj):
+        return obj.get_full_name
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    """Main Department serializer"""
+    head = DepartmentHeadSerializer(read_only=True)
+    parent_department = serializers.SerializerMethodField()
+    sub_departments_count = serializers.IntegerField(read_only=True)
+    level = serializers.SerializerMethodField()
+    hierarchy_path = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Department
+        fields = [
+            'id', 'name', 'code', 'description', 'head', 'parent_department',
+            'sub_departments_count', 'is_active', 'created_at', 'level', 'hierarchy_path'
+        ]
+    
+    def get_parent_department(self, obj):
+        if obj.parent_department:
+            return {
+                'id': obj.parent_department.id,
+                'name': obj.parent_department.name,
+                'code': obj.parent_department.code
+            }
+        return None
+    
+    def get_level(self, obj):
+        """Calculate the hierarchical level of the department"""
+        level = 0
+        current = obj.parent_department
+        while current:
+            level += 1
+            current = current.parent_department
+        return level
+    
+    def get_hierarchy_path(self, obj):
+        """Get the full hierarchy path from root to current department"""
+        path = []
+        current = obj
+        while current:
+            path.insert(0, {
+                'id': current.id,
+                'name': current.name,
+                'code': current.code
+            })
+            current = current.parent_department
+        return path
+
+
+class DepartmentTreeSerializer(serializers.ModelSerializer):
+    """Serializer for hierarchical tree structure"""
+    head = DepartmentHeadSerializer(read_only=True)
+    sub_departments = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Department
+        fields = ['id', 'name', 'code', 'description', 'head', 'sub_departments', 'is_active']
+    
+    def get_sub_departments(self, obj):
+        """Recursively serialize sub-departments"""
+        sub_departments = obj.sub_departments.filter(is_active=True)
+        return DepartmentTreeSerializer(sub_departments, many=True, context=self.context).data
+
+
+class DepartmentMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer for dropdown/select options"""
+    full_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Department
+        fields = ['id', 'name', 'code', 'full_name']
+    
+    def get_full_name(self, obj):
+        return f"{obj.code} - {obj.name}"

@@ -18,12 +18,13 @@ from django.utils import timezone
 from django.db.models import Q
 
 from rest_framework.response import Response
+from rest_framework.decorators import api_view
 
 from mainapps.user_profile.api.utils import ReferenceGenerator, generate_certificate_pdf, send_certificate_email
-from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DisabilityTypeSerializer, ProfileRoleSerializer
+from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DepartmentSerializer, DepartmentTreeSerializer, DisabilityTypeSerializer, ProfileRoleSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
-from mainapps.accounts.models import Disability, Industry, Expertise,VerificationCode, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
+from mainapps.accounts.models import Department, Disability, Industry, Expertise,VerificationCode, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
 from .serializers import (
     IndustrySerializer, ExpertiseSerializer, MembershipSerializer, PartnershipTypeSerializer,
     PartnershipLevelSerializer, ProfileSerialIzer, ProfileSerialIzerAttachment, SkillSerializer
@@ -1023,3 +1024,355 @@ class AddressViewSet(viewsets.ModelViewSet):
             )
         
         instance.delete()
+
+
+from rest_framework.pagination import PageNumberPagination
+
+
+class DepartmentPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class DepartmentFilter(filters.FilterSet):
+    """Filter class for Department model"""
+    name = filters.CharFilter(lookup_expr='icontains')
+    code = filters.CharFilter(lookup_expr='icontains')
+    is_active = filters.BooleanFilter()
+    has_parent = filters.BooleanFilter(method='filter_has_parent')
+    has_children = filters.BooleanFilter(method='filter_has_children')
+    parent_id = filters.NumberFilter(field_name='parent_department__id')
+    level = filters.NumberFilter(method='filter_by_level')
+    search = filters.CharFilter(method='filter_search')
+    
+    class Meta:
+        model = Department
+        fields = ['name', 'code', 'is_active', 'parent_department']
+    
+    def filter_has_parent(self, queryset, name, value):
+        if value:
+            return queryset.filter(parent_department__isnull=False)
+        return queryset.filter(parent_department__isnull=True)
+    
+    def filter_has_children(self, queryset, name, value):
+        if value:
+            return queryset.filter(sub_departments__isnull=False).distinct()
+        return queryset.filter(sub_departments__isnull=True)
+    
+    def filter_by_level(self, queryset, name, value):
+        """Filter departments by their hierarchical level (0=root, 1=first level, etc.)"""
+        if value == 0:
+            return queryset.filter(parent_department__isnull=True)
+        elif value == 1:
+            return queryset.filter(
+                parent_department__isnull=False,
+                parent_department__parent_department__isnull=True
+            )
+        elif value == 2:
+            return queryset.filter(
+                parent_department__parent_department__isnull=False,
+                parent_department__parent_department__parent_department__isnull=True
+            )
+        # Add more levels as needed
+        return queryset
+    
+    def filter_search(self, queryset, name, value):
+        """Search across multiple fields"""
+        return queryset.filter(
+            Q(name__icontains=value) |
+            Q(code__icontains=value) |
+            Q(description__icontains=value) |
+            Q(head__first_name__icontains=value) |
+            Q(head__last_name__icontains=value)
+        )
+
+
+class DepartmentListView(generics.ListAPIView):
+    """
+    List all departments with filtering, searching, and pagination
+    """
+    queryset = Department.objects.select_related('parent_department', 'head').prefetch_related('sub_departments')
+    serializer_class = DepartmentSerializer
+    pagination_class = DepartmentPagination
+    filterset_class = DepartmentFilter
+    ordering_fields = ['name', 'code', 'created_at']
+    ordering = ['name']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Add annotation for sub-department count
+        queryset = queryset.annotate(
+            sub_departments_count=Count('sub_departments', distinct=True)
+        )
+        
+        return queryset
+
+
+class DepartmentDetailView(generics.RetrieveAPIView):
+    """
+    Retrieve a specific department with its details
+    """
+    queryset = Department.objects.select_related('parent_department', 'head').prefetch_related(
+        'sub_departments__head',
+        'sub_departments__sub_departments'
+    )
+    serializer_class = DepartmentSerializer
+    lookup_field = 'id'
+
+
+class DepartmentTreeView(generics.ListAPIView):
+    """
+    Get departments in a hierarchical tree structure
+    """
+    serializer_class = DepartmentTreeSerializer
+    
+    def get_queryset(self):
+        # Get root departments (no parent)
+        return Department.objects.filter(
+            parent_department__isnull=True,
+            is_active=True
+        ).select_related('head').prefetch_related(
+            Prefetch(
+                'sub_departments',
+                queryset=Department.objects.filter(is_active=True).select_related('head').prefetch_related(
+                    Prefetch(
+                        'sub_departments',
+                        queryset=Department.objects.filter(is_active=True).select_related('head').prefetch_related(
+                            'sub_departments__head'
+                        )
+                    )
+                )
+            )
+        )
+
+
+@api_view(['GET'])
+def department_hierarchy(request, department_id=None):
+    """
+    Get the full hierarchy path for a department or all root departments
+    """
+    try:
+        if department_id:
+            department = get_object_or_404(Department, id=department_id)
+            
+            # Build hierarchy path from root to current department
+            hierarchy = []
+            current = department
+            while current:
+                hierarchy.insert(0, {
+                    'id': current.id,
+                    'name': current.name,
+                    'code': current.code,
+                    'level': len(hierarchy)
+                })
+                current = current.parent_department
+            
+            # Get children of the current department
+            children = Department.objects.filter(
+                parent_department=department,
+                is_active=True
+            ).select_related('head').annotate(
+                sub_departments_count=Count('sub_departments')
+            )
+            
+            children_data = [{
+                'id': child.id,
+                'name': child.name,
+                'code': child.code,
+                'has_children': child.sub_departments_count > 0,
+                'head': {
+                    'id': child.head.id,
+                    'name': f"{child.head.first_name} {child.head.last_name}"
+                } if child.head else None
+            } for child in children]
+            
+            return Response({
+                'hierarchy': hierarchy,
+                'children': children_data,
+                'current_department': {
+                    'id': department.id,
+                    'name': department.name,
+                    'code': department.code,
+                    'description': department.description,
+                    'head': {
+                        'id': department.head.id,
+                        'name': f"{department.head.first_name} {department.head.last_name}"
+                    } if department.head else None
+                }
+            })
+        else:
+            # Return all root departments
+            root_departments = Department.objects.filter(
+                parent_department__isnull=True,
+                is_active=True
+            ).select_related('head').annotate(
+                sub_departments_count=Count('sub_departments')
+            )
+            
+            data = [{
+                'id': dept.id,
+                'name': dept.name,
+                'code': dept.code,
+                'has_children': dept.sub_departments_count > 0,
+                'head': {
+                    'id': dept.head.id,
+                    'name': f"{dept.head.first_name} {dept.head.last_name}"
+                } if dept.head else None
+            } for dept in root_departments]
+            
+            return Response({'root_departments': data})
+            
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def department_statistics(request):
+    """
+    Get department statistics
+    """
+    try:
+        stats = {
+            'total_departments': Department.objects.count(),
+            'active_departments': Department.objects.filter(is_active=True).count(),
+            'inactive_departments': Department.objects.filter(is_active=False).count(),
+            'departments_with_heads': Department.objects.filter(head__isnull=False).count(),
+            'departments_without_heads': Department.objects.filter(head__isnull=True).count(),
+            'root_departments': Department.objects.filter(parent_department__isnull=True).count(),
+            'departments_by_level': {}
+        }
+        
+        # Calculate departments by level
+        for level in range(5):  # Assuming max 5 levels
+            if level == 0:
+                count = Department.objects.filter(parent_department__isnull=True).count()
+            elif level == 1:
+                count = Department.objects.filter(
+                    parent_department__isnull=False,
+                    parent_department__parent_department__isnull=True
+                ).count()
+            elif level == 2:
+                count = Department.objects.filter(
+                    parent_department__parent_department__isnull=False,
+                    parent_department__parent_department__parent_department__isnull=True
+                ).count()
+            # Add more levels as needed
+            else:
+                count = 0
+            
+            if count > 0:
+                stats['departments_by_level'][f'level_{level}'] = count
+        
+        return Response(stats)
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def department_search(request):
+    """
+    Advanced search for departments
+    """
+    query = request.GET.get('q', '')
+    department_type = request.GET.get('type', '')  # e.g., 'directorate', 'admin', 'leadership'
+    level = request.GET.get('level', '')
+    
+    if not query:
+        return Response({'error': 'Search query is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        queryset = Department.objects.filter(is_active=True)
+        
+        # Apply search filter
+        queryset = queryset.filter(
+            Q(name__icontains=query) |
+            Q(code__icontains=query) |
+            Q(description__icontains=query)
+        )
+        
+        # Apply type filter
+        if department_type == 'directorate':
+            # Assuming directorates have specific codes or patterns
+            queryset = queryset.filter(
+                Q(code__contains='AGR') | Q(code__contains='AUD') | Q(code__contains='BEP') |
+                Q(code__contains='COM') | Q(code__contains='CGA') | Q(code__contains='CSR') |
+                Q(code__contains='CUL') | Q(code__contains='EDU') | Q(code__contains='EDR') |
+                Q(code__contains='EGE') | Q(code__contains='ENP') | Q(code__contains='ENV') |
+                Q(code__contains='FIN') | Q(code__contains='HSS') | Q(code__contains='HRD') |
+                Q(code__contains='HUM') | Q(code__contains='ICT') | Q(code__contains='IFA') |
+                Q(code__contains='LEG') | Q(code__contains='MAM') | Q(code__contains='MED') |
+                Q(code__contains='MOE') | Q(code__contains='NOR') | Q(code__contains='PCR') |
+                Q(code__contains='PRO') | Q(code__contains='RAC') | Q(code__contains='RAI') |
+                Q(code__contains='RPD') | Q(code__contains='SEC') | Q(code__contains='SCI') |
+                Q(code__contains='SWR') | Q(code__contains='SPD') | Q(code__contains='PWD') |
+                Q(code__contains='SPE') | Q(code__contains='SDG') | Q(code__contains='TRA') |
+                Q(code__contains='TRL') | Q(code__contains='URD') | Q(code__contains='WAT') |
+                Q(code__contains='WAD') | Q(code__contains='INF') | Q(code__contains='YSD') |
+                Q(code__contains='PPM') | Q(code__contains='MHS')
+            )
+        elif department_type == 'admin':
+            queryset = queryset.filter(
+                Q(code__in=['NAT', 'REG', 'STATE', 'LGA', 'WARD', 'VILL'])
+            )
+        elif department_type == 'leadership':
+            queryset = queryset.filter(
+                Q(code__contains='COORD') | Q(code__contains='SEC') | Q(code__contains='DCOORD')
+            )
+        
+        # Apply level filter
+        if level:
+            try:
+                level_int = int(level)
+                if level_int == 0:
+                    queryset = queryset.filter(parent_department__isnull=True)
+                elif level_int == 1:
+                    queryset = queryset.filter(
+                        parent_department__isnull=False,
+                        parent_department__parent_department__isnull=True
+                    )
+                # Add more level filters as needed
+            except ValueError:
+                pass
+        
+        # Limit results and add related data
+        queryset = queryset.select_related('parent_department', 'head').annotate(
+            sub_departments_count=Count('sub_departments')
+        )[:50]  # Limit to 50 results
+        
+        results = [{
+            'id': dept.id,
+            'name': dept.name,
+            'code': dept.code,
+            'description': dept.description,
+            'parent': {
+                'id': dept.parent_department.id,
+                'name': dept.parent_department.name,
+                'code': dept.parent_department.code
+            } if dept.parent_department else None,
+            'head': {
+                'id': dept.head.id,
+                'name': f"{dept.head.first_name} {dept.head.last_name}"
+            } if dept.head else None,
+            'sub_departments_count': dept.sub_departments_count
+        } for dept in queryset]
+        
+        return Response({
+            'results': results,
+            'count': len(results),
+            'query': query
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
