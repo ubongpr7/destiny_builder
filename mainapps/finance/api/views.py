@@ -19,7 +19,7 @@ from ..models import (
     AccountTransaction, FundAllocation
 )
 from .serializers import (
-    BudgetDetailSerializer, FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
+    BudgetDetailSerializer, BudgetItemDetailSerializer, FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
     DonationCampaignSerializer, DonationDetailCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
     InKindDonationSerializer, GrantSerializer, GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
@@ -3119,6 +3119,11 @@ class BudgetItemViewSet(viewsets.ModelViewSet):
     search_fields = ['title', 'description']
     ordering_fields = ['title', 'allocated_amount', 'spent_amount', 'created_at']
     ordering = ['title']
+
+    def get_serializer(self, *args, **kwargs):
+        if self.action == 'retrieve' :
+            return BudgetItemDetailSerializer(*args, **kwargs)
+        return BudgetItemSerializer(*args, **kwargs)
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
