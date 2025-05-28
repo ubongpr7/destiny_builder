@@ -648,7 +648,7 @@ class BudgetItemSerializer(serializers.ModelSerializer):
     remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
-    budget_id=serializers.ImageField(write_only=True)
+    budget_id=serializers.IntegerField(write_only=True)
     
     class Meta:
         model = BudgetItem
