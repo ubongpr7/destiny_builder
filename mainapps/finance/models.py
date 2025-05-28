@@ -900,7 +900,7 @@ class Donation(models.Model):
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name() or self.donor.username
+            return self.donor.get_full_name or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
@@ -1038,7 +1038,7 @@ class RecurringDonation(models.Model):
         return f"{self.amount:,.2f}"
     
     def __str__(self):
-        donor_name = self.donor.get_full_name() or self.donor.username
+        donor_name = self.donor.get_full_name or self.donor.username
         return f"{donor_name} - {self.formatted_amount} {self.frequency}"
 
 class InKindDonation(models.Model):
@@ -1137,7 +1137,7 @@ class InKindDonation(models.Model):
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name() or self.donor.username
+            return self.donor.get_full_name or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
@@ -1736,7 +1736,7 @@ class Budget(models.Model):
                     'utilization_percentage': utilization,
                     'status': item.utilization_status,
                     'is_locked': item.is_locked,
-                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
+                    'responsible_person': item.responsible_person.get_full_name if item.responsible_person else None
                 })
             return items_data
         except Exception:
