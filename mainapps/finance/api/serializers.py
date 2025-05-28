@@ -641,7 +641,6 @@ class MinimalBudgetSerializer(serializers.ModelSerializer):
         model = Budget
         fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
         read_only_fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
-
 class BudgetItemSerializer(serializers.ModelSerializer):
     budget = MinimalBudgetSerializer(read_only=True)
     responsible_person = UserBasicSerializer(read_only=True)
@@ -649,7 +648,7 @@ class BudgetItemSerializer(serializers.ModelSerializer):
     remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
-    budget_id = serializers.IntegerField(write_only=True)
+    budget_id=serializers.IntegerField(write_only=True)
     
     class Meta:
         model = BudgetItem
@@ -660,43 +659,8 @@ class BudgetItemSerializer(serializers.ModelSerializer):
             'remaining_amount', 'spent_percentage', 'formatted_amount', 'budget_id'
         ]
         read_only_fields = ['id', 'budget', 'created_at', 'updated_at']
-    
-    def validate(self, data):
-        print(f"Received data: {data}")  # Debug print
-        
-        # Check if budget exists
-        budget_id = data.get('budget_id')
-        if budget_id:
-            try:
-                budget = Budget.objects.get(id=budget_id)
-                print(f"Budget found: {budget}")
-            except Budget.DoesNotExist:
-                raise serializers.ValidationError({"budget_id": "Budget does not exist"})
-        
-        # Check approval threshold validation
-        budgeted_amount = data.get('budgeted_amount')
-        approval_threshold = data.get('approval_required_threshold')
-        
-        if approval_threshold and budgeted_amount:
-            if approval_threshold > (budgeted_amount * 0.5):
-                raise serializers.ValidationError({
-                    "approval_required_threshold": "Approval threshold cannot exceed 50% of budget item amount"
-                })
-        
-        return data
-    
-    def create(self, validated_data):
-        print(f"Creating with validated data: {validated_data}")  # Debug print
-        
-        # Extract budget_id and set budget
-        budget_id = validated_data.pop('budget_id')
-        try:
-            budget = Budget.objects.get(id=budget_id)
-            validated_data['budget'] = budget
-        except Budget.DoesNotExist:
-            raise serializers.ValidationError({"budget_id": "Budget does not exist"})
-        
-        return super().create(validated_data)
+
+
 
 class OrganizationalExpenseMinimalSerializer(serializers.ModelSerializer):
     """Minimal serializer for organizational expenses in budget detail"""

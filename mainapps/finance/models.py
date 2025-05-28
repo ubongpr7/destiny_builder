@@ -1692,12 +1692,6 @@ class BudgetItem(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
-    spent_amount = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0,
-        validators=[MinValueValidator(Decimal('0.00'))]
-    )
     
     # Enhanced controls
     is_locked = models.BooleanField(
@@ -1740,7 +1734,43 @@ class BudgetItem(models.Model):
         ]
         verbose_name = "Budget Item"
         verbose_name_plural = "Budget Items"
-    
+
+    @property
+    def utilization_status(self):
+        """Returns budget utilization status"""
+        percentage = self.spent_percentage
+        if percentage >= 100:
+            return 'OVER_BUDGET'
+        elif percentage >= 90:
+            return 'CRITICAL'
+        elif percentage >= 75:
+            return 'WARNING'
+        else:
+            return 'NORMAL'
+
+    @property
+    def is_over_budget(self):
+        """Check if spending exceeds budget"""
+        return self.spent_amount > self.budgeted_amount
+
+    @property
+    def variance(self):
+        """Budget variance (positive = under budget, negative = over budget)"""
+        return self.budgeted_amount - self.spent_amount
+
+    @property
+    def variance_percentage(self):
+        """Variance as percentage"""
+        if self.budgeted_amount > 0:
+            return (self.variance / self.budgeted_amount) * 100
+        return 0
+
+    @property
+    def spent_amount(self):
+        """Calculate total spent from related expenses"""
+        return self.project_expenses.aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
     @property
     def remaining_amount(self):
         if self.budgeted_amount:
