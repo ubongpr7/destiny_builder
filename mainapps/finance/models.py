@@ -1723,7 +1723,7 @@ class BudgetItem(models.Model):
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    
+    created_by=models.ForeignKey(User,on_delete=models.SET_NULL,null=True,blank=True,related_name='created_budget_items')
     # Relationships
     project_expenses = models.ManyToManyField(
         'project.ProjectExpense', 
