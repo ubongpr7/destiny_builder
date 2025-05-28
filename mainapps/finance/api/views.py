@@ -3054,7 +3054,7 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
     serializer_class = FundingSourceSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['source_type', 'currency', 'is_active']
+    filterset_fields = ['funding_type', 'currency', 'is_active']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'total_amount', 'created_at']
     ordering = ['name']

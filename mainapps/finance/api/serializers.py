@@ -641,6 +641,7 @@ class MinimalBudgetSerializer(serializers.ModelSerializer):
         model = Budget
         fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
         read_only_fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
+        
 class BudgetItemSerializer(serializers.ModelSerializer):
     budget = MinimalBudgetSerializer(read_only=True)
     responsible_person = UserBasicSerializer(read_only=True)
