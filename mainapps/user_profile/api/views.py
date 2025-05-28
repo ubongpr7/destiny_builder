@@ -16,6 +16,8 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from django.utils import timezone
 from django.db.models import Q
+import django_filters  
+from rest_framework import filters as drf_filters  # Renamed to avoid confusion
 
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
@@ -1035,16 +1037,16 @@ class DepartmentPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class DepartmentFilter(filters.FilterSet):
+class DepartmentFilter(django_filters.FilterSet):  # Use django_filters.FilterSet
     """Filter class for Department model"""
-    name = filters.CharFilter(lookup_expr='icontains')
-    code = filters.CharFilter(lookup_expr='icontains')
-    is_active = filters.BooleanFilter()
-    has_parent = filters.BooleanFilter(method='filter_has_parent')
-    has_children = filters.BooleanFilter(method='filter_has_children')
-    parent_id = filters.NumberFilter(field_name='parent_department__id')
-    level = filters.NumberFilter(method='filter_by_level')
-    search = filters.CharFilter(method='filter_search')
+    name = django_filters.CharFilter(lookup_expr='icontains')
+    code = django_filters.CharFilter(lookup_expr='icontains')
+    is_active = django_filters.BooleanFilter()
+    has_parent = django_filters.BooleanFilter(method='filter_has_parent')
+    has_children = django_filters.BooleanFilter(method='filter_has_children')
+    parent_id = django_filters.NumberFilter(field_name='parent_department__id')
+    level = django_filters.NumberFilter(method='filter_by_level')
+    search = django_filters.CharFilter(method='filter_search')
     
     class Meta:
         model = Department
@@ -1093,11 +1095,13 @@ class DepartmentListView(generics.ListAPIView):
     List all departments with filtering, searching, and pagination
     """
     queryset = Department.objects.select_related('parent_department', 'head').prefetch_related('sub_departments')
-    serializer_class = DepartmentSerializer
+    # serializer_class = DepartmentSerializer  # Uncomment when you create the serializer
     pagination_class = DepartmentPagination
     filterset_class = DepartmentFilter
+    filter_backends = [django_filters.DjangoFilterBackend, drf_filters.OrderingFilter, drf_filters.SearchFilter]
     ordering_fields = ['name', 'code', 'created_at']
     ordering = ['name']
+    search_fields = ['name', 'code', 'description']
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -1118,7 +1122,7 @@ class DepartmentDetailView(generics.RetrieveAPIView):
         'sub_departments__head',
         'sub_departments__sub_departments'
     )
-    serializer_class = DepartmentSerializer
+    # serializer_class = DepartmentSerializer  # Uncomment when you create the serializer
     lookup_field = 'id'
 
 
@@ -1126,7 +1130,7 @@ class DepartmentTreeView(generics.ListAPIView):
     """
     Get departments in a hierarchical tree structure
     """
-    serializer_class = DepartmentTreeSerializer
+    # serializer_class = DepartmentTreeSerializer  # Uncomment when you create the serializer
     
     def get_queryset(self):
         # Get root departments (no parent)
@@ -1325,7 +1329,7 @@ def department_search(request):
             )
         elif department_type == 'leadership':
             queryset = queryset.filter(
-                Q(code__contains='COORD') | Q(code__contains='SEC') | Q(code__contains='DCOORD')
+                Q(code__contains='COORD') | Q(code__contains='SECR') | Q(code__contains='DCOORD')
             )
         
         # Apply level filter
