@@ -1098,7 +1098,6 @@ class DepartmentListView(generics.ListAPIView):
     # serializer_class = DepartmentSerializer  # Uncomment when you create the serializer
     pagination_class = DepartmentPagination
     filterset_class = DepartmentFilter
-    filter_backends = [django_filters.DjangoFilterBackend, drf_filters.OrderingFilter, drf_filters.SearchFilter]
     ordering_fields = ['name', 'code', 'created_at']
     ordering = ['name']
     search_fields = ['name', 'code', 'description']
