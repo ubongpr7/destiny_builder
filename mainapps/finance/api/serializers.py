@@ -963,23 +963,32 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     
     def get_allocation_summary(self, obj):
         """Get summary of fund allocations"""
+        allocations_qs = obj.fund_allocations.select_related(
+            'source_account', 'source_account__currency', 'allocated_by'
+        )
+
+        total_allocated = sum(allocation.amount_allocated for allocation in allocations_qs) or 1  # avoid division by zero
+
         allocations = []
-        for allocation in obj.fund_allocations.select_related('source_account', 'source_account__currency', 'allocated_by'):
+        for allocation in allocations_qs:
+            amount = float(allocation.amount_allocated)
+            percentage = (amount / total_allocated) * 100
             allocations.append({
                 'id': allocation.id,
                 'account_name': allocation.source_account.name,
                 'account_type': allocation.source_account.account_type,
-                'amount_allocated': float(allocation.amount_allocated),
+                'amount_allocated': amount,
                 'currency_code': allocation.source_account.currency.code,
                 'formatted_amount': f"{allocation.source_account.currency.code} {allocation.amount_allocated:,.2f}",
                 'allocation_date': allocation.allocation_date.isoformat(),
-                'allocated_by': allocation.allocated_by.get_full_name if allocation.allocated_by else 'Unknown',
+                'allocated_by': allocation.allocated_by.get_full_name() if allocation.allocated_by else 'Unknown',
                 'purpose': allocation.purpose,
-                'is_active': allocation.is_active
+                'is_active': allocation.is_active,
+                'percentage': round(percentage, 2)
             })
-        
+
         return allocations
-    
+
     def get_items_count(self, obj):
         return obj.items.count()
     
