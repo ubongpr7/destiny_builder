@@ -3102,7 +3102,7 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
     def allocation_history(self, request, pk=None):
         """Get allocation history for funding source"""
         funding_source = self.get_object()
-        allocations = funding_source.budget_funding.select_related('budget').order_by('-created_at')
+        allocations = funding_source.allocations.select_related('budget').order_by('-created_at')
         
         allocation_data = []
         for allocation in allocations:
