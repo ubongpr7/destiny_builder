@@ -972,7 +972,7 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
         allocations = []
         for allocation in allocations_qs:
             amount = float(allocation.amount_allocated)
-            percentage = (amount / total_allocated) * 100
+            percentage = (amount / float(total_allocated)) * 100
             allocations.append({
                 'id': allocation.id,
                 'account_name': allocation.source_account.name,
