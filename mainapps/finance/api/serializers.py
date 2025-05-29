@@ -972,7 +972,8 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
         allocations = []
         for allocation in allocations_qs:
             amount = float(allocation.amount_allocated)
-            percentage = (amount / float(total_allocated or 1)) * 100
+            percentage = (amount / float(total_allocated)) * 100 if total_allocated else 0.0
+
             allocations.append({
                 'id': allocation.id,
                 'account_name': allocation.source_account.name,

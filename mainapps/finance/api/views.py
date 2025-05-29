@@ -3174,7 +3174,7 @@ class BudgetItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['budget', 'category']
-    search_fields = ['title', 'description']
+    search_fields = [ 'description']
     ordering_fields = ['title', 'allocated_amount', 'spent_amount', 'created_at']
     ordering = ['title']
 
@@ -3262,7 +3262,6 @@ class AccountTransactionViewSet(viewsets.ModelViewSet):
     ordering = ['-transaction_date']
     
     def perform_create(self, serializer):
-        print(serializer)
         try:
             serializer.is_valid(raise_exception=True)
             serializer.save(authorized_by=self.request.user)
@@ -3411,7 +3410,6 @@ class FundAllocationViewSet(viewsets.ModelViewSet):
     ordering = ['-allocation_date']
     
     def perform_create(self, serializer):
-        print(serializer)
         serializer.save(allocated_by=self.request.user,)
     
     @action(detail=True, methods=['post'])
