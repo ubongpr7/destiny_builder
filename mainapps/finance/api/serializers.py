@@ -702,14 +702,16 @@ class BudgetItemDetailSerializer(serializers.ModelSerializer):
 class BudgetFundingSerializer(serializers.ModelSerializer):
     funding_source = FundingSourceSerializer(read_only=True)
     funding_source_id = serializers.IntegerField(write_only=True)
+    budget_id=serializers.IntegerField(write_only=True)
     
     class Meta:
         model = BudgetFunding
         fields = [
             'id', 'funding_source', 'funding_source_id', 'amount_allocated',
-            'allocation_date', 'notes','budget'
+            'allocation_date', 'notes','budget_id'
         ]
         read_only_fields = ['id', 'allocation_date']
+        
 class DepartmentSerializer(serializers.ModelSerializer):
     """Serializer for Department model"""
     class Meta:
