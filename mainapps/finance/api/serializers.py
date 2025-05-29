@@ -608,7 +608,7 @@ class GrantReportSerializer(serializers.ModelSerializer):
             'next_steps', 'feedback', 'attachments', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'submitted_by', 'created_at', 'updated_at']
-class MiniBudgetFundingSerializer():
+class MiniBudgetFundingSerializer(serializers.ModelSerializer):
     class Meta:
         model = BudgetFunding
         fields = [
