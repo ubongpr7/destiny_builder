@@ -3075,9 +3075,11 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         exclude_ids = self.request.query_params.getlist('exclude_ids')
+        
         if exclude_ids:
             # Convert all values to integers
             exclude_ids = [int(i) for i in exclude_ids if i.isdigit()]
+            print(f"Excluding IDs: {exclude_ids}")
             queryset = queryset.exclude(id__in=exclude_ids)
         return queryset
     
