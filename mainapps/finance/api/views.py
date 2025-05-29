@@ -3074,14 +3074,27 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
-        exclude_ids = self.request.query_params.getlist('exclude_ids')
+        exclude_ids_raw = self.request.query_params.getlist('exclude_ids')
+
+        exclude_ids = []
+        for item in exclude_ids_raw:
+            if ',' in item:
+                exclude_ids.extend(item.split(','))
+            else:
+                exclude_ids.append(item)
+
+        try:
+            exclude_ids = [int(i) for i in exclude_ids if i.strip().isdigit()]
+        except ValueError:
+            exclude_ids = []
 
         if exclude_ids:
-            print(f"Excluding IDs: {exclude_ids}")
-            exclude_ids = [int(i) for i in exclude_ids if i.isdigit()]
             queryset = queryset.exclude(id__in=exclude_ids)
+
         return queryset
-    
+
+
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
