@@ -2150,7 +2150,6 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 'error': 'Invalid funding source ID'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if funding source has enough remaining funds
         if funding_source.amount_remaining < amount:
             return Response({
                 'error': f'Insufficient funds in source. Available: {funding_source.currency.code} {funding_source.amount_remaining:,.2f}'
@@ -2177,7 +2176,56 @@ class BudgetViewSet(viewsets.ModelViewSet):
         })
 
 
+class BudgetFundingViewSet(viewsets.ModelViewSet):
+    queryset = BudgetFunding.objects.all()
+    serializer_class = BudgetFundingSerializer
 
+    def get_queryset(self):
+        """
+        Optionally restricts returned entries by budget ID,
+        e.g., /api/budgetfunding/?budget=123
+        """
+        queryset = super().get_queryset()
+        budget_id = self.request.query_params.get('budget')
+        if budget_id:
+            queryset = queryset.filter(budget_id=budget_id)
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            if 'unique constraint' in str(e).lower():
+                return Response(
+                    {"detail": "This funding source is already allocated to the budget."},
+                    status=status.HTTP_409_CONFLICT
+                )
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            return super().update(request, *args, **kwargs)
+        except Exception as e:
+            if 'unique constraint' in str(e).lower():
+                return Response(
+                    {"detail": "Duplicate allocation detected. Funding source already exists for this budget."},
+                    status=status.HTTP_409_CONFLICT
+                )
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(
+            {"detail": "Funding allocation deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT
+        )
 class OrganizationalExpenseViewSet(viewsets.ModelViewSet):
     queryset = OrganizationalExpense.objects.select_related(
         'budget_item', 'currency', 'submitted_by', 'approved_by'

@@ -707,7 +707,7 @@ class BudgetFundingSerializer(serializers.ModelSerializer):
         model = BudgetFunding
         fields = [
             'id', 'funding_source', 'funding_source_id', 'amount_allocated',
-            'allocation_date', 'notes'
+            'allocation_date', 'notes','budget'
         ]
         read_only_fields = ['id', 'allocation_date']
 class DepartmentSerializer(serializers.ModelSerializer):
@@ -747,7 +747,7 @@ class BudgetFundingDetailSerializer(serializers.ModelSerializer):
 class BudgetSerializer(serializers.ModelSerializer):
     project = ProjectMinimalSerializer(read_only=True)
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    department = DepartmentSerializer
+    department = DepartmentSerializer(read_only=True)
     department_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
