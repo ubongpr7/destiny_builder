@@ -73,7 +73,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(), write_only=True, required=False
     )
     created_by = UserBasicSerializer(read_only=True)
-    transactions=MinimalAccountTransactionSerializer(many=True, read_only=True)
+    # transactions=MinimalAccountTransactionSerializer(many=True, read_only=True)
     # Existing computed fields
     current_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     formatted_balance = serializers.CharField(read_only=True)
