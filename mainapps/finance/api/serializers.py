@@ -56,7 +56,11 @@ class BankAccountMinimalSerializer(serializers.ModelSerializer):
             'id', 'name', 'account_number', 'account_type', 'financial_institution',
             'currency', 'purpose', 'is_active', 'accepts_donations', 'formatted_balance'
         ]
-
+class MinimalAccountTransactionSerializer(serializers.ModelSerializer):
+    """Minimal account transaction info for campaign bank accounts"""
+    class Meta:
+        model = AccountTransaction
+        fields = '__all__'
 class BankAccountSerializer(serializers.ModelSerializer):
     financial_institution = FinancialInstitutionSerializer(read_only=True)
     financial_institution_id = serializers.IntegerField(write_only=True)
@@ -69,7 +73,7 @@ class BankAccountSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(), write_only=True, required=False
     )
     created_by = UserBasicSerializer(read_only=True)
-    
+    transactions=MinimalAccountTransactionSerializer(many=True, read_only=True)
     # Existing computed fields
     current_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     formatted_balance = serializers.CharField(read_only=True)
@@ -1049,15 +1053,15 @@ class FundAllocationSerializer(serializers.ModelSerializer):
     budget_id = serializers.IntegerField(write_only=True)
     allocated_by = UserBasicSerializer(read_only=True)
     approved_by = UserBasicSerializer(read_only=True)
-    approved_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     formatted_amount = serializers.CharField(read_only=True)
     
+
     class Meta:
         model = FundAllocation
         fields = [
             'id', 'source_account', 'source_account_id', 'budget', 'budget_id',
             'amount_allocated', 'allocation_date', 'purpose', 'allocated_by',
-            'approved_by', 'approved_by_id', 'is_active', 'created_at',
+            'approved_by', 'is_active', 'created_at',
             'formatted_amount'
         ]
         read_only_fields = ['id', 'allocated_by', 'created_at']

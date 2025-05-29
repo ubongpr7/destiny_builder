@@ -130,7 +130,6 @@ class BankAccountViewSet(viewsets.ModelViewSet):
         min_balance = self.request.query_params.get('min_balance')
         max_balance = self.request.query_params.get('max_balance')
 
-        # Convert to float safely
         try:
             min_balance = float(min_balance) if min_balance is not None else None
             max_balance = float(max_balance) if max_balance is not None else None
@@ -3412,7 +3411,8 @@ class FundAllocationViewSet(viewsets.ModelViewSet):
     ordering = ['-allocation_date']
     
     def perform_create(self, serializer):
-        serializer.save(authorized_by=self.request.user)
+        print(serializer)
+        serializer.save(allocated_by=self.request.user,)
     
     @action(detail=True, methods=['post'])
     def approve_allocation(self, request, pk=None):

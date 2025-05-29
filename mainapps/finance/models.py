@@ -2257,7 +2257,9 @@ class FundAllocation(models.Model):
     allocated_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
-        related_name='fund_allocations'
+        related_name='fund_allocations',
+        null=True,
+        blank=True
     )
     approved_by = models.ForeignKey(
         User,
