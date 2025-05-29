@@ -3175,8 +3175,8 @@ class BudgetItemViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['budget', 'category']
     search_fields = [ 'description']
-    ordering_fields = ['title', 'allocated_amount', 'spent_amount', 'created_at']
-    ordering = ['title']
+    ordering_fields = [ 'allocated_amount', 'spent_amount', 'created_at']
+    # ordering = ['title']
 
     def get_serializer(self, *args, **kwargs):
         if self.action == 'retrieve' :
@@ -3235,7 +3235,6 @@ class BudgetItemViewSet(viewsets.ModelViewSet):
         
         return Response({
             'budget_item': {
-                'title': budget_item.title,
                 'allocated_amount': float(budget_item.allocated_amount),
                 'spent_amount': float(budget_item.spent_amount),
                 'remaining_amount': float(remaining_amount),
