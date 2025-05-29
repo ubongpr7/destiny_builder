@@ -3072,6 +3072,16 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'total_amount', 'created_at']
     ordering = ['name']
     
+    def get_queryset(self):
+        queryset = FundingSource.objects.select_related('currency', 'created_by')
+
+        exclude_ids = self.request.query_params.getlist('exclude_ids[]') or self.request.query_params.getlist('exclude_ids')
+
+        if exclude_ids:
+            queryset = queryset.exclude(id__in=exclude_ids)
+
+        return queryset
+    
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
