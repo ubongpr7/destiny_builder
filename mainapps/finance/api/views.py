@@ -3110,7 +3110,7 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
                 'budget_title': allocation.budget.title,
                 'budget_id': allocation.budget.id,
                 'amount_allocated': float(allocation.amount_allocated),
-                'allocation_date': allocation.created_at.date(),
+                'allocation_date': allocation.allocation_date.date(),
                 'budget_status': allocation.budget.status
             })
         
