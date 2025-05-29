@@ -1816,7 +1816,7 @@ class Budget(models.Model):
 class BudgetFunding(models.Model):
     """Through model for budget funding sources"""
     budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='budget_funding')
-    funding_source = models.ForeignKey(FundingSource, on_delete=models.CASCADE)
+    funding_source = models.ForeignKey(FundingSource, on_delete=models.CASCADE, related_name='budget_funding')
     amount_allocated = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
