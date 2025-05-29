@@ -629,7 +629,7 @@ class FundingSourceSerializer(serializers.ModelSerializer):
     formatted_amount = serializers.CharField(read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
     is_available_now = serializers.BooleanField(read_only=True)
-    funding_source=MiniBudgetFundingSerializer(read_only=True,many=True)
+    allocations=MiniBudgetFundingSerializer(read_only=True,many=True)
     
     class Meta:
         model = FundingSource
@@ -639,7 +639,7 @@ class FundingSourceSerializer(serializers.ModelSerializer):
             'currency_id', 'amount_allocated', 'available_from', 'available_until', 
             'restrictions', 'is_active', 'created_by', 'created_at', 'updated_at',
             'amount_remaining', 'formatted_amount', 'is_expired', 'is_available_now',
-            'funding_source'
+            'allocations'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 

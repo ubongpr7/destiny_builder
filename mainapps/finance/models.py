@@ -683,7 +683,7 @@ class FundingSource(models.Model):
     def amount_allocated(self):
         """Calculate total allocated from budget funding relationships"""
         try:
-            return self.budget_funding.aggregate(
+            return self.allocations.aggregate(
                 total=Sum('amount_allocated')
             )['total'] or Decimal('0.00')
         except Exception:
@@ -1816,7 +1816,7 @@ class Budget(models.Model):
 class BudgetFunding(models.Model):
     """Through model for budget funding sources"""
     budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='budget_funding')
-    funding_source = models.ForeignKey(FundingSource, on_delete=models.CASCADE, related_name='budget_funding')
+    funding_source = models.ForeignKey(FundingSource, on_delete=models.CASCADE, related_name='allocations')
     amount_allocated = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
