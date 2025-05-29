@@ -124,27 +124,30 @@ class BankAccountViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'account_number', 'purpose']
     ordering_fields = ['name', 'created_at', 'current_balance']
     ordering = ['name']
-    def get_queryset(self):
-        queryset = super().get_queryset()
 
+    def get_queryset(self):
+        base_qs = super().get_queryset()
         min_balance = self.request.query_params.get('min_balance')
         max_balance = self.request.query_params.get('max_balance')
 
-        if min_balance is not None:
-            try:
-                min_balance = float(min_balance)
-                queryset = [acc for acc in queryset if acc.current_balance >= min_balance]
-            except ValueError:
-                pass
+        # Convert to float safely
+        try:
+            min_balance = float(min_balance) if min_balance is not None else None
+            max_balance = float(max_balance) if max_balance is not None else None
+        except ValueError:
+            min_balance = None
+            max_balance = None
 
-        if max_balance is not None:
-            try:
-                max_balance = float(max_balance)
-                queryset = [acc for acc in queryset if acc.current_balance <= max_balance]
-            except ValueError:
-                pass
+        # Filter in Python (temporary list)
+        if min_balance is not None or max_balance is not None:
+            filtered_ids = [
+                acc.pk for acc in base_qs
+                if (min_balance is None or acc.current_balance >= min_balance)
+                and (max_balance is None or acc.current_balance <= max_balance)
+            ]
+            return base_qs.filter(pk__in=filtered_ids)
 
-        return queryset
+        return base_qs
     def perform_create(self, serializer):
         account = serializer.save(created_by=self.request.user)
         # Send notification for new account
