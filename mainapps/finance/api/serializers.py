@@ -608,6 +608,12 @@ class GrantReportSerializer(serializers.ModelSerializer):
             'next_steps', 'feedback', 'attachments', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'submitted_by', 'created_at', 'updated_at']
+class MiniBudgetFundingSerializer():
+    class Meta:
+        model = BudgetFunding
+        fields = [
+            'id', 'amount_allocated', 'allocation_date', 'notes'
+        ]
 
 class FundingSourceSerializer(serializers.ModelSerializer):
     currency = CurrencySerializer(read_only=True)
@@ -623,6 +629,7 @@ class FundingSourceSerializer(serializers.ModelSerializer):
     formatted_amount = serializers.CharField(read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
     is_available_now = serializers.BooleanField(read_only=True)
+    funding_source=MiniBudgetFundingSerializer(read_only=True,many=True)
     
     class Meta:
         model = FundingSource
@@ -631,7 +638,8 @@ class FundingSourceSerializer(serializers.ModelSerializer):
             'campaign_id', 'grant', 'grant_id', 'amount_available', 'currency',
             'currency_id', 'amount_allocated', 'available_from', 'available_until', 
             'restrictions', 'is_active', 'created_by', 'created_at', 'updated_at',
-            'amount_remaining', 'formatted_amount', 'is_expired', 'is_available_now'
+            'amount_remaining', 'formatted_amount', 'is_expired', 'is_available_now',
+            'funding_source'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
@@ -711,7 +719,7 @@ class BudgetFundingSerializer(serializers.ModelSerializer):
             'allocation_date', 'notes','budget_id'
         ]
         read_only_fields = ['id', 'allocation_date']
-        
+
 class DepartmentSerializer(serializers.ModelSerializer):
     """Serializer for Department model"""
     class Meta:
