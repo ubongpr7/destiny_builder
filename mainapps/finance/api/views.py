@@ -3116,7 +3116,7 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
         
         return Response({
             'funding_source': funding_source.name,
-            'total_amount': float(funding_source.total_amount),
+            'total_amount': float(funding_source.amount_available),
             'amount_allocated': float(funding_source.amount_allocated),
             'amount_remaining': float(funding_source.amount_remaining),
             'allocations': allocation_data
