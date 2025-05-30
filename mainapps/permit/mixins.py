@@ -26,7 +26,7 @@ class ActivityTrackingMixin:
             model_name=model_name,
             object_id=object_id,
             instance=instance,
-            details=details
+            details=details,
             async_log=True
         )
     
