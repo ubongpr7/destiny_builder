@@ -3170,7 +3170,7 @@ class FundingSourceViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             'status': 'inactive'
         })
 
-class BudgetItemViewSet(ActivityTrackingMixin,viewsets.ModelViewSet,ActivityTrackingMixin):
+class BudgetItemViewSet(ActivityTrackingMixin,viewsets.ModelViewSet,):
 
     queryset = BudgetItem.objects.select_related('budget', 'created_by')
     serializer_class = BudgetItemSerializer
