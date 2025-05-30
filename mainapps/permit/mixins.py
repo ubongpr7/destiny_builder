@@ -2,7 +2,9 @@
 from django.db import transaction
 from rest_framework.response import Response
 from rest_framework import status
+from mainapps.permit.models_activity.activity_logger import log_user_activity
 from mainapps.permit.models_activity.changes import get_field_changes
+
 from .models import ActivityLog  
 
 class ActivityTrackingMixin:
@@ -18,14 +20,22 @@ class ActivityTrackingMixin:
         object_id = instance.pk
         
         # Create log entry
-        ActivityLog.objects.create(
+        # ActivityLog.objects.create(
+        #     user=user,
+        #     action=action,
+        #     model_name=model_name,
+        #     object_id=object_id,
+        #     details=details
+        # )
+        log_user_activity(
             user=user,
             action=action,
             model_name=model_name,
             object_id=object_id,
-            details=details
+            details=details,
+            instance=instance,
+            async_log=True
         )
-    
     def get_request_metadata(self, request):
         """Extracts common request metadata"""
         return {
