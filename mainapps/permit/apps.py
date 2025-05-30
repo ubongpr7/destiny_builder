@@ -5,3 +5,5 @@ class PermitConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'mainapps.permit'
 
+    def ready(self):
+        import mainapps.permit.signals  

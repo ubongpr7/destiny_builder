@@ -12,6 +12,8 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.db.models import Max
 
+from mainapps.permit.mixins import ActivityTrackingMixin
+
 from ..models import (
     FinancialInstitution, BankAccount, ExchangeRate, DonationCampaign,
     Donation, RecurringDonation, InKindDonation, Grant, GrantReport,
@@ -3168,7 +3170,8 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
             'status': 'inactive'
         })
 
-class BudgetItemViewSet(viewsets.ModelViewSet):
+class BudgetItemViewSet(viewsets.ModelViewSet,ActivityTrackingMixin):
+
     queryset = BudgetItem.objects.select_related('budget', 'created_by')
     serializer_class = BudgetItemSerializer
     permission_classes = [IsAuthenticated]

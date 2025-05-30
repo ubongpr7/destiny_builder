@@ -318,7 +318,6 @@ class UserRoleAssignment(models.Model):
 
 
 
-
 class ActivityLog(models.Model):
     """
     Tracks all user activities
@@ -330,13 +329,12 @@ class ActivityLog(models.Model):
         ('APPROVE', 'Approval'),
         ('CANCEL', 'Cancellation'),
     ]
-
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     action = models.CharField(max_length=200, choices=ACTION_CHOICES)
     model_name = models.CharField(max_length=255)
     object_id = models.PositiveIntegerField()
     timestamp = models.DateTimeField(auto_now_add=True)
     details = models.JSONField(default=dict)
-
+    changes = models.JSONField(default=dict)  
     def __str__(self):
         return f"{self.user} {self.action} {self.model_name} {self.object_id}"
