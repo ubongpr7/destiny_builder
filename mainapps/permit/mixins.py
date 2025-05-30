@@ -1,8 +1,7 @@
 # mixins.py
 from django.db import transaction
-from rest_framework import status
 from rest_framework.response import Response
-
+from rest_framework import status
 from mainapps.permit.models_activity.changes import get_field_changes
 from .models import ActivityLog  
 
@@ -34,69 +33,73 @@ class ActivityTrackingMixin:
             'user_agent': request.META.get('HTTP_USER_AGENT')
         }
     
-    @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        # Call the original create method
+        response = super().create(request, *args, **kwargs)
         
-        # Save instance within transaction
-        instance = serializer.save()
+        # Only log if creation was successful (HTTP 201)
+        if response.status_code == status.HTTP_201_CREATED:
+            instance = self.get_queryset().get(pk=response.data['id'])
+            
+            # Log creation activity
+            metadata = self.get_request_metadata(request)
+            metadata['initial_data'] = request.data
+            metadata['created_data'] = response.data
+            
+            self.log_activity(
+                user=request.user,
+                action='CREATE',
+                instance=instance,
+                details=metadata
+            )
         
-        # Log creation activity
-        metadata = self.get_request_metadata(request)
-        metadata['initial_data'] = request.data
-        metadata['created_data'] = serializer.data
-        
-        self.log_activity(
-            user=request.user,
-            action='CREATE',
-            instance=instance,
-            details=metadata
-        )
-        
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return response
     
-    @transaction.atomic
     def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
+        # Get instance before update
         instance = self.get_object()
         old_data = self.get_serializer(instance).data
         
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+        # Call the original update method
+        response = super().update(request, *args, **kwargs)
         
-        # Save updated instance
-        updated_instance = serializer.save()
+        # Only log if update was successful (HTTP 200)
+        if response.status_code == status.HTTP_200_OK:
+            # Get updated instance
+            updated_instance = self.get_object()
+            
+            # Log update activity
+            metadata = self.get_request_metadata(request)
+            metadata['changes'] = get_field_changes(old_data, response.data)
+            
+            self.log_activity(
+                user=request.user,
+                action='UPDATE',
+                instance=updated_instance,
+                details=metadata
+            )
         
-        # Log update activity
-        new_data = serializer.data
-        metadata = self.get_request_metadata(request)
-        metadata['changes'] = get_field_changes(old_data, new_data)
-        
-        self.log_activity(
-            user=request.user,
-            action='UPDATE',
-            instance=updated_instance,
-            details=metadata
-        )
-        
-        return Response(serializer.data)
+        return response
     
-    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
+        # Get instance before deletion
         instance = self.get_object()
+        deleted_data = self.get_serializer(instance).data
         
-        # Log deletion activity before actual deletion
-        metadata = self.get_request_metadata(request)
-        metadata['deleted_data'] = self.get_serializer(instance).data
+        # Call the original destroy method
+        response = super().destroy(request, *args, **kwargs)
         
-        self.log_activity(
-            user=request.user,
-            action='DELETE',
-            instance=instance,
-            details=metadata
-        )
+        # Only log if deletion was successful (HTTP 204)
+        if response.status_code == status.HTTP_204_NO_CONTENT:
+            # Log deletion activity
+            metadata = self.get_request_metadata(request)
+            metadata['deleted_data'] = deleted_data
+            
+            self.log_activity(
+                user=request.user,
+                action='DELETE',
+                instance=instance,
+                details=metadata
+            )
         
-        # Perform actual deletion
-        return super().destroy(request, *args, **kwargs)
+        return response
