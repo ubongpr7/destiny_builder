@@ -3,7 +3,6 @@ from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 
-from mainapps.permit.models_activity.activity_logger import log_user_activity
 from mainapps.permit.models_activity.changes import get_field_changes
 from .models import ActivityLog  
 
@@ -20,14 +19,12 @@ class ActivityTrackingMixin:
         object_id = instance.pk
         
         # Create log entry
-        log_user_activity(
+        ActivityLog.objects.create(
             user=user,
             action=action,
             model_name=model_name,
             object_id=object_id,
-            instance=instance,
-            details=details,
-            async_log=True
+            details=details
         )
     
     def get_request_metadata(self, request):
