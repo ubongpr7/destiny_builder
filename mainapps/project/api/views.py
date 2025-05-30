@@ -11,6 +11,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import api_view, permission_classes, action
 from django.db.models.functions import TruncDate
 from rest_framework.viewsets import ReadOnlyModelViewSet
+from mainapps.permit.mixins import ActivityTrackingMixin
 from mainapps.user_profile.api.views import BaseReferenceViewSet
 from .notification_utils import (
     notify_project_created, notify_project_status_changed, notify_team_member_added,
@@ -94,7 +95,7 @@ class ProjectCategoryViewSet(BaseReferenceViewSet):
     search_fields = ['name']
 
 
-class ProjectViewSet(viewsets.ModelViewSet):
+class ProjectViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     ViewSet for Project model with additional actions
     """
@@ -468,7 +469,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         })
 
 
-class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
+class ProjectTeamMemberViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     ViewSet for managing project team members
     """
@@ -653,7 +654,7 @@ class ProjectTeamMemberViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(team_member)
         return Response(serializer.data)
 
-class ProjectMilestoneViewSet(viewsets.ModelViewSet):
+class ProjectMilestoneViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     ViewSet for managing project milestones
     """
@@ -1129,7 +1130,7 @@ def get_project_team_members(request):
     return Response(serializer.data)
 
 
-class ProjectExpenseViewSet(viewsets.ModelViewSet):
+class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     ViewSet for managing project expenses
     """
@@ -1475,7 +1476,7 @@ class ProjectExpenseViewSet(viewsets.ModelViewSet):
             'expenses_by_user': expenses_by_user
         })
 
-class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
+class DailyProjectUpdateViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     ViewSet for managing daily project updates
     """
@@ -1700,7 +1701,7 @@ class DailyProjectUpdateViewSet(viewsets.ModelViewSet):
             'updates_by_date': updates_by_date,
         })
 
-class ProjectUpdateMediaViewSet(viewsets.ModelViewSet):
+class ProjectUpdateMediaViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     ViewSet for managing project update media files
     """
@@ -1955,7 +1956,7 @@ def project_model_info(request):
         'relationships': relationships
     })
 
-class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
+class UserRelatedProjectsViewSet(ActivityTrackingMixin,viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for retrieving projects related to the authenticated user.
     """
@@ -1999,7 +2000,7 @@ class UserRelatedProjectsViewSet(viewsets.ReadOnlyModelViewSet):
         context['request'] = self.request
         return context
 
-class BaseMediaViewSet(viewsets.ModelViewSet):
+class BaseMediaViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """Base ViewSet for all media models"""
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]

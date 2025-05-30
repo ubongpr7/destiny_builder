@@ -39,6 +39,9 @@ urlpatterns = [
     path("schema/", Schema.as_view()),
 
     # db sync
+    path('finance/', include("mainapps.finance.urls")),
+
+
 
     path('api/v1/accounts/', include("mainapps.accounts.api.urls")),
     path('project_api/', include("mainapps.project.api.urls",)),

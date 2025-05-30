@@ -50,6 +50,7 @@ class Project(models.Model):
     
     title = models.CharField(max_length=200)
     description = models.TextField()
+    local_currency=models.ForeignKey('common.Currency', on_delete=models.SET_NULL, null=True, related_name='local_projects')
     project_type = models.CharField(max_length=20, choices=PROJECT_TYPE_CHOICES)
     category = models.ForeignKey(ProjectCategory, on_delete=models.SET_NULL, null=True, related_name='projects')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_projects')

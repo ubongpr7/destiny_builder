@@ -48,7 +48,7 @@ from .notification_utils import (
     send_reconciliation_notification
 )
 
-class FinancialInstitutionViewSet(viewsets.ModelViewSet):
+class FinancialInstitutionViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """Enhanced Financial Institution ViewSet with comprehensive management"""
     queryset = FinancialInstitution.objects.all()
     serializer_class = FinancialInstitutionSerializer
@@ -114,7 +114,7 @@ class FinancialInstitutionViewSet(viewsets.ModelViewSet):
         
         return Response(summary)
 
-class BankAccountViewSet(viewsets.ModelViewSet):
+class BankAccountViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """Enhanced Bank Account ViewSet with comprehensive transaction management"""
     queryset = BankAccount.objects.select_related(
         'financial_institution', 'currency', 'primary_signatory', 'created_by'
@@ -363,7 +363,7 @@ class BankAccountViewSet(viewsets.ModelViewSet):
             )
         })
 
-class ExchangeRateViewSet(viewsets.ModelViewSet):
+class ExchangeRateViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """Enhanced Exchange Rate ViewSet with comprehensive currency management"""
     queryset = ExchangeRate.objects.select_related('from_currency', 'to_currency', 'created_by')
     serializer_class = ExchangeRateSerializer
@@ -558,7 +558,7 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
             'historical_rates': historical_data
         })
 
-class DonationCampaignViewSet(viewsets.ModelViewSet):
+class DonationCampaignViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """Enhanced Campaign ViewSet with comprehensive donation type support and bank account management"""
     queryset = DonationCampaign.objects.select_related(
         'target_currency', 'project', 'created_by'
@@ -957,7 +957,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 'error': 'Invalid date format. Use YYYY-MM-DD'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-class DonationViewSet(viewsets.ModelViewSet):
+class DonationViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = Donation.objects.select_related(
         'donor', 'campaign', 'project', 'currency', 'converted_currency',
         'processor_fee_currency', 'deposited_to_account', 'processed_by'
@@ -1128,7 +1128,7 @@ class DonationViewSet(viewsets.ModelViewSet):
             'receipt_number': donation.receipt_number
         })
 
-class RecurringDonationViewSet(viewsets.ModelViewSet):
+class RecurringDonationViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = RecurringDonation.objects.select_related(
         'donor', 'campaign', 'project', 'currency', 'created_by'
     )
@@ -1430,7 +1430,7 @@ class RecurringDonationViewSet(viewsets.ModelViewSet):
             'payment_method_breakdown': list(payment_method_stats)
         })
 
-class GrantViewSet(viewsets.ModelViewSet):
+class GrantViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = Grant.objects.select_related(
         'currency', 'project', 'designated_account', 'created_by', 'managed_by'
     ).prefetch_related('reports')
@@ -2200,7 +2200,7 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
         })
 
 
-class BudgetFundingViewSet(viewsets.ModelViewSet):
+class BudgetFundingViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = BudgetFunding.objects.all()
     serializer_class = BudgetFundingSerializer
     
@@ -2213,7 +2213,7 @@ class BudgetFundingViewSet(viewsets.ModelViewSet):
         return queryset
 
     
-class OrganizationalExpenseViewSet(viewsets.ModelViewSet):
+class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = OrganizationalExpense.objects.select_related(
         'budget_item', 'currency', 'submitted_by', 'approved_by'
     )
@@ -2345,7 +2345,7 @@ class OrganizationalExpenseViewSet(viewsets.ModelViewSet):
         })
 
 # Enhanced Dashboard ViewSet with comprehensive analytics
-class DashboardViewSet(viewsets.ViewSet):
+class DashboardViewSet(ActivityTrackingMixin,viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
@@ -2880,7 +2880,7 @@ class DashboardViewSet(viewsets.ViewSet):
         
         return Response(forecast)
 
-class InKindDonationViewSet(viewsets.ModelViewSet):
+class InKindDonationViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = InKindDonation.objects.select_related(
         'donor', 'campaign', 'project', 'currency', 'processed_by'
     )
@@ -2992,7 +2992,7 @@ class InKindDonationViewSet(viewsets.ModelViewSet):
             'category_breakdown': list(category_stats)
         })
 
-class GrantReportViewSet(viewsets.ModelViewSet):
+class GrantReportViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = GrantReport.objects.select_related('grant', 'submitted_by', 'reviewed_by')
     serializer_class = GrantReportSerializer
     permission_classes = [IsAuthenticated]
@@ -3086,7 +3086,7 @@ class GrantReportViewSet(viewsets.ModelViewSet):
             'reports': serializer.data
         })
 
-class FundingSourceViewSet(viewsets.ModelViewSet):
+class FundingSourceViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = FundingSource.objects.select_related('currency', 'created_by')
     serializer_class = FundingSourceSerializer
     permission_classes = [IsAuthenticated]
@@ -3170,7 +3170,7 @@ class FundingSourceViewSet(viewsets.ModelViewSet):
             'status': 'inactive'
         })
 
-class BudgetItemViewSet(viewsets.ModelViewSet,ActivityTrackingMixin):
+class BudgetItemViewSet(ActivityTrackingMixin,viewsets.ModelViewSet,ActivityTrackingMixin):
 
     queryset = BudgetItem.objects.select_related('budget', 'created_by')
     serializer_class = BudgetItemSerializer
@@ -3251,7 +3251,7 @@ class BudgetItemViewSet(viewsets.ModelViewSet,ActivityTrackingMixin):
             'monthly_spending': list(expense_breakdown)
         })
 
-class AccountTransactionViewSet(viewsets.ModelViewSet):
+class AccountTransactionViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = AccountTransaction.objects.select_related(
         'account', 'original_currency', 'donation', 'grant', 'expense', 'authorized_by'
     )
@@ -3399,7 +3399,7 @@ class AccountTransactionViewSet(viewsets.ModelViewSet):
             'reconciliation_date': timezone.now().date()
         })
 
-class FundAllocationViewSet(viewsets.ModelViewSet):
+class FundAllocationViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = FundAllocation.objects.select_related(
         'from_account', 'to_account', 'project', 'currency', 'authorized_by'
     )
