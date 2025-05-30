@@ -1624,7 +1624,7 @@ class GrantViewSet(viewsets.ModelViewSet):
             'status': grant.status
         })
 
-class BudgetViewSet(viewsets.ModelViewSet):
+class BudgetViewSet(viewsets.ModelViewSet,ActivityTrackingMixin):
     queryset = Budget.objects.select_related(
         'project', 'department', 'currency', 'created_by', 'approved_by'
     ).prefetch_related('items', 'budget_funding__funding_source')
