@@ -23,8 +23,11 @@ class ActivityTrackingMixin:
         log_user_activity(
             user=user,
             action=action,
+            model_name=model_name,
+            object_id=object_id,
             instance=instance,
             details=details
+            async_log=True
         )
     
     def get_request_metadata(self, request):
