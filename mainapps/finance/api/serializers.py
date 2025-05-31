@@ -708,7 +708,8 @@ class BudgetItemDetailSerializer(serializers.ModelSerializer):
             'id', 'category', 'subcategory', 'description', 'budgeted_amount',
             'spent_amount', 'remaining_amount', 'spent_percentage', 'formatted_amount',
             'is_locked', 'approval_required_threshold', 'responsible_person',
-            'notes', 'created_at', 'updated_at', 'organizational_expenses', 'expenses_count'
+            'notes', 'created_at', 'updated_at', 'organizational_expenses', 'expenses_count',
+            'budget'
         ]
     
     def get_expenses_count(self, obj):
