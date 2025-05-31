@@ -1624,6 +1624,21 @@ class GrantViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             'status': grant.status
         })
 
+def formatCurrency(currency_code, amount):
+    """Format currency amount for display in alerts"""
+    try:
+        if currency_code == 'USD':
+            return f"${amount:,.2f}"
+        elif currency_code == 'EUR':
+            return f"€{amount:,.2f}"
+        elif currency_code == 'GBP':
+            return f"£{amount:,.2f}"
+        else:
+            return f"{currency_code} {amount:,.2f}"
+    except:
+        return f"{currency_code} {amount}"
+
+
 class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = Budget.objects.select_related(
         'project', 'department', 'currency', 'created_by', 'approved_by'
@@ -2403,358 +2418,7 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 'filters_applied': {}
             })
     
-    # @action(detail=False, methods=['get'])
-    # def utilization_matrix(self, request):
-    #     """Get detailed budget utilization metrics for visualization and analysis"""
-    #     try:
-    #         # Get query parameters for filtering
-    #         fiscal_year = request.query_params.get('fiscal_year')
-    #         budget_type = request.query_params.get('budget_type')
-    #         status_filter = request.query_params.get('status')
-    #         currency_id = request.query_params.get('currency')
-    #         department_id = request.query_params.get('department')
-            
-    #         # Base queryset
-    #         budgets = self.get_queryset()
-            
-    #         # Apply filters
-    #         if fiscal_year:
-    #             budgets = budgets.filter(fiscal_year=fiscal_year)
-    #         if budget_type:
-    #             budgets = budgets.filter(budget_type=budget_type)
-    #         if status_filter:
-    #             budgets = budgets.filter(status=status_filter)
-    #         if currency_id:
-    #             budgets = budgets.filter(currency_id=currency_id)
-    #         if department_id:
-    #             budgets = budgets.filter(department_id=department_id)
-            
-    #         # Group budgets by currency
-    #         currency_groups = {}
-    #         for budget in budgets.select_related('currency', 'department'):
-    #             currency_id = budget.currency.id if budget.currency else 0
-    #             currency_code = budget.currency.code if budget.currency else 'Unknown'
-    #             currency_name = budget.currency.name if budget.currency else 'Unknown Currency'
-                
-    #             if currency_id not in currency_groups:
-    #                 currency_groups[currency_id] = {
-    #                     'currency_id': currency_id,
-    #                     'currency_code': currency_code,
-    #                     'currency_name': currency_name,
-    #                     'budgets': []
-    #                 }
-    #             currency_groups[currency_id]['budgets'].append(budget)
-            
-    #         # Helper functions
-    #         def safe_divide(numerator, denominator, default=0.0):
-    #             try:
-    #                 if denominator is None or denominator == 0:
-    #                     return default
-    #                 if numerator is None:
-    #                     return default
-    #                 result = float(numerator) / float(denominator)
-    #                 if result != result:  # Check for NaN
-    #                     return default
-    #                 return result
-    #             except (TypeError, ValueError, ZeroDivisionError):
-    #                 return default
-            
-    #         def safe_percentage(numerator, denominator, default=0.0):
-    #             return safe_divide(numerator, denominator, default) * 100
-            
-    #         def calculate_utilization_metrics(currency_budgets, currency_info):
-    #             """Calculate detailed utilization metrics for budgets in a specific currency"""
-                
-    #             # Get budget IDs for expense calculation
-    #             budget_ids = [b.id for b in currency_budgets]
-                
-    #             # Calculate spent amounts by aggregating from OrganizationalExpense
-    #             budget_expenses = {}
-    #             if budget_ids:
-    #                 try:
-    #                     expense_data = OrganizationalExpense.objects.filter(
-    #                         budget_item__budget_id__in=budget_ids,
-    #                         status='paid'
-    #                     ).values('budget_item__budget_id').annotate(
-    #                         total_spent=Sum('amount')
-    #                     )
-                        
-    #                     for item in expense_data:
-    #                         budget_id = item['budget_item__budget_id']
-    #                         spent_amount = item['total_spent']
-    #                         if spent_amount is not None:
-    #                             budget_expenses[budget_id] = float(spent_amount)
-    #                         else:
-    #                             budget_expenses[budget_id] = 0.0
-    #                 except Exception:
-    #                     budget_expenses = {}
-                
-    #             # Calculate daily velocity by aggregating recent expenses
-    #             budget_velocity = {}
-    #             if budget_ids:
-    #                 try:
-    #                     # Get expenses from the last 30 days
-    #                     thirty_days_ago = timezone.now() - timedelta(days=30)
-    #                     recent_expenses = OrganizationalExpense.objects.filter(
-    #                         budget_item__budget_id__in=budget_ids,
-    #                         status='paid',
-    #                         payment_date__gte=thirty_days_ago
-    #                     ).values('budget_item__budget_id').annotate(
-    #                         recent_spent=Sum('amount')
-    #                     )
-                        
-    #                     for item in recent_expenses:
-    #                         budget_id = item['budget_item__budget_id']
-    #                         recent_spent = item['recent_spent']
-    #                         if recent_spent is not None:
-    #                             # Calculate daily velocity (spending per day)
-    #                             budget_velocity[budget_id] = float(recent_spent) / 30.0
-    #                         else:
-    #                             budget_velocity[budget_id] = 0.0
-    #                 except Exception:
-    #                     budget_velocity = {}
-                
-    #             # Process each budget
-    #             utilization_data = []
-    #             for budget in currency_budgets:
-    #                 try:
-    #                     # Basic metrics
-    #                     budget_id = budget.id
-    #                     budget_name = budget.title or f"Budget #{budget_id}"
-    #                     budget_type = budget.get_budget_type_display() if hasattr(budget, 'get_budget_type_display') else budget.budget_type
-    #                     department_name = budget.department.name if budget.department else "No Department"
-                        
-    #                     allocated_amount = float(budget.total_amount) if budget.total_amount else 0.0
-    #                     spent_amount = budget_expenses.get(budget_id, 0.0)
-    #                     remaining_amount = allocated_amount - spent_amount
-                        
-    #                     # Calculate utilization percentage
-    #                     utilization = safe_percentage(spent_amount, allocated_amount, 0.0)
-                        
-    #                     # Calculate days remaining
-    #                     days_remaining = None
-    #                     if budget.end_date:
-    #                         try:
-    #                             days_remaining = (budget.end_date - timezone.now().date()).days
-    #                             days_remaining = max(0, days_remaining)  # Ensure non-negative
-    #                         except Exception:
-    #                             days_remaining = None
-                        
-    #                     # Calculate velocity (spending per day)
-    #                     velocity = budget_velocity.get(budget_id, 0.0)
-    #                     if velocity == 0.0 and days_remaining and days_remaining > 0:
-    #                         # If no recent expenses, estimate based on total spent and time elapsed
-    #                         if budget.start_date:
-    #                             days_elapsed = (timezone.now().date() - budget.start_date).days
-    #                             if days_elapsed > 0:
-    #                                 velocity = safe_divide(spent_amount, days_elapsed, 0.0)
-                        
-    #                     # Calculate efficiency score
-    #                     # Efficiency is based on:
-    #                     # 1. How close utilization is to ideal (proportional to time elapsed)
-    #                     # 2. Consistency of spending (low variance is better)
-    #                     # 3. Alignment with budget timeline
-                        
-    #                     ideal_utilization = 100.0
-    #                     if budget.start_date and budget.end_date and days_remaining is not None:
-    #                         total_days = (budget.end_date - budget.start_date).days
-    #                         days_elapsed = total_days - days_remaining
-    #                         if total_days > 0:
-    #                             ideal_utilization = safe_percentage(days_elapsed, total_days, 0.0)
-                        
-    #                     utilization_variance = abs(utilization - ideal_utilization)
-    #                     efficiency_score = max(0, 100 - utilization_variance)
-                        
-    #                     # Determine status based on utilization and timeline
-    #                     if utilization > 100:
-    #                         status = "critical"  # Over budget
-    #                     elif utilization >= 95:
-    #                         status = "critical"  # At risk of going over
-    #                     elif utilization >= 85:
-    #                         status = "warning"   # High utilization
-    #                     elif utilization < 50 and ideal_utilization > 75:
-    #                         status = "underutilized"  # Significantly under-utilized
-    #                     else:
-    #                         status = "healthy"   # Healthy utilization
-                        
-    #                     # Determine trend based on velocity and remaining budget
-    #                     if velocity > 0 and days_remaining and days_remaining > 0:
-    #                         projected_additional_spend = velocity * days_remaining
-    #                         if (spent_amount + projected_additional_spend) > (allocated_amount * 1.1):
-    #                             trend = "up"  # Trending to exceed budget by 10%+
-    #                         elif (spent_amount + projected_additional_spend) < (allocated_amount * 0.9):
-    #                             trend = "down"  # Trending to underspend by 10%+
-    #                         else:
-    #                             trend = "stable"  # On track to use 90-110% of budget
-    #                     else:
-    #                         trend = "stable"
-                        
-    #                     # Calculate risk score (0-100)
-    #                     # Risk factors:
-    #                     # 1. Over-utilization or severe under-utilization
-    #                     # 2. Short time remaining with high remaining budget
-    #                     # 3. High velocity relative to remaining budget
-    #                     # 4. Trend direction
-                        
-    #                     utilization_risk = 0
-    #                     if utilization > 100:
-    #                         utilization_risk = 100  # Already over budget
-    #                     elif utilization > 90:
-    #                         utilization_risk = 70   # Close to over budget
-    #                     elif utilization < 30 and ideal_utilization > 70:
-    #                         utilization_risk = 60   # Severely under-utilized
-                        
-    #                     timeline_risk = 0
-    #                     if days_remaining is not None and days_remaining < 30:
-    #                         if remaining_amount > (allocated_amount * 0.3):
-    #                             timeline_risk = 80  # Significant funds with little time
-    #                         elif remaining_amount > (allocated_amount * 0.15):
-    #                             timeline_risk = 50  # Moderate funds with little time
-                        
-    #                     velocity_risk = 0
-    #                     if velocity > 0 and days_remaining and days_remaining > 0:
-    #                         if (velocity * days_remaining) > remaining_amount:
-    #                             velocity_risk = 90  # Will exceed remaining budget at current velocity
-                        
-    #                     trend_risk = 0
-    #                     if trend == "up":
-    #                         trend_risk = 60
-                        
-    #                     # Combine risk factors with weights
-    #                     risk_score = (
-    #                         utilization_risk * 0.4 +
-    #                         timeline_risk * 0.3 +
-    #                         velocity_risk * 0.2 +
-    #                         trend_risk * 0.1
-    #                     )
-                        
-    #                     # Add to utilization data
-    #                     utilization_data.append({
-    #                         'id': budget_id,
-    #                         'name': budget_name,
-    #                         'type': budget_type,
-    #                         'department': department_name,
-    #                         'allocated': allocated_amount,
-    #                         'spent': spent_amount,
-    #                         'remaining': remaining_amount,
-    #                         'utilization': round(utilization, 1),
-    #                         'efficiency': round(efficiency_score, 1),
-    #                         'velocity': round(velocity, 2),
-    #                         'days_remaining': days_remaining,
-    #                         'status': status,
-    #                         'trend': trend,
-    #                         'risk_score': round(risk_score, 1),
-    #                         'start_date': budget.start_date.isoformat() if budget.start_date else None,
-    #                         'end_date': budget.end_date.isoformat() if budget.end_date else None,
-    #                         'fiscal_year': budget.fiscal_year,
-    #                     })
-    #                 except Exception as e:
-    #                     # Skip this budget if there's an error
-    #                     continue
-                
-    #             # Sort by risk score (descending)
-    #             utilization_data.sort(key=lambda x: x.get('risk_score', 0), reverse=True)
-                
-    #             # Calculate summary metrics
-    #             total_budgets = len(utilization_data)
-    #             if total_budgets > 0:
-    #                 avg_utilization = sum(item['utilization'] for item in utilization_data) / total_budgets
-    #                 avg_efficiency = sum(item['efficiency'] for item in utilization_data) / total_budgets
-    #                 avg_velocity = sum(item['velocity'] for item in utilization_data) / total_budgets
-    #                 high_risk_count = sum(1 for item in utilization_data if item['risk_score'] >= 70)
-    #             else:
-    #                 avg_utilization = 0.0
-    #                 avg_efficiency = 0.0
-    #                 avg_velocity = 0.0
-    #                 high_risk_count = 0
-                
-    #             # Prepare scatter data for charts
-    #             scatter_data = [
-    #                 {
-    #                     'x': item['utilization'],
-    #                     'y': item['efficiency'],
-    #                     'z': item['allocated'] / 10000,  # Size of bubble (scaled)
-    #                     'name': item['name'],
-    #                     'status': item['status'],
-    #                     'risk_score': item['risk_score'],
-    #                 }
-    #                 for item in utilization_data
-    #             ]
-                
-    #             risk_matrix = [
-    #                 {
-    #                     'name': item['name'],
-    #                     'utilization': item['utilization'],
-    #                     'risk_score': item['risk_score'],
-    #                     'status': item['status'],
-    #                 }
-    #                 for item in utilization_data
-    #             ]
-                
-    #             velocity_data = [
-    #                 {
-    #                     'name': item['name'][:15] + ('...' if len(item['name']) > 15 else ''),
-    #                     'velocity': item['velocity'],
-    #                     'utilization': item['utilization'],
-    #                     'efficiency': item['efficiency'],
-    #                     'index': idx,
-    #                 }
-    #                 for idx, item in enumerate(utilization_data)
-    #             ]
-                
-    #             return {
-    #                 'currency_info': {
-    #                     'id': currency_info['currency_id'],
-    #                     'code': currency_info['currency_code'],
-    #                     'name': currency_info['currency_name'],
-    #                 },
-    #                 'summary': {
-    #                     'total_budgets': total_budgets,
-    #                     'avg_utilization': round(avg_utilization, 1),
-    #                     'avg_efficiency': round(avg_efficiency, 1),
-    #                     'avg_velocity': round(avg_velocity, 2),
-    #                     'high_risk_count': high_risk_count,
-    #                 },
-    #                 'utilization_data': utilization_data,
-    #                 'scatter_data': scatter_data,
-    #                 'risk_matrix': risk_matrix,
-    #                 'velocity_data': velocity_data,
-    #             }
-            
-    #         # Calculate utilization metrics for each currency
-    #         utilization_by_currency = {}
-    #         for currency_id, currency_data in currency_groups.items():
-    #             if currency_data['budgets']:  # Only process currencies with budgets
-    #                 utilization_by_currency[currency_id] = calculate_utilization_metrics(
-    #                     currency_data['budgets'],
-    #                     currency_data
-    #                 )
-            
-    #         # If specific currency requested, return only that currency's data
-    #         if currency_id and int(currency_id) in utilization_by_currency:
-    #             return Response(utilization_by_currency[int(currency_id)])
-            
-    #         # Return all currencies
-    #         return Response({
-    #             'currencies': utilization_by_currency,
-    #             'generated_at': timezone.now().isoformat(),
-    #             'filters_applied': {
-    #                 'fiscal_year': fiscal_year,
-    #                 'budget_type': budget_type,
-    #                 'status': status_filter,
-    #                 'currency': currency_id,
-    #                 'department': department_id,
-    #             }
-    #         })
-            
-    #     except Exception as e:
-    #         # Return a safe fallback response
-    #         return Response({
-    #             'currencies': {},
-    #             'generated_at': timezone.now().isoformat(),
-    #             'error': 'Utilization calculation failed',
-    #             'filters_applied': {}
-    #         })
+    
     @action(detail=False, methods=['get'])
     def utilization_matrix(self, request):
         """Get detailed budget utilization metrics for visualization and analysis"""
@@ -3148,7 +2812,427 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 'error': f'Utilization calculation failed: {str(e)}',
                 'filters_applied': {}
             })
+    @action(detail=False, methods=['get'])
+    def health_indicators(self, request):
+        """Get comprehensive budget health indicators and alerts"""
+        try:
+            # Get query parameters for filtering
+            fiscal_year = request.query_params.get('fiscal_year')
+            budget_type = request.query_params.get('budget_type')
+            status_filter = request.query_params.get('status')
+            currency_id = request.query_params.get('currency')
+            department_id = request.query_params.get('department')
+            
+            # Base queryset
+            budgets = self.get_queryset()
+            
+            # Apply filters (except currency to see all currencies by default)
+            if fiscal_year:
+                budgets = budgets.filter(fiscal_year=fiscal_year)
+            if budget_type:
+                budgets = budgets.filter(budget_type=budget_type)
+            if status_filter:
+                budgets = budgets.filter(status=status_filter)
+            if department_id:
+                budgets = budgets.filter(department_id=department_id)
+            
+            # Only apply currency filter if specifically requested
+            if currency_id:
+                budgets = budgets.filter(currency_id=currency_id)
+            
+            # Group budgets by currency
+            currency_groups = {}
+            for budget in budgets.select_related('currency', 'department'):
+                currency_id_key = budget.currency.id if budget.currency else 0
+                currency_code = budget.currency.code if budget.currency else 'Unknown'
+                currency_name = budget.currency.name if budget.currency else 'Unknown Currency'
+                
+                if currency_id_key not in currency_groups:
+                    currency_groups[currency_id_key] = {
+                        'currency_id': currency_id_key,
+                        'currency_code': currency_code,
+                        'currency_name': currency_name,
+                        'budgets': []
+                    }
+                currency_groups[currency_id_key]['budgets'].append(budget)
+            
+            # Helper functions
+            def safe_divide(numerator, denominator, default=0.0):
+                try:
+                    if denominator is None or denominator == 0:
+                        return default
+                    if numerator is None:
+                        return default
+                    result = float(numerator) / float(denominator)
+                    if result != result:  # Check for NaN
+                        return default
+                    return result
+                except (TypeError, ValueError, ZeroDivisionError):
+                    return default
+            
+            def safe_percentage(numerator, denominator, default=0.0):
+                return safe_divide(numerator, denominator, default) * 100
+            
+            def calculate_health_indicators(currency_budgets, currency_info):
+                """Calculate comprehensive health indicators for budgets in a specific currency"""
+                
+                # Get budget IDs for expense calculation
+                budget_ids = [b.id for b in currency_budgets]
+                
+                # Calculate spent amounts by aggregating from OrganizationalExpense
+                budget_expenses = {}
+                if budget_ids:
+                    try:
+                        expense_data = OrganizationalExpense.objects.filter(
+                            budget_item__budget_id__in=budget_ids,
+                            status='paid'
+                        ).values('budget_item__budget_id').annotate(
+                            total_spent=Sum('amount')
+                        )
+                        
+                        for item in expense_data:
+                            budget_id = item['budget_item__budget_id']
+                            spent_amount = item['total_spent']
+                            if spent_amount is not None:
+                                budget_expenses[budget_id] = float(spent_amount)
+                            else:
+                                budget_expenses[budget_id] = 0.0
+                    except Exception:
+                        budget_expenses = {}
+                
+                # Calculate recent spending trends (last 6 months)
+                monthly_trends = []
+                current_date = timezone.now().date()
+                
+                for i in range(6):
+                    month_start = current_date.replace(day=1) - timedelta(days=i*30)
+                    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+                    
+                    # Get budgets created in this month
+                    month_budgets = [b for b in currency_budgets if b.created_at.date() >= month_start and b.created_at.date() <= month_end]
+                    
+                    # Calculate health metrics for this month
+                    month_health_scores = []
+                    month_issues = 0
+                    month_warnings = 0
+                    
+                    for budget in month_budgets:
+                        allocated = float(budget.total_amount) if budget.total_amount else 0.0
+                        spent = budget_expenses.get(budget.id, 0.0)
+                        utilization = safe_percentage(spent, allocated, 0.0)
+                        
+                        # Calculate health score
+                        if utilization > 100:
+                            health_score = max(0, 100 - (utilization - 100) * 2)  # Penalize overruns heavily
+                            month_issues += 1
+                        elif utilization >= 95:
+                            health_score = 60  # At risk
+                            month_issues += 1
+                        elif utilization >= 85:
+                            health_score = 75  # Warning
+                            month_warnings += 1
+                        elif utilization < 50:
+                            # Check if budget should be more utilized based on timeline
+                            if budget.start_date and budget.end_date:
+                                total_days = (budget.end_date - budget.start_date).days
+                                days_elapsed = (current_date - budget.start_date).days
+                                if total_days > 0:
+                                    expected_utilization = safe_percentage(days_elapsed, total_days, 0.0)
+                                    if expected_utilization > 75 and utilization < 50:
+                                        health_score = 65  # Underutilized
+                                        month_warnings += 1
+                                    else:
+                                        health_score = 85  # Normal early stage
+                                else:
+                                    health_score = 85
+                            else:
+                                health_score = 85
+                        else:
+                            health_score = 90  # Healthy
+                        
+                        month_health_scores.append(health_score)
+                    
+                    avg_health = sum(month_health_scores) / len(month_health_scores) if month_health_scores else 0
+                    
+                    monthly_trends.append({
+                        'month': month_start.strftime('%b'),
+                        'score': round(avg_health, 1),
+                        'issues': month_issues,
+                        'warnings': month_warnings,
+                    })
+                
+                monthly_trends.reverse()  # Oldest to newest
+                
+                # Process each budget for detailed health analysis
+                budget_health_data = []
+                health_alerts = []
+                overall_health_scores = []
+                critical_issues = 0
+                warnings = 0
+                healthy_budgets = 0
+                risk_distribution = {'low': 0, 'medium': 0, 'high': 0}
+                
+                for budget in currency_budgets:
+                    try:
+                        # Basic metrics
+                        budget_id = budget.id
+                        budget_name = budget.title or f"Budget #{budget_id}"
+                        budget_type = budget.get_budget_type_display() if hasattr(budget, 'get_budget_type_display') else budget.budget_type
+                        department_name = budget.department.name if budget.department else "No Department"
+                        
+                        allocated_amount = float(budget.total_amount) if budget.total_amount else 0.0
+                        spent_amount = budget_expenses.get(budget_id, 0.0)
+                        remaining_amount = allocated_amount - spent_amount
+                        
+                        # Calculate utilization percentage
+                        utilization = safe_percentage(spent_amount, allocated_amount, 0.0)
+                        
+                        # Calculate days remaining
+                        days_remaining = None
+                        if budget.end_date:
+                            try:
+                                days_remaining = (budget.end_date - timezone.now().date()).days
+                                days_remaining = max(0, days_remaining)
+                            except Exception:
+                                days_remaining = None
+                        
+                        # Calculate efficiency score
+                        ideal_utilization = 100.0
+                        if budget.start_date and budget.end_date and days_remaining is not None:
+                            total_days = (budget.end_date - budget.start_date).days
+                            days_elapsed = total_days - days_remaining
+                            if total_days > 0:
+                                ideal_utilization = safe_percentage(days_elapsed, total_days, 0.0)
+                        
+                        utilization_variance = abs(utilization - ideal_utilization)
+                        efficiency_score = max(0, 100 - utilization_variance)
+                        
+                        # Calculate health score (0-100)
+                        health_score = 100
+                        
+                        # Utilization health factor
+                        if utilization > 100:
+                            health_score -= (utilization - 100) * 2  # Heavy penalty for overruns
+                        elif utilization >= 95:
+                            health_score -= 25  # At risk
+                        elif utilization >= 85:
+                            health_score -= 10  # Minor concern
+                        elif utilization < 50 and ideal_utilization > 75:
+                            health_score -= 20  # Underutilization concern
+                        
+                        # Timeline health factor
+                        if days_remaining is not None:
+                            if days_remaining < 7 and remaining_amount > (allocated_amount * 0.2):
+                                health_score -= 30  # Critical timeline issue
+                            elif days_remaining < 30 and remaining_amount > (allocated_amount * 0.3):
+                                health_score -= 15  # Timeline concern
+                        
+                        # Efficiency health factor
+                        if efficiency_score < 60:
+                            health_score -= 15
+                        elif efficiency_score < 80:
+                            health_score -= 5
+                        
+                        health_score = max(0, min(100, health_score))
+                        overall_health_scores.append(health_score)
+                        
+                        # Determine status and risk level
+                        if health_score >= 80:
+                            status = "healthy"
+                            risk_level = "low"
+                            healthy_budgets += 1
+                            risk_distribution['low'] += 1
+                        elif health_score >= 60:
+                            status = "warning"
+                            risk_level = "medium"
+                            warnings += 1
+                            risk_distribution['medium'] += 1
+                        else:
+                            status = "critical"
+                            risk_level = "high"
+                            critical_issues += 1
+                            risk_distribution['high'] += 1
+                        
+                        # Generate health alerts
+                        alert_timestamp = timezone.now()
+                        
+                        if utilization > 100:
+                            health_alerts.append({
+                                'id': f"overrun_{budget_id}",
+                                'type': 'critical',
+                                'title': 'Budget Overrun',
+                                'description': f'{budget_name} has exceeded budget by {formatCurrency(currency_info["currency_code"], spent_amount - allocated_amount)}',
+                                'budget': budget_name,
+                                'severity': 'high',
+                                'action': 'Budget reallocation needed',
+                                'timestamp': alert_timestamp.isoformat(),
+                                'budget_id': budget_id,
+                            })
+                        elif utilization >= 95:
+                            health_alerts.append({
+                                'id': f"atrisk_{budget_id}",
+                                'type': 'critical',
+                                'title': 'Budget Depletion Risk',
+                                'description': f'{budget_name} is {utilization:.1f}% utilized with {days_remaining or "unknown"} days remaining',
+                                'budget': budget_name,
+                                'severity': 'high',
+                                'action': 'Immediate review required',
+                                'timestamp': alert_timestamp.isoformat(),
+                                'budget_id': budget_id,
+                            })
+                        elif utilization >= 85:
+                            health_alerts.append({
+                                'id': f"warning_{budget_id}",
+                                'type': 'warning',
+                                'title': 'High Utilization Warning',
+                                'description': f'{budget_name} is {utilization:.1f}% utilized',
+                                'budget': budget_name,
+                                'severity': 'medium',
+                                'action': 'Monitor spending patterns',
+                                'timestamp': alert_timestamp.isoformat(),
+                                'budget_id': budget_id,
+                            })
+                        elif utilization < 50 and ideal_utilization > 75:
+                            health_alerts.append({
+                                'id': f"underutil_{budget_id}",
+                                'type': 'warning',
+                                'title': 'Underutilization Alert',
+                                'description': f'{budget_name} is only {utilization:.1f}% utilized',
+                                'budget': budget_name,
+                                'severity': 'low',
+                                'action': 'Accelerate spending or reallocate',
+                                'timestamp': alert_timestamp.isoformat(),
+                                'budget_id': budget_id,
+                            })
+                        
+                        if efficiency_score >= 95:
+                            health_alerts.append({
+                                'id': f"efficient_{budget_id}",
+                                'type': 'info',
+                                'title': 'High Efficiency Achievement',
+                                'description': f'{budget_name} showing {efficiency_score:.1f}% efficiency rating',
+                                'budget': budget_name,
+                                'severity': 'low',
+                                'action': 'Share best practices',
+                                'timestamp': alert_timestamp.isoformat(),
+                                'budget_id': budget_id,
+                            })
+                        
+                        # Add to budget health data
+                        budget_health_data.append({
+                            'id': budget_id,
+                            'name': budget_name,
+                            'health': round(health_score, 1),
+                            'utilization': round(utilization, 1),
+                            'efficiency': round(efficiency_score, 1),
+                            'risk': round(100 - health_score, 1),  # Inverse of health score
+                            'status': status,
+                            'risk_level': risk_level,
+                            'allocated': allocated_amount,
+                            'spent': spent_amount,
+                            'remaining': remaining_amount,
+                            'days_remaining': days_remaining,
+                            'department': department_name,
+                            'type': budget_type,
+                        })
+                        
+                    except Exception as e:
+                        print(f"Error processing budget {budget.id} for health: {e}")
+                        continue
+                
+                # Sort alerts by severity and timestamp
+                health_alerts.sort(key=lambda x: (
+                    {'critical': 0, 'warning': 1, 'info': 2}[x['type']],
+                    x['timestamp']
+                ), reverse=True)
+                
+                # Limit alerts to most recent 10
+                health_alerts = health_alerts[:10]
+                
+                # Sort budget health data by health score (worst first)
+                budget_health_data.sort(key=lambda x: x['health'])
+                
+                # Calculate overall health score
+                overall_score = sum(overall_health_scores) / len(overall_health_scores) if overall_health_scores else 0
+                
+                # Risk distribution data for charts
+                risk_distribution_data = [
+                    {'name': 'Low Risk', 'value': risk_distribution['low'], 'color': '#10b981'},
+                    {'name': 'Medium Risk', 'value': risk_distribution['medium'], 'color': '#f59e0b'},
+                    {'name': 'High Risk', 'value': risk_distribution['high'], 'color': '#ef4444'},
+                ]
+                
+                return {
+                    'currency_info': {
+                        'id': currency_info['currency_id'],
+                        'code': currency_info['currency_code'],
+                        'name': currency_info['currency_name'],
+                    },
+                    'health_metrics': {
+                        'overall_score': round(overall_score, 1),
+                        'critical_issues': critical_issues,
+                        'warnings': warnings,
+                        'healthy_budgets': healthy_budgets,
+                        'total_budgets': len(currency_budgets),
+                        'risk_distribution': risk_distribution,
+                        'trends': {
+                            'improving': len([b for b in budget_health_data if b['health'] >= 80]),
+                            'stable': len([b for b in budget_health_data if 60 <= b['health'] < 80]),
+                            'declining': len([b for b in budget_health_data if b['health'] < 60]),
+                        }
+                    },
+                    'health_alerts': health_alerts,
+                    'health_trends': monthly_trends,
+                    'risk_distribution_data': risk_distribution_data,
+                    'budget_health_data': budget_health_data,
+                }
+            
+            # Calculate health indicators for each currency
+            health_by_currency = {}
+            for currency_id_key, currency_data in currency_groups.items():
+                if currency_data['budgets']:  # Only process currencies with budgets
+                    try:
+                        health_by_currency[str(currency_id_key)] = calculate_health_indicators(
+                            currency_data['budgets'],
+                            currency_data
+                        )
+                    except Exception as e:
+                        print(f"Error processing health for currency {currency_id_key}: {e}")
+                        continue
+            
+            # If specific currency requested AND it exists, return only that currency's data
+            if currency_id and currency_id in health_by_currency:
+                return Response(health_by_currency[currency_id])
+            
+            # If only one currency exists, return it directly
+            if len(health_by_currency) == 1:
+                single_currency_data = list(health_by_currency.values())[0]
+                return Response(single_currency_data)
+            
+            # Return all currencies
+            return Response({
+                'currencies': health_by_currency,
+                'generated_at': timezone.now().isoformat(),
+                'filters_applied': {
+                    'fiscal_year': fiscal_year,
+                    'budget_type': budget_type,
+                    'status': status_filter,
+                    'currency': currency_id,
+                    'department': department_id,
+                }
+            })
+            
+        except Exception as e:
+            print(f"Major error in health_indicators: {e}")
+            # Return a safe fallback response
+            return Response({
+                'currencies': {},
+                'generated_at': timezone.now().isoformat(),
+                'error': f'Health calculation failed: {str(e)}',
+                'filters_applied': {}
+            })
 
+    
     @action(detail=True, methods=['post'])
     def submit_for_approval(self, request, pk=None):
         """Submit budget for approval"""
