@@ -3398,7 +3398,6 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     ordering = ['-expense_date']
     
     def perform_create(self, serializer):
-        print(serializer.data)
         expense = serializer.save(submitted_by=self.request.user)
         expense.currency=expense.budget_item.budget.currency
         expense.save()
