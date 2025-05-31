@@ -650,6 +650,8 @@ class FundingSourceSerializer(serializers.ModelSerializer):
 class MinimalBudgetSerializer(serializers.ModelSerializer): 
     """Minimal budget info for dropdowns and simple listings"""
     remaining_amount=serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    currency=CurrencySerializer(read_only=True)
+    
     
     class Meta:
         model = Budget
@@ -701,6 +703,7 @@ class BudgetItemDetailSerializer(serializers.ModelSerializer):
     organizational_expenses = OrganizationalExpenseMinimalSerializer(many=True, read_only=True)
     expenses_count = serializers.SerializerMethodField()
     budget=MinimalBudgetSerializer(read_only=True)
+    
     
     class Meta:
         model = BudgetItem
