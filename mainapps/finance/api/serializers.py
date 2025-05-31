@@ -649,10 +649,12 @@ class FundingSourceSerializer(serializers.ModelSerializer):
 
 class MinimalBudgetSerializer(serializers.ModelSerializer): 
     """Minimal budget info for dropdowns and simple listings"""
+    remaining_amount=serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
     class Meta:
         model = Budget
-        fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
-        read_only_fields = ['id', 'title', 'total_amount', 'currency', 'start_date', 'end_date']
+        fields = ['id', 'title','remaining_amount', 'total_amount', 'currency', 'start_date', 'end_date']
+        read_only_fields = ['id', 'remaining_amount','title', 'total_amount', 'currency', 'start_date', 'end_date']
 
 class BudgetItemSerializer(serializers.ModelSerializer):
     budget = MinimalBudgetSerializer(read_only=True)
@@ -698,6 +700,7 @@ class BudgetItemDetailSerializer(serializers.ModelSerializer):
     responsible_person = UserBasicSerializer(read_only=True)
     organizational_expenses = OrganizationalExpenseMinimalSerializer(many=True, read_only=True)
     expenses_count = serializers.SerializerMethodField()
+    budget=MinimalBudgetSerializer(read_only=True)
     
     class Meta:
         model = BudgetItem
