@@ -1645,15 +1645,406 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             return BudgetDetailSerializer
         return BudgetSerializer
 
+    # @action(detail=False, methods=['get'])
+    # def statistics(self, request):
+    #     """Get comprehensive budget statistics for dashboard"""
+    #     try:
+    #         fiscal_year = request.query_params.get('fiscal_year')
+    #         department_id = request.query_params.get('department')
+    #         budget_type = request.query_params.get('budget_type')
+    #         status_filter = request.query_params.get('status')
+            
+    #         # Base queryset
+    #         budgets = self.get_queryset()
+            
+    #         # Apply filters
+    #         if fiscal_year:
+    #             budgets = budgets.filter(fiscal_year=fiscal_year)
+    #         if department_id:
+    #             budgets = budgets.filter(department_id=department_id)
+    #         if budget_type:
+    #             budgets = budgets.filter(budget_type=budget_type)
+    #         if status_filter:
+    #             budgets = budgets.filter(status=status_filter)
+            
+    #         budget_ids = list(budgets.values_list('id', flat=True))
+            
+    #         budget_expenses = {}
+            
+    #         if budget_ids:
+    #             try:
+    #                 expense_data = OrganizationalExpense.objects.filter(
+    #                     budget_item__budget_id__in=budget_ids,
+    #                     status='paid'
+    #                 ).values('budget_item__budget_id').annotate(
+    #                     total_spent=Sum('amount')
+    #                 )
+                    
+    #                 for item in expense_data:
+    #                     budget_id = item['budget_item__budget_id']
+    #                     spent_amount = item['total_spent']
+    #                     if spent_amount is not None:
+    #                         budget_expenses[budget_id] = float(spent_amount)
+    #                     else:
+    #                         budget_expenses[budget_id] = 0.0
+    #             except Exception as e:
+    #                 budget_expenses = {}
+            
+    #         def safe_divide(numerator, denominator, default=0.0):
+    #             try:
+    #                 if denominator is None or denominator == 0:
+    #                     return default
+    #                 if numerator is None:
+    #                     return default
+    #                 result = float(numerator) / float(denominator)
+    #                 if result != result:  # Check for NaN
+    #                     return default
+    #                 return result
+    #             except (TypeError, ValueError, ZeroDivisionError):
+    #                 return default
+            
+    #         # Helper function for safe percentage
+    #         def safe_percentage(numerator, denominator, default=0.0):
+    #             return safe_divide(numerator, denominator, default) * 100
+            
+    #         # Overall Summary
+    #         total_budgets = budgets.count()
+    #         total_allocated = budgets.aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    #         total_allocated = float(total_allocated) if total_allocated else 0.0
+            
+    #         total_spent = sum(budget_expenses.values()) if budget_expenses else 0.0
+    #         total_remaining = total_allocated - total_spent
+    #         avg_utilization = safe_percentage(total_spent, total_allocated, 0.0)
+            
+    #         # Active budgets
+    #         active_budgets = budgets.filter(status='active').count()
+    #         pending_approval = budgets.filter(status='pending_approval').count()
+    #         over_budget_count = 0
+    #         near_limit_count = 0
+            
+    #         # Calculate over-budget and near-limit counts safely
+    #         for budget in budgets:
+    #             try:
+    #                 spent_amount = budget_expenses.get(budget.id, 0.0)
+    #                 budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                    
+    #                 if budget_total > 0:
+    #                     utilization = safe_percentage(spent_amount, budget_total, 0.0)
+    #                     if utilization > 100:
+    #                         over_budget_count += 1
+    #                     elif utilization >= 90:
+    #                         near_limit_count += 1
+    #             except Exception:
+    #                 continue
+            
+    #         summary = {
+    #             'total_budgets': total_budgets,
+    #             'total_allocated': total_allocated,
+    #             'total_spent': total_spent,
+    #             'total_remaining': total_remaining,
+    #             'avg_utilization': round(avg_utilization, 2),
+    #             'active_budgets': active_budgets,
+    #             'pending_approval': pending_approval,
+    #             'over_budget_count': over_budget_count,
+    #             'near_limit_count': near_limit_count,
+    #             'efficiency_score': min(100, max(0, 100 - abs(avg_utilization - 85))),
+    #         }
+            
+    #         # Budget by Type - Calculate manually with safe operations
+    #         by_type = {}
+    #         for budget in budgets.select_related('currency'):
+    #             try:
+    #                 budget_type = budget.budget_type
+    #                 spent_amount = budget_expenses.get(budget.id, 0.0)
+    #                 budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                    
+    #                 if budget_type not in by_type:
+    #                     by_type[budget_type] = {
+    #                         'budget_type': budget_type,
+    #                         'count': 0,
+    #                         'total_amount': 0.0,
+    #                         'spent_amount': 0.0,
+    #                         'avg_utilization': 0.0
+    #                     }
+                    
+    #                 by_type[budget_type]['count'] += 1
+    #                 by_type[budget_type]['total_amount'] += budget_total
+    #                 by_type[budget_type]['spent_amount'] += spent_amount
+    #             except Exception:
+    #                 continue
+            
+    #         # Calculate utilization for each type safely
+    #         for type_data in by_type.values():
+    #             try:
+    #                 type_data['avg_utilization'] = round(
+    #                     safe_percentage(type_data['spent_amount'], type_data['total_amount'], 0.0), 2
+    #                 )
+    #             except Exception:
+    #                 type_data['avg_utilization'] = 0.0
+            
+    #         by_type = list(by_type.values())
+    #         by_type.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
+            
+    #         # Budget by Status - Calculate manually with safe operations
+    #         by_status = {}
+    #         for budget in budgets:
+    #             try:
+    #                 status = budget.status
+    #                 spent_amount = budget_expenses.get(budget.id, 0.0)
+    #                 budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                    
+    #                 if status not in by_status:
+    #                     by_status[status] = {
+    #                         'status': status,
+    #                         'count': 0,
+    #                         'total_amount': 0.0,
+    #                         'spent_amount': 0.0
+    #                     }
+                    
+    #                 by_status[status]['count'] += 1
+    #                 by_status[status]['total_amount'] += budget_total
+    #                 by_status[status]['spent_amount'] += spent_amount
+    #             except Exception:
+    #                 continue
+            
+    #         by_status = list(by_status.values())
+    #         by_status.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
+            
+    #         # Individual Budget Utilization Summary with safe calculations
+    #         utilization_summary = []
+    #         for budget in budgets.select_related('currency', 'department'):
+    #             try:
+    #                 spent_amount = budget_expenses.get(budget.id, 0.0)
+    #                 budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+    #                 utilization_percentage = safe_percentage(spent_amount, budget_total, 0.0)
+                    
+    #                 # Determine health status
+    #                 if utilization_percentage > 100:
+    #                     health_status = 'critical'
+    #                 elif utilization_percentage > 90:
+    #                     health_status = 'warning'
+    #                 elif utilization_percentage < 50:
+    #                     health_status = 'underutilized'
+    #                 else:
+    #                     health_status = 'healthy'
+                    
+    #                 days_remaining = None
+    #                 if budget.end_date:
+    #                     try:
+    #                         days_remaining = (budget.end_date - timezone.now().date()).days
+    #                     except Exception:
+    #                         days_remaining = None
+                    
+    #                 utilization_summary.append({
+    #                     'budget_id': budget.id,
+    #                     'budget_title': budget.title or 'Untitled Budget',
+    #                     'budget_type': budget.get_budget_type_display() if hasattr(budget, 'get_budget_type_display') else budget.budget_type,
+    #                     'department_name': budget.department.name if budget.department else 'No Department',
+    #                     'total_amount': budget_total,
+    #                     'spent_amount': spent_amount,
+    #                     'remaining_amount': budget_total - spent_amount,
+    #                     'utilization_percentage': round(utilization_percentage, 2),
+    #                     'currency_code': budget.currency.code if budget.currency else 'USD',
+    #                     'status': budget.status,
+    #                     'health_status': health_status,
+    #                     'start_date': budget.start_date.isoformat() if budget.start_date else None,
+    #                     'end_date': budget.end_date.isoformat() if budget.end_date else None,
+    #                     'days_remaining': days_remaining,
+    #                     'created_by': budget.created_by.get_full_name if budget.created_by else 'Unknown',
+    #                 })
+    #             except Exception:
+    #                 # Skip problematic budgets
+    #                 continue
+            
+    #         # Sort by utilization percentage descending
+    #         utilization_summary.sort(key=lambda x: x.get('utilization_percentage', 0), reverse=True)
+            
+    #         # Budget by Department with safe calculations
+    #         by_department = {}
+    #         for budget in budgets.filter(department__isnull=False).select_related('department'):
+    #             try:
+    #                 dept_name = budget.department.name
+    #                 dept_id = budget.department.id
+    #                 spent_amount = budget_expenses.get(budget.id, 0.0)
+    #                 budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                    
+    #                 if dept_id not in by_department:
+    #                     by_department[dept_id] = {
+    #                         'department__name': dept_name,
+    #                         'department__id': dept_id,
+    #                         'count': 0,
+    #                         'total_amount': 0.0,
+    #                         'spent_amount': 0.0,
+    #                         'avg_utilization': 0.0
+    #                     }
+                    
+    #                 by_department[dept_id]['count'] += 1
+    #                 by_department[dept_id]['total_amount'] += budget_total
+    #                 by_department[dept_id]['spent_amount'] += spent_amount
+    #             except Exception:
+    #                 continue
+            
+    #         # Calculate utilization for each department safely
+    #         for dept_data in by_department.values():
+    #             try:
+    #                 dept_data['avg_utilization'] = round(
+    #                     safe_percentage(dept_data['spent_amount'], dept_data['total_amount'], 0.0), 2
+    #                 )
+    #             except Exception:
+    #                 dept_data['avg_utilization'] = 0.0
+            
+    #         by_department = list(by_department.values())
+    #         by_department.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
+            
+    #         # Monthly Trends (simplified for safety)
+    #         monthly_trends = []
+    #         try:
+    #             end_date = timezone.now().date()
+                
+    #             for i in range(12):
+    #                 try:
+    #                     month_start = (end_date.replace(day=1) - timedelta(days=i*30)).replace(day=1)
+    #                     month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+                        
+    #                     # Get expenses for this month
+    #                     month_expenses = OrganizationalExpense.objects.filter(
+    #                         expense_date__gte=month_start,
+    #                         expense_date__lte=month_end,
+    #                         status='paid'
+    #                     ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+                        
+    #                     month_expenses = float(month_expenses) if month_expenses else 0.0
+                        
+    #                     # Get budgets created in this month
+    #                     month_budgets = budgets.filter(
+    #                         created_at__date__gte=month_start,
+    #                         created_at__date__lte=month_end
+    #                     ).aggregate(
+    #                         count=Count('id'),
+    #                         total_amount=Sum('total_amount')
+    #                     )
+                        
+    #                     budget_count = month_budgets['count'] or 0
+    #                     budget_amount = float(month_budgets['total_amount']) if month_budgets['total_amount'] else 0.0
+                        
+    #                     monthly_trends.append({
+    #                         'month': month_start.strftime('%Y-%m'),
+    #                         'month_name': month_start.strftime('%B %Y'),
+    #                         'budgets_created': budget_count,
+    #                         'total_allocated': budget_amount,
+    #                         'total_spent': month_expenses,
+    #                         'net_position': budget_amount - month_expenses
+    #                     })
+    #                 except Exception:
+    #                     # Skip problematic months
+    #                     continue
+                
+    #             # Reverse to get chronological order
+    #             monthly_trends.reverse()
+    #         except Exception:
+    #             monthly_trends = []
+            
+    #         # Simplified alerts to avoid complex calculations
+    #         alerts = []
+            
+    #         # Performance Metrics with safe calculations
+    #         performance_metrics = {
+    #             'budget_accuracy': min(100, max(0, 100 - abs(avg_utilization - 85))),
+    #             'approval_efficiency': safe_percentage(
+    #                 budgets.filter(status='approved').count(),
+    #                 max(budgets.filter(status__in=['pending_approval', 'approved']).count(), 1),
+    #                 0.0
+    #             ),
+    #             'spend_velocity': avg_utilization,
+    #             'forecast_precision': 85.0,  # Simplified
+    #             'resource_utilization': avg_utilization,
+    #         }
+            
+    #         # Risk Analysis with safe calculations
+    #         risk_analysis = {
+    #             'overspend_risk': safe_percentage(over_budget_count, max(total_budgets, 1), 0.0),
+    #             'underspend_risk': safe_percentage(
+    #                 len([b for b in utilization_summary if b.get('health_status') == 'underutilized']),
+    #                 max(total_budgets, 1),
+    #                 0.0
+    #             ),
+    #             'timeline_risk': safe_percentage(
+    #                 len([b for b in utilization_summary if b.get('days_remaining') and b['days_remaining'] < 30]),
+    #                 max(total_budgets, 1),
+    #                 0.0
+    #             ),
+    #             'resource_risk': safe_percentage(near_limit_count, max(total_budgets, 1), 0.0),
+    #             'compliance_risk': safe_percentage(pending_approval, max(total_budgets, 1), 0.0),
+    #         }
+           
+    #         return Response({
+    #             'summary': summary,
+    #             'by_type': by_type,
+    #             'by_status': by_status,
+    #             'utilization_summary': utilization_summary,
+    #             'by_department': by_department,
+    #             'monthly_trends': monthly_trends,
+    #             'alerts': alerts,
+    #             'performance_metrics': performance_metrics,
+    #             'risk_analysis': risk_analysis,
+    #             'generated_at': timezone.now().isoformat(),
+    #             'filters_applied': {
+    #                 'fiscal_year': fiscal_year,
+    #                 'department': department_id,
+    #                 'budget_type': budget_type,
+    #                 'status': status_filter,
+    #             }
+    #         })
+            
+    #     except Exception as e:
+    #         # Return a safe fallback response
+    #         return Response({
+    #             'summary': {
+    #                 'total_budgets': 0,
+    #                 'total_allocated': 0.0,
+    #                 'total_spent': 0.0,
+    #                 'total_remaining': 0.0,
+    #                 'avg_utilization': 0.0,
+    #                 'active_budgets': 0,
+    #                 'pending_approval': 0,
+    #                 'over_budget_count': 0,
+    #                 'near_limit_count': 0,
+    #                 'efficiency_score': 0.0,
+    #             },
+    #             'by_type': [],
+    #             'by_status': [],
+    #             'utilization_summary': [],
+    #             'by_department': [],
+    #             'monthly_trends': [],
+    #             'alerts': [],
+    #             'performance_metrics': {
+    #                 'budget_accuracy': 0.0,
+    #                 'approval_efficiency': 0.0,
+    #                 'spend_velocity': 0.0,
+    #                 'forecast_precision': 0.0,
+    #                 'resource_utilization': 0.0,
+    #             },
+    #             'risk_analysis': {
+    #                 'overspend_risk': 0.0,
+    #                 'underspend_risk': 0.0,
+    #                 'timeline_risk': 0.0,
+    #                 'resource_risk': 0.0,
+    #                 'compliance_risk': 0.0,
+    #             },
+    #             'generated_at': timezone.now().isoformat(),
+    #             'error': 'Statistics calculation failed',
+    #             'filters_applied': {}
+    #         })
     @action(detail=False, methods=['get'])
     def statistics(self, request):
-        """Get comprehensive budget statistics for dashboard"""
+        """Get comprehensive budget statistics for dashboard - grouped by currency"""
         try:
             # Get query parameters for filtering
             fiscal_year = request.query_params.get('fiscal_year')
             department_id = request.query_params.get('department')
             budget_type = request.query_params.get('budget_type')
             status_filter = request.query_params.get('status')
+            currency_id = request.query_params.get('currency')  # Add currency filter
             
             # Base queryset
             budgets = self.get_queryset()
@@ -1667,34 +2058,35 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 budgets = budgets.filter(budget_type=budget_type)
             if status_filter:
                 budgets = budgets.filter(status=status_filter)
+            if currency_id:
+                budgets = budgets.filter(currency_id=currency_id)
             
-            # Calculate spent amounts by aggregating from OrganizationalExpense
-            budget_ids = list(budgets.values_list('id', flat=True))
+            # Group budgets by currency
+            currency_groups = {}
+            for budget in budgets.select_related('currency'):
+                currency_code = budget.currency.code if budget.currency else 'Unknown'
+                currency_name = budget.currency.name if budget.currency else 'Unknown Currency'
+                currency_key = budget.currency.id if budget.currency else 0
+                
+                if currency_key not in currency_groups:
+                    currency_groups[currency_key] = {
+                        'currency_id': currency_key,
+                        'currency_code': currency_code,
+                        'currency_name': currency_name,
+                        'budgets': []
+                    }
+                currency_groups[currency_key]['budgets'].append(budget)
             
-            # Initialize budget_expenses dictionary
-            budget_expenses = {}
+            # If specific currency requested, only process that currency
+            if currency_id:
+                currency_groups = {int(currency_id): currency_groups.get(int(currency_id), {
+                    'currency_id': int(currency_id),
+                    'currency_code': 'Unknown',
+                    'currency_name': 'Unknown Currency',
+                    'budgets': []
+                })}
             
-            if budget_ids:
-                try:
-                    expense_data = OrganizationalExpense.objects.filter(
-                        budget_item__budget_id__in=budget_ids,
-                        status='paid'
-                    ).values('budget_item__budget_id').annotate(
-                        total_spent=Sum('amount')
-                    )
-                    
-                    for item in expense_data:
-                        budget_id = item['budget_item__budget_id']
-                        spent_amount = item['total_spent']
-                        if spent_amount is not None:
-                            budget_expenses[budget_id] = float(spent_amount)
-                        else:
-                            budget_expenses[budget_id] = 0.0
-                except Exception as e:
-                    # If expense calculation fails, initialize empty
-                    budget_expenses = {}
-            
-            # Helper function for safe division
+            # Helper functions
             def safe_divide(numerator, denominator, default=0.0):
                 try:
                     if denominator is None or denominator == 0:
@@ -1708,296 +2100,292 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 except (TypeError, ValueError, ZeroDivisionError):
                     return default
             
-            # Helper function for safe percentage
             def safe_percentage(numerator, denominator, default=0.0):
                 return safe_divide(numerator, denominator, default) * 100
             
-            # Overall Summary
-            total_budgets = budgets.count()
-            total_allocated = budgets.aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
-            total_allocated = float(total_allocated) if total_allocated else 0.0
-            
-            total_spent = sum(budget_expenses.values()) if budget_expenses else 0.0
-            total_remaining = total_allocated - total_spent
-            avg_utilization = safe_percentage(total_spent, total_allocated, 0.0)
-            
-            # Active budgets
-            active_budgets = budgets.filter(status='active').count()
-            pending_approval = budgets.filter(status='pending_approval').count()
-            over_budget_count = 0
-            near_limit_count = 0
-            
-            # Calculate over-budget and near-limit counts safely
-            for budget in budgets:
-                try:
-                    spent_amount = budget_expenses.get(budget.id, 0.0)
-                    budget_total = float(budget.total_amount) if budget.total_amount else 0.0
-                    
-                    if budget_total > 0:
-                        utilization = safe_percentage(spent_amount, budget_total, 0.0)
-                        if utilization > 100:
-                            over_budget_count += 1
-                        elif utilization >= 90:
-                            near_limit_count += 1
-                except Exception:
-                    continue
-            
-            summary = {
-                'total_budgets': total_budgets,
-                'total_allocated': total_allocated,
-                'total_spent': total_spent,
-                'total_remaining': total_remaining,
-                'avg_utilization': round(avg_utilization, 2),
-                'active_budgets': active_budgets,
-                'pending_approval': pending_approval,
-                'over_budget_count': over_budget_count,
-                'near_limit_count': near_limit_count,
-                'efficiency_score': min(100, max(0, 100 - abs(avg_utilization - 85))),
-            }
-            
-            # Budget by Type - Calculate manually with safe operations
-            by_type = {}
-            for budget in budgets.select_related('currency'):
-                try:
-                    budget_type = budget.budget_type
-                    spent_amount = budget_expenses.get(budget.id, 0.0)
-                    budget_total = float(budget.total_amount) if budget.total_amount else 0.0
-                    
-                    if budget_type not in by_type:
-                        by_type[budget_type] = {
-                            'budget_type': budget_type,
-                            'count': 0,
-                            'total_amount': 0.0,
-                            'spent_amount': 0.0,
-                            'avg_utilization': 0.0
-                        }
-                    
-                    by_type[budget_type]['count'] += 1
-                    by_type[budget_type]['total_amount'] += budget_total
-                    by_type[budget_type]['spent_amount'] += spent_amount
-                except Exception:
-                    continue
-            
-            # Calculate utilization for each type safely
-            for type_data in by_type.values():
-                try:
-                    type_data['avg_utilization'] = round(
-                        safe_percentage(type_data['spent_amount'], type_data['total_amount'], 0.0), 2
-                    )
-                except Exception:
-                    type_data['avg_utilization'] = 0.0
-            
-            by_type = list(by_type.values())
-            by_type.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
-            
-            # Budget by Status - Calculate manually with safe operations
-            by_status = {}
-            for budget in budgets:
-                try:
-                    status = budget.status
-                    spent_amount = budget_expenses.get(budget.id, 0.0)
-                    budget_total = float(budget.total_amount) if budget.total_amount else 0.0
-                    
-                    if status not in by_status:
-                        by_status[status] = {
-                            'status': status,
-                            'count': 0,
-                            'total_amount': 0.0,
-                            'spent_amount': 0.0
-                        }
-                    
-                    by_status[status]['count'] += 1
-                    by_status[status]['total_amount'] += budget_total
-                    by_status[status]['spent_amount'] += spent_amount
-                except Exception:
-                    continue
-            
-            by_status = list(by_status.values())
-            by_status.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
-            
-            # Individual Budget Utilization Summary with safe calculations
-            utilization_summary = []
-            for budget in budgets.select_related('currency', 'department'):
-                try:
-                    spent_amount = budget_expenses.get(budget.id, 0.0)
-                    budget_total = float(budget.total_amount) if budget.total_amount else 0.0
-                    utilization_percentage = safe_percentage(spent_amount, budget_total, 0.0)
-                    
-                    # Determine health status
-                    if utilization_percentage > 100:
-                        health_status = 'critical'
-                    elif utilization_percentage > 90:
-                        health_status = 'warning'
-                    elif utilization_percentage < 50:
-                        health_status = 'underutilized'
-                    else:
-                        health_status = 'healthy'
-                    
-                    days_remaining = None
-                    if budget.end_date:
-                        try:
-                            days_remaining = (budget.end_date - timezone.now().date()).days
-                        except Exception:
-                            days_remaining = None
-                    
-                    utilization_summary.append({
-                        'budget_id': budget.id,
-                        'budget_title': budget.title or 'Untitled Budget',
-                        'budget_type': budget.get_budget_type_display() if hasattr(budget, 'get_budget_type_display') else budget.budget_type,
-                        'department_name': budget.department.name if budget.department else 'No Department',
-                        'total_amount': budget_total,
-                        'spent_amount': spent_amount,
-                        'remaining_amount': budget_total - spent_amount,
-                        'utilization_percentage': round(utilization_percentage, 2),
-                        'currency_code': budget.currency.code if budget.currency else 'USD',
-                        'status': budget.status,
-                        'health_status': health_status,
-                        'start_date': budget.start_date.isoformat() if budget.start_date else None,
-                        'end_date': budget.end_date.isoformat() if budget.end_date else None,
-                        'days_remaining': days_remaining,
-                        'created_by': budget.created_by.get_full_name if budget.created_by else 'Unknown',
-                    })
-                except Exception:
-                    # Skip problematic budgets
-                    continue
-            
-            # Sort by utilization percentage descending
-            utilization_summary.sort(key=lambda x: x.get('utilization_percentage', 0), reverse=True)
-            
-            # Budget by Department with safe calculations
-            by_department = {}
-            for budget in budgets.filter(department__isnull=False).select_related('department'):
-                try:
-                    dept_name = budget.department.name
-                    dept_id = budget.department.id
-                    spent_amount = budget_expenses.get(budget.id, 0.0)
-                    budget_total = float(budget.total_amount) if budget.total_amount else 0.0
-                    
-                    if dept_id not in by_department:
-                        by_department[dept_id] = {
-                            'department__name': dept_name,
-                            'department__id': dept_id,
-                            'count': 0,
-                            'total_amount': 0.0,
-                            'spent_amount': 0.0,
-                            'avg_utilization': 0.0
-                        }
-                    
-                    by_department[dept_id]['count'] += 1
-                    by_department[dept_id]['total_amount'] += budget_total
-                    by_department[dept_id]['spent_amount'] += spent_amount
-                except Exception:
-                    continue
-            
-            # Calculate utilization for each department safely
-            for dept_data in by_department.values():
-                try:
-                    dept_data['avg_utilization'] = round(
-                        safe_percentage(dept_data['spent_amount'], dept_data['total_amount'], 0.0), 2
-                    )
-                except Exception:
-                    dept_data['avg_utilization'] = 0.0
-            
-            by_department = list(by_department.values())
-            by_department.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
-            
-            # Monthly Trends (simplified for safety)
-            monthly_trends = []
-            try:
-                end_date = timezone.now().date()
+            def calculate_currency_statistics(currency_budgets, currency_info):
+                """Calculate statistics for a specific currency"""
                 
-                for i in range(12):
+                # Get budget IDs for expense calculation
+                budget_ids = [b.id for b in currency_budgets]
+                
+                # Calculate spent amounts by aggregating from OrganizationalExpense
+                budget_expenses = {}
+                if budget_ids:
                     try:
-                        month_start = (end_date.replace(day=1) - timedelta(days=i*30)).replace(day=1)
-                        month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-                        
-                        # Get expenses for this month
-                        month_expenses = OrganizationalExpense.objects.filter(
-                            expense_date__gte=month_start,
-                            expense_date__lte=month_end,
+                        expense_data = OrganizationalExpense.objects.filter(
+                            budget_item__budget_id__in=budget_ids,
                             status='paid'
-                        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-                        
-                        month_expenses = float(month_expenses) if month_expenses else 0.0
-                        
-                        # Get budgets created in this month
-                        month_budgets = budgets.filter(
-                            created_at__date__gte=month_start,
-                            created_at__date__lte=month_end
-                        ).aggregate(
-                            count=Count('id'),
-                            total_amount=Sum('total_amount')
+                        ).values('budget_item__budget_id').annotate(
+                            total_spent=Sum('amount')
                         )
                         
-                        budget_count = month_budgets['count'] or 0
-                        budget_amount = float(month_budgets['total_amount']) if month_budgets['total_amount'] else 0.0
-                        
-                        monthly_trends.append({
-                            'month': month_start.strftime('%Y-%m'),
-                            'month_name': month_start.strftime('%B %Y'),
-                            'budgets_created': budget_count,
-                            'total_allocated': budget_amount,
-                            'total_spent': month_expenses,
-                            'net_position': budget_amount - month_expenses
-                        })
+                        for item in expense_data:
+                            budget_id = item['budget_item__budget_id']
+                            spent_amount = item['total_spent']
+                            if spent_amount is not None:
+                                budget_expenses[budget_id] = float(spent_amount)
+                            else:
+                                budget_expenses[budget_id] = 0.0
                     except Exception:
-                        # Skip problematic months
+                        budget_expenses = {}
+                
+                # Overall Summary for this currency
+                total_budgets = len(currency_budgets)
+                total_allocated = sum(float(b.total_amount) if b.total_amount else 0.0 for b in currency_budgets)
+                total_spent = sum(budget_expenses.values()) if budget_expenses else 0.0
+                total_remaining = total_allocated - total_spent
+                avg_utilization = safe_percentage(total_spent, total_allocated, 0.0)
+                
+                # Status counts
+                active_budgets = len([b for b in currency_budgets if b.status == 'active'])
+                pending_approval = len([b for b in currency_budgets if b.status == 'pending_approval'])
+                over_budget_count = 0
+                near_limit_count = 0
+                
+                # Calculate over-budget and near-limit counts
+                for budget in currency_budgets:
+                    try:
+                        spent_amount = budget_expenses.get(budget.id, 0.0)
+                        budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                        
+                        if budget_total > 0:
+                            utilization = safe_percentage(spent_amount, budget_total, 0.0)
+                            if utilization > 100:
+                                over_budget_count += 1
+                            elif utilization >= 90:
+                                near_limit_count += 1
+                    except Exception:
                         continue
                 
-                # Reverse to get chronological order
-                monthly_trends.reverse()
-            except Exception:
-                monthly_trends = []
+                summary = {
+                    'currency_id': currency_info['currency_id'],
+                    'currency_code': currency_info['currency_code'],
+                    'currency_name': currency_info['currency_name'],
+                    'total_budgets': total_budgets,
+                    'total_allocated': total_allocated,
+                    'total_spent': total_spent,
+                    'total_remaining': total_remaining,
+                    'avg_utilization': round(avg_utilization, 2),
+                    'active_budgets': active_budgets,
+                    'pending_approval': pending_approval,
+                    'over_budget_count': over_budget_count,
+                    'near_limit_count': near_limit_count,
+                    'efficiency_score': min(100, max(0, 100 - abs(avg_utilization - 85))),
+                }
+                
+                # Budget by Type for this currency
+                by_type = {}
+                for budget in currency_budgets:
+                    try:
+                        budget_type = budget.budget_type
+                        spent_amount = budget_expenses.get(budget.id, 0.0)
+                        budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                        
+                        if budget_type not in by_type:
+                            by_type[budget_type] = {
+                                'budget_type': budget_type,
+                                'count': 0,
+                                'total_amount': 0.0,
+                                'spent_amount': 0.0,
+                                'avg_utilization': 0.0
+                            }
+                        
+                        by_type[budget_type]['count'] += 1
+                        by_type[budget_type]['total_amount'] += budget_total
+                        by_type[budget_type]['spent_amount'] += spent_amount
+                    except Exception:
+                        continue
+                
+                # Calculate utilization for each type
+                for type_data in by_type.values():
+                    try:
+                        type_data['avg_utilization'] = round(
+                            safe_percentage(type_data['spent_amount'], type_data['total_amount'], 0.0), 2
+                        )
+                    except Exception:
+                        type_data['avg_utilization'] = 0.0
+                
+                by_type = list(by_type.values())
+                by_type.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
+                
+                # Budget by Status for this currency
+                by_status = {}
+                for budget in currency_budgets:
+                    try:
+                        status = budget.status
+                        spent_amount = budget_expenses.get(budget.id, 0.0)
+                        budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                        
+                        if status not in by_status:
+                            by_status[status] = {
+                                'status': status,
+                                'count': 0,
+                                'total_amount': 0.0,
+                                'spent_amount': 0.0
+                            }
+                        
+                        by_status[status]['count'] += 1
+                        by_status[status]['total_amount'] += budget_total
+                        by_status[status]['spent_amount'] += spent_amount
+                    except Exception:
+                        continue
+                
+                by_status = list(by_status.values())
+                by_status.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
+                
+                # Budget by Department for this currency
+                by_department = {}
+                for budget in [b for b in currency_budgets if b.department]:
+                    try:
+                        dept_name = budget.department.name
+                        dept_id = budget.department.id
+                        spent_amount = budget_expenses.get(budget.id, 0.0)
+                        budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                        
+                        if dept_id not in by_department:
+                            by_department[dept_id] = {
+                                'department__name': dept_name,
+                                'department__id': dept_id,
+                                'count': 0,
+                                'total_amount': 0.0,
+                                'spent_amount': 0.0,
+                                'avg_utilization': 0.0
+                            }
+                        
+                        by_department[dept_id]['count'] += 1
+                        by_department[dept_id]['total_amount'] += budget_total
+                        by_department[dept_id]['spent_amount'] += spent_amount
+                    except Exception:
+                        continue
+                
+                # Calculate utilization for each department
+                for dept_data in by_department.values():
+                    try:
+                        dept_data['avg_utilization'] = round(
+                            safe_percentage(dept_data['spent_amount'], dept_data['total_amount'], 0.0), 2
+                        )
+                    except Exception:
+                        dept_data['avg_utilization'] = 0.0
+                
+                by_department = list(by_department.values())
+                by_department.sort(key=lambda x: x.get('total_amount', 0), reverse=True)
+                
+                # Individual Budget Utilization Summary
+                utilization_summary = []
+                for budget in currency_budgets:
+                    try:
+                        spent_amount = budget_expenses.get(budget.id, 0.0)
+                        budget_total = float(budget.total_amount) if budget.total_amount else 0.0
+                        utilization_percentage = safe_percentage(spent_amount, budget_total, 0.0)
+                        
+                        # Determine health status
+                        if utilization_percentage > 100:
+                            health_status = 'critical'
+                        elif utilization_percentage > 90:
+                            health_status = 'warning'
+                        elif utilization_percentage < 50:
+                            health_status = 'underutilized'
+                        else:
+                            health_status = 'healthy'
+                        
+                        days_remaining = None
+                        if budget.end_date:
+                            try:
+                                days_remaining = (budget.end_date - timezone.now().date()).days
+                            except Exception:
+                                days_remaining = None
+                        
+                        utilization_summary.append({
+                            'budget_id': budget.id,
+                            'budget_title': budget.title or 'Untitled Budget',
+                            'budget_type': budget.get_budget_type_display() if hasattr(budget, 'get_budget_type_display') else budget.budget_type,
+                            'department_name': budget.department.name if budget.department else 'No Department',
+                            'total_amount': budget_total,
+                            'spent_amount': spent_amount,
+                            'remaining_amount': budget_total - spent_amount,
+                            'utilization_percentage': round(utilization_percentage, 2),
+                            'currency_code': currency_info['currency_code'],
+                            'status': budget.status,
+                            'health_status': health_status,
+                            'start_date': budget.start_date.isoformat() if budget.start_date else None,
+                            'end_date': budget.end_date.isoformat() if budget.end_date else None,
+                            'days_remaining': days_remaining,
+                            'created_by': budget.created_by.get_full_name() if budget.created_by else 'Unknown',
+                        })
+                    except Exception:
+                        continue
+                
+                utilization_summary.sort(key=lambda x: x.get('utilization_percentage', 0), reverse=True)
+                
+                # Performance Metrics
+                performance_metrics = {
+                    'budget_accuracy': min(100, max(0, 100 - abs(avg_utilization - 85))),
+                    'approval_efficiency': safe_percentage(
+                        len([b for b in currency_budgets if b.status == 'approved']),
+                        max(len([b for b in currency_budgets if b.status in ['pending_approval', 'approved']]), 1),
+                        0.0
+                    ),
+                    'spend_velocity': avg_utilization,
+                    'forecast_precision': 85.0,
+                    'resource_utilization': avg_utilization,
+                }
+                
+                # Risk Analysis
+                risk_analysis = {
+                    'overspend_risk': safe_percentage(over_budget_count, max(total_budgets, 1), 0.0),
+                    'underspend_risk': safe_percentage(
+                        len([b for b in utilization_summary if b.get('health_status') == 'underutilized']),
+                        max(total_budgets, 1),
+                        0.0
+                    ),
+                    'timeline_risk': safe_percentage(
+                        len([b for b in utilization_summary if b.get('days_remaining') and b['days_remaining'] < 30]),
+                        max(total_budgets, 1),
+                        0.0
+                    ),
+                    'resource_risk': safe_percentage(near_limit_count, max(total_budgets, 1), 0.0),
+                    'compliance_risk': safe_percentage(pending_approval, max(total_budgets, 1), 0.0),
+                }
+                
+                return {
+                    'summary': summary,
+                    'by_type': by_type,
+                    'by_status': by_status,
+                    'utilization_summary': utilization_summary,
+                    'by_department': by_department,
+                    'performance_metrics': performance_metrics,
+                    'risk_analysis': risk_analysis,
+                }
             
-            # Simplified alerts to avoid complex calculations
-            alerts = []
+            # Calculate statistics for each currency
+            currency_statistics = {}
+            for currency_key, currency_data in currency_groups.items():
+                if currency_data['budgets']:  # Only process currencies that have budgets
+                    currency_statistics[currency_key] = calculate_currency_statistics(
+                        currency_data['budgets'], 
+                        currency_data
+                    )
             
-            # Performance Metrics with safe calculations
-            performance_metrics = {
-                'budget_accuracy': min(100, max(0, 100 - abs(avg_utilization - 85))),
-                'approval_efficiency': safe_percentage(
-                    budgets.filter(status='approved').count(),
-                    max(budgets.filter(status__in=['pending_approval', 'approved']).count(), 1),
-                    0.0
-                ),
-                'spend_velocity': avg_utilization,
-                'forecast_precision': 85.0,  # Simplified
-                'resource_utilization': avg_utilization,
-            }
+            # If specific currency requested, return only that currency's data
+            if currency_id and int(currency_id) in currency_statistics:
+                return Response(currency_statistics[int(currency_id)])
             
-            # Risk Analysis with safe calculations
-            risk_analysis = {
-                'overspend_risk': safe_percentage(over_budget_count, max(total_budgets, 1), 0.0),
-                'underspend_risk': safe_percentage(
-                    len([b for b in utilization_summary if b.get('health_status') == 'underutilized']),
-                    max(total_budgets, 1),
-                    0.0
-                ),
-                'timeline_risk': safe_percentage(
-                    len([b for b in utilization_summary if b.get('days_remaining') and b['days_remaining'] < 30]),
-                    max(total_budgets, 1),
-                    0.0
-                ),
-                'resource_risk': safe_percentage(near_limit_count, max(total_budgets, 1), 0.0),
-                'compliance_risk': safe_percentage(pending_approval, max(total_budgets, 1), 0.0),
-            }
-           
+            # If no specific currency requested, return all currencies
+            # For backward compatibility, if only one currency, return its data directly
+            if len(currency_statistics) == 1:
+                return Response(list(currency_statistics.values())[0])
+            
+            # Multiple currencies - return grouped data
             return Response({
-                'summary': summary,
-                'by_type': by_type,
-                'by_status': by_status,
-                'utilization_summary': utilization_summary,
-                'by_department': by_department,
-                'monthly_trends': monthly_trends,
-                'alerts': alerts,
-                'performance_metrics': performance_metrics,
-                'risk_analysis': risk_analysis,
+                'currencies': currency_statistics,
                 'generated_at': timezone.now().isoformat(),
                 'filters_applied': {
                     'fiscal_year': fiscal_year,
                     'department': department_id,
                     'budget_type': budget_type,
                     'status': status_filter,
+                    'currency': currency_id,
                 }
             })
             
@@ -2005,6 +2393,9 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             # Return a safe fallback response
             return Response({
                 'summary': {
+                    'currency_id': None,
+                    'currency_code': 'Unknown',
+                    'currency_name': 'Unknown Currency',
                     'total_budgets': 0,
                     'total_allocated': 0.0,
                     'total_spent': 0.0,
@@ -2020,8 +2411,6 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 'by_status': [],
                 'utilization_summary': [],
                 'by_department': [],
-                'monthly_trends': [],
-                'alerts': [],
                 'performance_metrics': {
                     'budget_accuracy': 0.0,
                     'approval_efficiency': 0.0,
@@ -2040,7 +2429,6 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 'error': 'Statistics calculation failed',
                 'filters_applied': {}
             })
-
     @action(detail=True, methods=['post'])
     def submit_for_approval(self, request, pk=None):
         """Submit budget for approval"""
