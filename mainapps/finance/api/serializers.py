@@ -1252,7 +1252,7 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
                 'currency_code': allocation.source_account.currency.code if allocation.source_account.currency else None,
                 'formatted_amount': f"{allocation.source_account.currency.code} {allocation.amount_allocated:,.2f}" if allocation.source_account.currency else f"{allocation.amount_allocated:,.2f}",
                 'allocation_date': allocation.allocation_date.isoformat(),
-                'allocated_by': allocation.allocated_by.get_full_name() if allocation.allocated_by else 'Unknown',
+                'allocated_by': allocation.allocated_by.get_full_name if allocation.allocated_by else 'Unknown',
                 'purpose': allocation.purpose or '',
                 'is_active': allocation.is_active,
                 'notes': allocation.notes or ''

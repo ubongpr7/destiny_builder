@@ -2299,7 +2299,7 @@ class BudgetViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                             'start_date': budget.start_date.isoformat() if budget.start_date else None,
                             'end_date': budget.end_date.isoformat() if budget.end_date else None,
                             'days_remaining': days_remaining,
-                            'created_by': budget.created_by.get_full_name() if budget.created_by else 'Unknown',
+                            'created_by': budget.created_by.get_full_name if budget.created_by else 'Unknown',
                         })
                     except Exception:
                         continue

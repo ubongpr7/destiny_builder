@@ -2227,7 +2227,7 @@ class Budget(models.Model):
                     'is_over_budget': item.is_over_budget,
                     'is_overcommitted': item.is_overcommitted,
                     'has_pending_requests': item.has_pending_requests,
-                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
+                    'responsible_person': item.responsible_person.get_full_name if item.responsible_person else None
                 })
             return items_data
         except Exception as e:
