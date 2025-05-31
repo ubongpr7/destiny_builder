@@ -2101,7 +2101,7 @@ class Budget(models.Model):
             pass
         
         return alerts
-
+ 
     def get_funding_breakdown(self):
         """Get detailed funding breakdown by source"""
         try:
@@ -2126,31 +2126,43 @@ class Budget(models.Model):
         """Get spending breakdown by budget item category"""
         try:
             from django.db.models import Sum
+            from collections import defaultdict
+            
+            # Get all budget items grouped by category
             categories = self.items.values('category').annotate(
-                total_budgeted=Sum('budgeted_amount'),
-                total_spent=Sum('spent_amount'),
-                total_committed=Sum('committed_amount'),
-                total_pending=Sum('pending_amount')
+                total_budgeted=Sum('budgeted_amount')
             ).order_by('category')
             
             category_data = []
             for category in categories:
+                category_name = category['category']
                 budgeted = category['total_budgeted'] or Decimal('0.00')
-                spent = category['total_spent'] or Decimal('0.00')
-                committed = category['total_committed'] or Decimal('0.00')
-                pending = category['total_pending'] or Decimal('0.00')
-                remaining = budgeted - spent
+                
+                # Get all items in this category
+                category_items = self.items.filter(category=category_name)
+                
+                # Calculate totals by iterating through items and using their properties
+                total_spent = Decimal('0.00')
+                total_committed = Decimal('0.00')
+                total_pending = Decimal('0.00')
+                
+                for item in category_items:
+                    total_spent += item.spent_amount
+                    total_committed += item.committed_amount
+                    total_pending += item.pending_amount
+                
+                remaining = budgeted - total_spent
                 
                 category_data.append({
-                    'category': category['category'],
+                    'category': category_name,
                     'budgeted_amount': str(budgeted),
-                    'spent_amount': str(spent),
-                    'committed_amount': str(committed),
-                    'pending_amount': str(pending),
+                    'spent_amount': str(total_spent),
+                    'committed_amount': str(total_committed),
+                    'pending_amount': str(total_pending),
                     'remaining_amount': str(remaining),
-                    'spent_percentage': float((spent / budgeted) * 100) if budgeted > 0 else 0,
-                    'committed_percentage': float((committed / budgeted) * 100) if budgeted > 0 else 0,
-                    'utilization_percentage': float(((committed + pending) / budgeted) * 100) if budgeted > 0 else 0
+                    'spent_percentage': float((total_spent / budgeted) * 100) if budgeted > 0 else 0,
+                    'committed_percentage': float((total_committed / budgeted) * 100) if budgeted > 0 else 0,
+                    'utilization_percentage': float(((total_committed + total_pending) / budgeted) * 100) if budgeted > 0 else 0
                 })
             return category_data
         except Exception as e:
@@ -2160,15 +2172,14 @@ class Budget(models.Model):
     def get_monthly_spending_trend(self):
         """Get monthly spending trend for this budget"""
         try:
-            from django.db.models import Sum, Q
+            from django.db.models import Sum
             from django.db.models.functions import TruncMonth
-            from datetime import datetime, timedelta
-            
+        
             # Get spending data for the budget period
             start_date = self.start_date
             end_date = min(self.end_date, timezone.now().date())
-            
-            # Get monthly data from organizational expenses
+        
+            # Get monthly data from organizational expenses through budget items
             monthly_data = OrganizationalExpense.objects.filter(
                 budget_item__budget=self,
                 expense_date__gte=start_date,
@@ -2179,7 +2190,7 @@ class Budget(models.Model):
             ).values('month').annotate(
                 total_spent=Sum('amount')
             ).order_by('month')
-            
+        
             trend_data = []
             for month_data in monthly_data:
                 if month_data['month']:
@@ -2227,7 +2238,7 @@ class Budget(models.Model):
                     'is_over_budget': item.is_over_budget,
                     'is_overcommitted': item.is_overcommitted,
                     'has_pending_requests': item.has_pending_requests,
-                    'responsible_person': item.responsible_person.get_full_name if item.responsible_person else None
+                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
                 })
             return items_data
         except Exception as e:
@@ -2270,7 +2281,7 @@ class Budget(models.Model):
             print(f"Error in get_funding_vs_spending_analysis: {e}")
             return {}
     
-    
+       
     def __str__(self):
         return f"{self.title} - {self.get_budget_type_display()} ({self.formatted_amount})"
 

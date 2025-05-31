@@ -1,0 +1,324 @@
+{
+  "id": 1,
+  "title": "Q1 2024 Project Budget",
+  "budget_type": "project",
+  "status": "active",
+  "fiscal_year": "2024",
+  "start_date": "2024-01-01",
+  "end_date": "2024-03-31",
+  "notes": "Quarterly project budget for development activities",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-15T10:30:00Z",
+  "approved_at": "2024-01-05T14:20:00Z",
+
+  // Basic relationships
+  "project": {
+    "id": 1,
+    "name": "Mobile App Development",
+    "code": "MAD-2024"
+  },
+  "department": {
+    "id": 1,
+    "name": "Technology Department"
+  },
+  "currency": {
+    "id": 1,
+    "code": "USD",
+    "name": "US Dollar"
+  },
+  "created_by": {
+    "id": 1,
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john.doe@example.com"
+  },
+  "approved_by": {
+    "id": 2,
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane.smith@example.com"
+  },
+
+  // Core financial amounts
+  "total_amount": "100000.00",
+  "spent_amount": "35000.00",
+  "pending_amount": "15000.00",
+  "committed_amount": "50000.00",
+  "approved_amount": "15000.00",
+  "rejected_amount": "2000.00",
+  "total_requested_amount": "67000.00",
+
+  // Budget allocation calculations
+  "allocated_amount": "95000.00",
+  "unallocated_amount": "5000.00",
+  "remaining_amount": "65000.00",
+  "available_amount": "50000.00",
+  "encumbered_amount": "30000.00",
+  "truly_available_amount": "35000.00",
+
+  // Percentage calculations
+  "spent_percentage": "35.00",
+  "committed_percentage": "50.00",
+  "utilization_percentage": "65.00",
+  "allocation_percentage": "95.00",
+
+  // Variance calculations
+  "variance": "65000.00",
+  "variance_percentage": "65.00",
+  "committed_variance": "50000.00",
+  "allocation_variance": "5000.00",
+
+  // Funding calculations
+  "total_funding_allocated": "100000.00",
+  "funding_gap": "0.00",
+  "funding_surplus": "0.00",
+  "funding_utilization_percentage": "35.00",
+
+  // Status and health indicators
+  "budget_health": "HEALTHY",
+  "utilization_status": "MODERATE",
+  "funding_status": "FULLY_FUNDED",
+
+  // Boolean status checks
+  "is_over_budget": false,
+  "is_overcommitted": false,
+  "is_fully_allocated": true,
+  "is_fully_funded": true,
+  "has_pending_requests": true,
+  "is_expired": false,
+  "is_active_period": true,
+  "can_allocate_more": true,
+  "is_locked_for_allocation": false,
+
+  // Time-based calculations
+  "days_remaining": 45,
+  "days_elapsed": 45,
+  "total_budget_days": 90,
+  "progress_percentage": "50.00",
+  "burn_rate": "777.78",
+  "projected_total_spend": "70000.00",
+  "projected_variance": "30000.00",
+
+  // Efficiency metrics
+  "spending_efficiency": "85.50",
+  "allocation_efficiency": "95.00",
+  "funding_efficiency": "35.00",
+
+  // Item-level aggregations
+  "total_budget_items_count": 8,
+  "active_budget_items_count": 7,
+  "over_budget_items_count": 1,
+  "critical_items_count": 2,
+
+  // Formatted amounts
+  "formatted_amount": "USD 100,000.00",
+  "formatted_spent_amount": "USD 35,000.00",
+  "formatted_committed_amount": "USD 50,000.00",
+  "formatted_pending_amount": "USD 15,000.00",
+  "formatted_remaining_amount": "USD 65,000.00",
+  "formatted_available_amount": "USD 35,000.00",
+  "formatted_variance": "+USD 65,000.00",
+  "formatted_funding_gap": "USD 0.00",
+
+  // Comprehensive summaries
+  "financial_summary": {
+    "total_budget": "100000.00",
+    "allocated": "95000.00",
+    "unallocated": "5000.00",
+    "spent": "35000.00",
+    "committed": "50000.00",
+    "pending": "15000.00",
+    "remaining": "65000.00",
+    "truly_available": "35000.00",
+    "currency": "USD"
+  },
+
+  "performance_metrics": {
+    "spent_percentage": 35.0,
+    "committed_percentage": 50.0,
+    "utilization_percentage": 65.0,
+    "allocation_percentage": 95.0,
+    "spending_efficiency": 85.5,
+    "allocation_efficiency": 95.0,
+    "funding_efficiency": 35.0,
+    "burn_rate": 777.78,
+    "projected_variance": 30000.0
+  },
+
+  "status_summary": {
+    "budget_health": "HEALTHY",
+    "utilization_status": "MODERATE",
+    "funding_status": "FULLY_FUNDED",
+    "is_over_budget": false,
+    "is_overcommitted": false,
+    "is_fully_funded": true,
+    "has_pending_requests": true,
+    "is_expired": false,
+    "days_remaining": 45,
+    "progress_percentage": 50.0
+  },
+
+  // Detailed analysis
+  "funding_breakdown": [
+    {
+      "source_name": "Grant Funding",
+      "source_type": "Grant",
+      "amount_allocated": "75000.00",
+      "currency": "USD",
+      "allocation_date": "2024-01-01",
+      "percentage_of_budget": 75.0,
+      "is_active": true,
+      "notes": "Primary grant funding"
+    },
+    {
+      "source_name": "Internal Funding",
+      "source_type": "Internal",
+      "amount_allocated": "25000.00",
+      "currency": "USD",
+      "allocation_date": "2024-01-01",
+      "percentage_of_budget": 25.0,
+      "is_active": true,
+      "notes": "Internal organizational funding"
+    }
+  ],
+
+  "category_breakdown": [
+    {
+      "category": "Personnel & Salaries",
+      "budgeted_amount": "60000.00",
+      "spent_amount": "20000.00",
+      "committed_amount": "30000.00",
+      "pending_amount": "10000.00",
+      "remaining_amount": "40000.00",
+      "spent_percentage": 33.33,
+      "committed_percentage": 50.0,
+      "utilization_percentage": 66.67
+    },
+    {
+      "category": "Equipment & Supplies",
+      "budgeted_amount": "25000.00",
+      "spent_amount": "10000.00",
+      "committed_amount": "15000.00",
+      "pending_amount": "3000.00",
+      "remaining_amount": "15000.00",
+      "spent_percentage": 40.0,
+      "committed_percentage": 60.0,
+      "utilization_percentage": 72.0
+    }
+  ],
+
+  "expense_summary": [
+    {
+      "expense_type": "equipment",
+      "expense_type_display": "Equipment",
+      "total_amount": 15000.0,
+      "total_count": 5,
+      "formatted_total_amount": "USD 15,000.00",
+      "by_status": {
+        "paid": {
+          "amount": 10000.0,
+          "count": 3,
+          "formatted_amount": "USD 10,000.00"
+        },
+        "approved": {
+          "amount": 5000.0,
+          "count": 2,
+          "formatted_amount": "USD 5,000.00"
+        }
+      }
+    }
+  ],
+
+  "budget_alerts": [
+    {
+      "type": "warning",
+      "message": "2 budget items in critical status",
+      "severity": "medium",
+      "category": "items"
+    },
+    {
+      "type": "info",
+      "message": "Budget expires in 45 days",
+      "severity": "low",
+      "category": "timeline"
+    }
+  ],
+
+  "monthly_spending_trend": [
+    {
+      "month": "2024-01",
+      "spent_amount": "20000.00",
+      "currency": "USD"
+    },
+    {
+      "month": "2024-02",
+      "spent_amount": "15000.00",
+      "currency": "USD"
+    }
+  ],
+
+  "budget_utilization_by_item": [
+    {
+      "id": 1,
+      "category": "Personnel & Salaries",
+      "subcategory": "Full-time Staff",
+      "description": "Development team salaries",
+      "budgeted_amount": "40000.00",
+      "spent_amount": "15000.00",
+      "committed_amount": "20000.00",
+      "pending_amount": "5000.00",
+      "remaining_amount": "25000.00",
+      "truly_available_amount": "15000.00",
+      "spent_percentage": 37.5,
+      "committed_percentage": 50.0,
+      "utilization_percentage": 62.5,
+      "status": "MODERATE",
+      "budget_health": "HEALTHY",
+      "is_locked": false,
+      "is_over_budget": false,
+      "is_overcommitted": false,
+      "has_pending_requests": true,
+      "responsible_person": "John Doe"
+    }
+  ],
+
+  "funding_vs_spending_analysis": {
+    "total_budget": "100000.00",
+    "total_funded": "100000.00",
+    "total_spent": "35000.00",
+    "total_committed": "50000.00",
+    "total_pending": "15000.00",
+    "funding_gap": "0.00",
+    "funding_surplus": "0.00",
+    "spending_vs_funding_ratio": 35.0,
+    "committed_vs_funding_ratio": 50.0,
+    "budget_utilization": 35.0,
+    "committed_utilization": 50.0,
+    "total_utilization": 65.0,
+    "funding_utilization": 100.0,
+    "funding_efficiency": 35.0,
+    "spending_efficiency": 85.5,
+    "is_overspent": false,
+    "is_overcommitted": false,
+    "is_underfunded": false,
+    "has_pending_requests": true,
+    "currency": "USD"
+  },
+
+  // Statistics
+  "items_count": 8,
+  "expenses_count": 25,
+  "paid_expenses_count": 15,
+  "pending_expenses_count": 8,
+  "approved_expenses_count": 2,
+  "funding_sources_count": 2,
+  "allocations_count": 3,
+
+  // Related data (truncated for brevity)
+  "items": [], // Full budget items with detailed properties
+  "budget_funding": [...], // Funding source details
+  "fund_allocations": [...], // Fund allocation details
+  "recent_expenses": [...], // Recent 15 expenses
+  "funding_sources_summary": [...], // Enhanced funding sources
+  "allocation_summary": [...] // Enhanced allocations
+}
