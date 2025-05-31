@@ -1873,7 +1873,7 @@ class BudgetItem(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_budget_items')
     
     # Relationships
-    organizational_expenses = models.ManyToManyField(
+    project_expenses = models.ManyToManyField(
         'project.ProjectExpense', 
         blank=True, 
         related_name='budget_items',
