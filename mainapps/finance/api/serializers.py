@@ -1011,7 +1011,6 @@ class OrganizationalExpenseSerializer(serializers.ModelSerializer):
     budget_item = BudgetItemSerializer
     budget_item_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     currency = CurrencySerializer(read_only=True)
-    currency_id = serializers.IntegerField(write_only=True)
     submitted_by = UserBasicSerializer(read_only=True)
     approved_by = UserBasicSerializer(read_only=True)
     approved_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
@@ -1021,7 +1020,7 @@ class OrganizationalExpenseSerializer(serializers.ModelSerializer):
         model = OrganizationalExpense
         fields = [
             'id', 'budget_item', 'budget_item_id', 'title', 'description',
-            'expense_type', 'amount', 'currency', 'currency_id', 'expense_date',
+            'expense_type', 'amount', 'currency', 'expense_date',
             'vendor', 'receipt', 'status', 'submitted_by', 'approved_by',
             'approved_by_id', 'approved_at', 'notes', 'created_at', 'updated_at',
             'formatted_amount'

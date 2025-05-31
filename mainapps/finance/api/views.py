@@ -3400,6 +3400,8 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     def perform_create(self, serializer):
         print(serializer.data)
         expense = serializer.save(submitted_by=self.request.user)
+        expense.currency=expense.budget_item.budget.currency
+        expense.save()
         
         # Auto-send notification for submission
         if expense.status == 'pending':
