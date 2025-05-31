@@ -3442,7 +3442,7 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             self.log_activity(
                 user=request.user,
                 action='APPROVE',
-                instance=instance,
+                instance=expense,
                 details={
                     'approved_by': request.user.username,
                     'approval_date': timezone.now().isoformat(),
