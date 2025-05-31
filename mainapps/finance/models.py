@@ -1696,12 +1696,12 @@ class Budget(models.Model):
             )
             
             monthly_data = self.items.filter(
-                project_expenses__expense_date__gte=start_date,
-                project_expenses__expense_date__lte=self.end_date
+                organizational_expenses__expense_date__gte=start_date,
+                organizational_expenses__expense_date__lte=self.end_date
             ).annotate(
-                month=TruncMonth('project_expenses__expense_date')
+                month=TruncMonth('organizational_expenses__expense_date')
             ).values('month').annotate(
-                total_spent=Sum('project_expenses__amount')
+                total_spent=Sum('organizational_expenses__amount')
             ).order_by('month')
             
             trend_data = []
@@ -1873,7 +1873,7 @@ class BudgetItem(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_budget_items')
     
     # Relationships
-    project_expenses = models.ManyToManyField(
+    organizational_expenses = models.ManyToManyField(
         'project.ProjectExpense', 
         blank=True, 
         related_name='budget_items',
@@ -1893,7 +1893,7 @@ class BudgetItem(models.Model):
     def spent_amount(self):
         """Calculate total spent from related expenses"""
         try:
-            return self.project_expenses.aggregate(
+            return self.organizational_expenses.aggregate(
                 total=Sum('amount')
             )['total'] or Decimal('0.00')
         except Exception:
