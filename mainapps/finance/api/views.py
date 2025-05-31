@@ -3411,7 +3411,7 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
         """Approve an expense"""
         expense = self.get_object()
         
-        if expense.status != 'pending':
+        if expense.status not in [ 'pending','draft' ] :
             return Response({
                 'error': f'Cannot approve expense with status: {expense.status}'
             }, status=status.HTTP_400_BAD_REQUEST)
@@ -3431,15 +3431,7 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             
             # Update budget item if linked
             if expense.budget_item:
-                expense.budget_item.spent_amount += expense.amount
-                expense.budget_item.save()
-                
-                # Update budget
                 budget = expense.budget_item.budget
-                budget.spent_amount += expense.amount
-                budget.save()
-                
-                # Check budget utilization
                 spent_percentage = budget.spent_percentage
                 if spent_percentage >= 100:
                     send_budget_notification(budget, 'exceeded')
@@ -3447,7 +3439,16 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                     send_budget_notification(budget, 'alert_90')
                 elif spent_percentage >= 80:
                     send_budget_notification(budget, 'alert_80')
-            
+            self.log_activity(
+                user=request.user,
+                action='APPROVE',
+                instance=instance,
+                details={
+                    'approved_by': request.user.username,
+                    'approval_date': timezone.now().isoformat(),
+                    **self.get_request_metadata(request)
+                }
+            )
             send_expense_notification(expense, 'approved', request.user)
         
         serializer = self.get_serializer(expense)
