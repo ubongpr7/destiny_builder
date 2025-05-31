@@ -1333,8 +1333,9 @@ class GrantReport(models.Model):
     def __str__(self):
         return f"{self.grant.title} - {self.title}"
 
+
 class Budget(models.Model):
-    """Budget for projects or the organization with multi-currency support"""
+    """Enhanced Budget model with comprehensive financial tracking"""
     BUDGET_TYPE_CHOICES = [
         ('project', 'Project'),
         ('organizational', 'Organizational'),
@@ -1441,16 +1442,80 @@ class Budget(models.Model):
         
         if self.budget_type == 'project' and not self.project:
             raise ValidationError("Project budgets must have a project assigned.")
+
+    # ============================================================================
+    # CORE AMOUNT CALCULATIONS (from budget items)
+    # ============================================================================
     
     @property
     def spent_amount(self):
-        """Calculate total spent from all budget items"""
+        """Calculate total spent from all budget items (paid expenses only)"""
         try:
-            return self.items.aggregate(
-                total=Sum('spent_amount')
-            )['total'] or Decimal('0.00')
+            total = Decimal('0.00')
+            for item in self.items.all():
+                total += item.spent_amount
+            return total
         except Exception:
             return Decimal('0.00')
+    
+    @property
+    def pending_amount(self):
+        """Calculate total pending from all budget items"""
+        try:
+            total = Decimal('0.00')
+            for item in self.items.all():
+                total += item.pending_amount
+            return total
+        except Exception:
+            return Decimal('0.00')
+    
+    @property
+    def committed_amount(self):
+        """Calculate total committed from all budget items (approved + paid)"""
+        try:
+            total = Decimal('0.00')
+            for item in self.items.all():
+                total += item.committed_amount
+            return total
+        except Exception:
+            return Decimal('0.00')
+    
+    @property
+    def approved_amount(self):
+        """Calculate total approved but not paid from all budget items"""
+        try:
+            total = Decimal('0.00')
+            for item in self.items.all():
+                total += item.approved_amount
+            return total
+        except Exception:
+            return Decimal('0.00')
+    
+    @property
+    def rejected_amount(self):
+        """Calculate total rejected from all budget items"""
+        try:
+            total = Decimal('0.00')
+            for item in self.items.all():
+                total += item.rejected_amount
+            return total
+        except Exception:
+            return Decimal('0.00')
+    
+    @property
+    def total_requested_amount(self):
+        """Calculate total requested from all budget items"""
+        try:
+            total = Decimal('0.00')
+            for item in self.items.all():
+                total += item.total_requested_amount
+            return total
+        except Exception:
+            return Decimal('0.00')
+
+    # ============================================================================
+    # BUDGET ALLOCATION CALCULATIONS
+    # ============================================================================
     
     @property
     def allocated_amount(self):
@@ -1463,12 +1528,6 @@ class Budget(models.Model):
             return Decimal('0.00')
     
     @property
-    def remaining_amount(self):
-        total = self.total_amount or Decimal('0.00')
-        spent = self.spent_amount
-        return total - spent
-    
-    @property
     def unallocated_amount(self):
         """Amount not yet allocated to budget items"""
         total = self.total_amount or Decimal('0.00')
@@ -1476,11 +1535,60 @@ class Budget(models.Model):
         return total - allocated
     
     @property
+    def remaining_amount(self):
+        """Amount remaining after actual spending (paid expenses only)"""
+        total = self.total_amount or Decimal('0.00')
+        spent = self.spent_amount
+        return total - spent
+    
+    @property
+    def available_amount(self):
+        """Amount available considering committed expenses"""
+        total = self.total_amount or Decimal('0.00')
+        committed = self.committed_amount
+        return total - committed
+    
+    @property
+    def encumbered_amount(self):
+        """Amount encumbered by pending and approved expenses"""
+        return self.pending_amount + self.approved_amount
+    
+    @property
+    def truly_available_amount(self):
+        """Amount truly available after all commitments and pending requests"""
+        total = self.total_amount or Decimal('0.00')
+        total_obligations = self.committed_amount + self.pending_amount
+        return total - total_obligations
+
+    # ============================================================================
+    # PERCENTAGE CALCULATIONS
+    # ============================================================================
+    
+    @property
     def spent_percentage(self):
+        """Percentage of budget actually spent (paid expenses only)"""
         total = self.total_amount or Decimal('0.00')
         if total > 0:
             spent = self.spent_amount
             return float((spent / total) * 100)
+        return 0
+    
+    @property
+    def committed_percentage(self):
+        """Percentage of budget committed (approved + paid)"""
+        total = self.total_amount or Decimal('0.00')
+        if total > 0:
+            committed = self.committed_amount
+            return float((committed / total) * 100)
+        return 0
+    
+    @property
+    def utilization_percentage(self):
+        """Total utilization including all pending requests"""
+        total = self.total_amount or Decimal('0.00')
+        if total > 0:
+            total_obligations = self.committed_amount + self.pending_amount
+            return float((total_obligations / total) * 100)
         return 0
     
     @property
@@ -1491,17 +1599,21 @@ class Budget(models.Model):
             allocated = self.allocated_amount
             return float((allocated / total) * 100)
         return 0
+
+    # ============================================================================
+    # VARIANCE CALCULATIONS
+    # ============================================================================
     
     @property
     def variance(self):
-        """Budget variance (positive = under budget, negative = over budget)"""
+        """Budget variance based on actual spending (positive = under budget)"""
         total = self.total_amount or Decimal('0.00')
         spent = self.spent_amount
         return total - spent
     
     @property
     def variance_percentage(self):
-        """Variance as percentage"""
+        """Variance as percentage of budget"""
         total = self.total_amount or Decimal('0.00')
         if total > 0:
             variance = self.variance
@@ -1509,32 +1621,26 @@ class Budget(models.Model):
         return 0
     
     @property
-    def budget_health(self):
-        """Overall budget health status"""
-        percentage = self.spent_percentage
-        if percentage >= 100:
-            return 'OVER_BUDGET'
-        elif percentage >= 90:
-            return 'CRITICAL'
-        elif percentage >= 75:
-            return 'WARNING'
-        elif percentage >= 50:
-            return 'MODERATE'
-        else:
-            return 'HEALTHY'
+    def committed_variance(self):
+        """Variance considering committed expenses"""
+        total = self.total_amount or Decimal('0.00')
+        committed = self.committed_amount
+        return total - committed
     
     @property
-    def is_over_budget(self):
-        """Check if budget is over spent"""
-        return self.spent_amount > (self.total_amount or Decimal('0.00'))
-    
-    @property
-    def is_fully_allocated(self):
-        """Check if all budget is allocated to items"""
-        return self.allocated_amount >= (self.total_amount or Decimal('0.00'))
+    def allocation_variance(self):
+        """Variance in allocation vs total budget"""
+        total = self.total_amount or Decimal('0.00')
+        allocated = self.allocated_amount
+        return total - allocated
+
+    # ============================================================================
+    # FUNDING CALCULATIONS
+    # ============================================================================
     
     @property
     def total_funding_allocated(self):
+        """Total funding allocated from all sources"""
         try:
             return self.budget_funding.aggregate(
                 total=Sum('amount_allocated')
@@ -1551,9 +1657,125 @@ class Budget(models.Model):
         return max(Decimal('0.00'), gap)
     
     @property
+    def funding_surplus(self):
+        """Amount over-funded (if any)"""
+        funded = self.total_funding_allocated
+        total = self.total_amount or Decimal('0.00')
+        surplus = funded - total
+        return max(Decimal('0.00'), surplus)
+    
+    @property
+    def funding_utilization_percentage(self):
+        """Percentage of funding actually utilized"""
+        funded = self.total_funding_allocated
+        if funded > 0:
+            spent = self.spent_amount
+            return float((spent / funded) * 100)
+        return 0
+
+    # ============================================================================
+    # STATUS AND HEALTH CALCULATIONS
+    # ============================================================================
+    
+    @property
+    def budget_health(self):
+        """Overall budget health considering all factors"""
+        utilization = self.utilization_percentage
+        if utilization > 100:
+            return 'OVERCOMMITTED'
+        elif utilization > 95:
+            return 'AT_RISK'
+        elif utilization > 80:
+            return 'CAUTION'
+        elif utilization > 50:
+            return 'HEALTHY'
+        else:
+            return 'UNDERUTILIZED'
+    
+    @property
+    def utilization_status(self):
+        """Budget utilization status based on committed percentage"""
+        percentage = self.committed_percentage
+        if percentage >= 100:
+            return 'OVER_BUDGET'
+        elif percentage >= 90:
+            return 'CRITICAL'
+        elif percentage >= 75:
+            return 'WARNING'
+        elif percentage >= 50:
+            return 'MODERATE'
+        else:
+            return 'NORMAL'
+    
+    @property
+    def funding_status(self):
+        """Funding status assessment"""
+        if self.funding_gap > 0:
+            gap_percentage = float((self.funding_gap / self.total_amount) * 100)
+            if gap_percentage > 50:
+                return 'SEVERELY_UNDERFUNDED'
+            elif gap_percentage > 25:
+                return 'UNDERFUNDED'
+            else:
+                return 'PARTIALLY_FUNDED'
+        elif self.funding_surplus > 0:
+            return 'OVERFUNDED'
+        else:
+            return 'FULLY_FUNDED'
+
+    # ============================================================================
+    # BOOLEAN STATUS CHECKS
+    # ============================================================================
+    
+    @property
+    def is_over_budget(self):
+        """Check if actual spending exceeds budget"""
+        return self.spent_amount > (self.total_amount or Decimal('0.00'))
+    
+    @property
+    def is_overcommitted(self):
+        """Check if committed expenses exceed budget"""
+        return self.committed_amount > (self.total_amount or Decimal('0.00'))
+    
+    @property
+    def is_fully_allocated(self):
+        """Check if all budget is allocated to items"""
+        return self.allocated_amount >= (self.total_amount or Decimal('0.00'))
+    
+    @property
     def is_fully_funded(self):
         """Check if budget is fully funded"""
         return self.total_funding_allocated >= (self.total_amount or Decimal('0.00'))
+    
+    @property
+    def has_pending_requests(self):
+        """Check if there are pending expense requests"""
+        return self.pending_amount > Decimal('0.00')
+    
+    @property
+    def is_expired(self):
+        """Check if budget period has ended"""
+        return timezone.now().date() > self.end_date
+    
+    @property
+    def is_active_period(self):
+        """Check if budget is in active period"""
+        today = timezone.now().date()
+        return self.start_date <= today <= self.end_date
+    
+    @property
+    def can_allocate_more(self):
+        """Check if more budget can be allocated"""
+        return self.unallocated_amount > 0 and not self.is_locked_for_allocation
+    
+    @property
+    def is_locked_for_allocation(self):
+        """Check if budget is locked for new allocations"""
+        return self.status in ['completed', 'cancelled'] or self.is_expired
+
+    # ============================================================================
+    # TIME-BASED CALCULATIONS
+    # ============================================================================
     
     @property
     def days_remaining(self):
@@ -1565,60 +1787,166 @@ class Budget(models.Model):
         return 0
     
     @property
-    def is_expired(self):
-        """Check if budget period has ended"""
-        return timezone.now().date() > self.end_date
+    def days_elapsed(self):
+        """Days elapsed since budget start"""
+        if self.start_date:
+            today = timezone.now().date()
+            if today >= self.start_date:
+                return (today - self.start_date).days
+        return 0
+    
+    @property
+    def total_budget_days(self):
+        """Total days in budget period"""
+        if self.start_date and self.end_date:
+            return (self.end_date - self.start_date).days
+        return 0
     
     @property
     def progress_percentage(self):
         """Time progress percentage"""
-        if self.start_date and self.end_date:
-            today = timezone.now().date()
-            total_days = (self.end_date - self.start_date).days
-            if total_days > 0:
-                elapsed_days = (today - self.start_date).days
-                return min(max(float((elapsed_days / total_days) * 100), 0), 100)
+        total_days = self.total_budget_days
+        if total_days > 0:
+            elapsed_days = self.days_elapsed
+            return min(max(float((elapsed_days / total_days) * 100), 0), 100)
         return 0
     
     @property
     def burn_rate(self):
         """Daily spending rate"""
-        if self.start_date:
-            today = timezone.now().date()
-            days_elapsed = (today - self.start_date).days
-            if days_elapsed > 0:
-                return self.spent_amount / days_elapsed
+        days_elapsed = self.days_elapsed
+        if days_elapsed > 0:
+            return self.spent_amount / days_elapsed
         return Decimal('0.00')
     
     @property
     def projected_total_spend(self):
         """Projected total spend based on current burn rate"""
         burn_rate = self.burn_rate
-        if burn_rate > 0 and self.end_date:
-            total_days = (self.end_date - self.start_date).days
+        total_days = self.total_budget_days
+        if burn_rate > 0 and total_days > 0:
             return burn_rate * total_days
         return self.spent_amount
     
     @property
+    def projected_variance(self):
+        """Projected variance at budget end"""
+        total = self.total_amount or Decimal('0.00')
+        projected = self.projected_total_spend
+        return total - projected
+
+    # ============================================================================
+    # EFFICIENCY AND PERFORMANCE METRICS
+    # ============================================================================
+    
+    @property
+    def spending_efficiency(self):
+        """Spending efficiency score (0-100)"""
+        if self.total_amount > 0:
+            # Ideal spending should match time progress
+            time_progress = self.progress_percentage / 100
+            spending_progress = self.spent_percentage / 100
+            
+            if time_progress > 0:
+                efficiency = min(spending_progress / time_progress, 2.0)  # Cap at 200%
+                return max(0, 100 - abs(100 - (efficiency * 100)))
+        return 0
+    
+    @property
+    def allocation_efficiency(self):
+        """How efficiently budget is allocated"""
+        if self.total_amount > 0:
+            return min(float((self.allocated_amount / self.total_amount) * 100), 100)
+        return 0
+    
+    @property
+    def funding_efficiency(self):
+        """How efficiently funding is utilized"""
+        if self.total_funding_allocated > 0:
+            return float((self.spent_amount / self.total_funding_allocated) * 100)
+        return 0
+
+    # ============================================================================
+    # ITEM-LEVEL AGGREGATIONS
+    # ============================================================================
+    
+    @property
+    def total_budget_items_count(self):
+        """Total number of budget items"""
+        return self.items.count()
+    
+    @property
+    def active_budget_items_count(self):
+        """Number of active (not locked) budget items"""
+        return self.items.filter(is_locked=False).count()
+    
+    @property
+    def over_budget_items_count(self):
+        """Number of budget items that are over budget"""
+        count = 0
+        for item in self.items.all():
+            if item.is_over_budget:
+                count += 1
+        return count
+    
+    @property
+    def critical_items_count(self):
+        """Number of budget items in critical status"""
+        count = 0
+        for item in self.items.all():
+            if item.utilization_status in ['CRITICAL', 'OVER_BUDGET']:
+                count += 1
+        return count
+
+    # ============================================================================
+    # FORMATTING PROPERTIES
+    # ============================================================================
+    
+    @property
     def formatted_amount(self):
+        """Formatted total amount with currency"""
         if self.currency:
             return f"{self.currency.code} {self.total_amount:,.2f}"
         return f"{self.total_amount:,.2f}"
     
     @property
     def formatted_spent_amount(self):
+        """Formatted spent amount with currency"""
         if self.currency:
             return f"{self.currency.code} {self.spent_amount:,.2f}"
         return f"{self.spent_amount:,.2f}"
     
     @property
+    def formatted_committed_amount(self):
+        """Formatted committed amount with currency"""
+        if self.currency:
+            return f"{self.currency.code} {self.committed_amount:,.2f}"
+        return f"{self.committed_amount:,.2f}"
+    
+    @property
+    def formatted_pending_amount(self):
+        """Formatted pending amount with currency"""
+        if self.currency:
+            return f"{self.currency.code} {self.pending_amount:,.2f}"
+        return f"{self.pending_amount:,.2f}"
+    
+    @property
     def formatted_remaining_amount(self):
+        """Formatted remaining amount with currency"""
         if self.currency:
             return f"{self.currency.code} {self.remaining_amount:,.2f}"
         return f"{self.remaining_amount:,.2f}"
     
     @property
+    def formatted_available_amount(self):
+        """Formatted available amount with currency"""
+        if self.currency:
+            return f"{self.currency.code} {self.truly_available_amount:,.2f}"
+        return f"{self.truly_available_amount:,.2f}"
+    
+    @property
     def formatted_variance(self):
+        """Formatted variance with currency and sign"""
         variance = self.variance
         sign = "+" if variance >= 0 else ""
         if self.currency:
@@ -1626,183 +1954,147 @@ class Budget(models.Model):
         return f"{sign}{variance:,.2f}"
     
     @property
-    def budget_summary(self):
-        """Comprehensive budget summary"""
+    def formatted_funding_gap(self):
+        """Formatted funding gap with currency"""
+        if self.currency:
+            return f"{self.currency.code} {self.funding_gap:,.2f}"
+        return f"{self.funding_gap:,.2f}"
+
+    # ============================================================================
+    # COMPREHENSIVE SUMMARY PROPERTIES
+    # ============================================================================
+    
+    @property
+    def financial_summary(self):
+        """Comprehensive financial summary"""
         return {
             'total_budget': self.total_amount,
             'allocated': self.allocated_amount,
+            'unallocated': self.unallocated_amount,
             'spent': self.spent_amount,
+            'committed': self.committed_amount,
+            'pending': self.pending_amount,
             'remaining': self.remaining_amount,
-            'funded': self.total_funding_allocated,
-            'funding_gap': self.funding_gap,
-            'spent_percentage': self.spent_percentage,
-            'allocation_percentage': self.allocation_percentage,
-            'health_status': self.budget_health,
-            'days_remaining': self.days_remaining,
+            'truly_available': self.truly_available_amount,
             'currency': self.currency.code if self.currency else None
         }
     
-    # RESTORED METHODS - These were missing and causing the error
-    def get_funding_breakdown(self):
-        """Get detailed funding breakdown by source"""
-        try:
-            funding_data = []
-            for funding in self.budget_funding.select_related('funding_source', 'funding_source__currency'):
-                funding_data.append({
-                    'source_name': funding.funding_source.name,
-                    'source_type': funding.funding_source.get_funding_type_display(),
-                    'amount_allocated': str(funding.amount_allocated),
-                    'currency': funding.funding_source.currency.code if funding.funding_source.currency else None,
-                    'allocation_date': funding.allocation_date.isoformat() if funding.allocation_date else None,
-                    'percentage_of_budget': float((funding.amount_allocated / self.total_amount) * 100) if self.total_amount > 0 else 0
-                })
-            return funding_data
-        except Exception:
-            return []
+    @property
+    def performance_metrics(self):
+        """Performance and efficiency metrics"""
+        return {
+            'spent_percentage': self.spent_percentage,
+            'committed_percentage': self.committed_percentage,
+            'utilization_percentage': self.utilization_percentage,
+            'allocation_percentage': self.allocation_percentage,
+            'spending_efficiency': self.spending_efficiency,
+            'allocation_efficiency': self.allocation_efficiency,
+            'funding_efficiency': self.funding_efficiency,
+            'burn_rate': float(self.burn_rate),
+            'projected_variance': float(self.projected_variance)
+        }
     
-    def get_spending_by_category(self):
-        """Get spending breakdown by budget item category"""
-        try:
-            from django.db.models import Sum
-            categories = self.items.values('category').annotate(
-                total_budgeted=Sum('budgeted_amount'),
-                total_spent=Sum('spent_amount')
-            ).order_by('category')
-            
-            category_data = []
-            for category in categories:
-                category_data.append({
-                    'category': category['category'],
-                    'budgeted_amount': str(category['total_budgeted'] or Decimal('0.00')),
-                    'spent_amount': str(category['total_spent'] or Decimal('0.00')),
-                    'remaining_amount': str((category['total_budgeted'] or Decimal('0.00')) - (category['total_spent'] or Decimal('0.00'))),
-                    'spent_percentage': float(((category['total_spent'] or Decimal('0.00')) / (category['total_budgeted'] or Decimal('1.00'))) * 100) if category['total_budgeted'] and category['total_budgeted'] > 0 else 0
-                })
-            return category_data
-        except Exception:
-            return []
-    
-    def get_monthly_spending_trend(self):
-        """Get monthly spending trend for this budget"""
-        try:
-            from django.db.models import Sum
-            from django.db.models.functions import TruncMonth
-            from datetime import datetime, timedelta
-            
-            # Get spending data for the last 12 months or budget period
-            start_date = max(
-                self.start_date,
-                (timezone.now().date() - timedelta(days=365))
-            )
-            
-            monthly_data = self.items.filter(
-                organizational_expenses__expense_date__gte=start_date,
-                organizational_expenses__expense_date__lte=self.end_date
-            ).annotate(
-                month=TruncMonth('organizational_expenses__expense_date')
-            ).values('month').annotate(
-                total_spent=Sum('organizational_expenses__amount')
-            ).order_by('month')
-            
-            trend_data = []
-            for month_data in monthly_data:
-                if month_data['month']:
-                    trend_data.append({
-                        'month': month_data['month'].strftime('%Y-%m'),
-                        'spent_amount': str(month_data['total_spent'] or Decimal('0.00')),
-                        'currency': self.currency.code if self.currency else None
-                    })
-            return trend_data
-        except Exception:
-            return []
-    
-    def get_budget_utilization_by_item(self):
-        """Get utilization percentage for each budget item"""
-        try:
-            items_data = []
-            for item in self.items.all():
-                utilization = 0
-                if item.budgeted_amount and item.budgeted_amount > 0:
-                    utilization = float((item.spent_amount / item.budgeted_amount) * 100)
-                
-                items_data.append({
-                    'id': item.id,
-                    'category': item.category,
-                    'subcategory': item.subcategory or '',
-                    'description': item.description,
-                    'budgeted_amount': str(item.budgeted_amount),
-                    'spent_amount': str(item.spent_amount),
-                    'remaining_amount': str(item.remaining_amount),
-                    'utilization_percentage': utilization,
-                    'status': item.utilization_status,
-                    'is_locked': item.is_locked,
-                    'responsible_person': item.responsible_person.get_full_name if item.responsible_person else None
-                })
-            return items_data
-        except Exception:
-            return []
-    
-    def get_funding_vs_spending_analysis(self):
-        """Compare funding received vs actual spending"""
-        try:
-            return {
-                'total_budget': str(self.total_amount),
-                'total_funded': str(self.total_funding_allocated),
-                'total_spent': str(self.spent_amount),
-                'funding_gap': str(self.funding_gap),
-                'spending_vs_funding_ratio': float((self.spent_amount / self.total_funding_allocated) * 100) if self.total_funding_allocated > 0 else 0,
-                'budget_utilization': self.spent_percentage,
-                'funding_utilization': float((self.total_funding_allocated / self.total_amount) * 100) if self.total_amount > 0 else 0,
-                'is_overspent': self.is_over_budget,
-                'is_underfunded': not self.is_fully_funded,
-                'currency': self.currency.code if self.currency else None
-            }
-        except Exception:
-            return {}
+    @property
+    def status_summary(self):
+        """Status and health summary"""
+        return {
+            'budget_health': self.budget_health,
+            'utilization_status': self.utilization_status,
+            'funding_status': self.funding_status,
+            'is_over_budget': self.is_over_budget,
+            'is_overcommitted': self.is_overcommitted,
+            'is_fully_funded': self.is_fully_funded,
+            'has_pending_requests': self.has_pending_requests,
+            'is_expired': self.is_expired,
+            'days_remaining': self.days_remaining,
+            'progress_percentage': self.progress_percentage
+        }
+
+    # ============================================================================
+    # EXISTING METHODS (Enhanced)
+    # ============================================================================
     
     def get_budget_alerts(self):
-        """Get budget alerts and warnings"""
+        """Get comprehensive budget alerts and warnings"""
         alerts = []
         
         try:
-            # Over budget alert
+            # Critical alerts
             if self.is_over_budget:
                 alerts.append({
                     'type': 'error',
-                    'message': f'Budget is over spent by {self.currency.code if self.currency else ""} {abs(self.variance):,.2f}',
-                    'severity': 'high'
+                    'message': f'Budget is over spent by {self.formatted_variance}',
+                    'severity': 'critical',
+                    'category': 'spending'
                 })
             
-            # High utilization warning
-            elif self.spent_percentage >= 90:
+            if self.is_overcommitted:
+                alerts.append({
+                    'type': 'error',
+                    'message': f'Budget is overcommitted by {self.currency.code if self.currency else ""} {abs(self.committed_variance):,.2f}',
+                    'severity': 'critical',
+                    'category': 'commitment'
+                })
+            
+            # High priority warnings
+            if self.utilization_percentage >= 95:
                 alerts.append({
                     'type': 'warning',
-                    'message': f'Budget is {self.spent_percentage:.1f}% utilized - approaching limit',
-                    'severity': 'medium'
+                    'message': f'Budget utilization is {self.utilization_percentage:.1f}% - critically high',
+                    'severity': 'high',
+                    'category': 'utilization'
+                })
+            elif self.committed_percentage >= 90:
+                alerts.append({
+                    'type': 'warning',
+                    'message': f'Budget is {self.committed_percentage:.1f}% committed - approaching limit',
+                    'severity': 'medium',
+                    'category': 'commitment'
                 })
             
-            # Funding gap alert
+            # Funding alerts
             if self.funding_gap > 0:
+                gap_percentage = float((self.funding_gap / self.total_amount) * 100)
+                severity = 'high' if gap_percentage > 25 else 'medium'
                 alerts.append({
                     'type': 'warning',
-                    'message': f'Funding gap of {self.currency.code if self.currency else ""} {self.funding_gap:,.2f}',
-                    'severity': 'medium'
+                    'message': f'Funding gap of {self.formatted_funding_gap} ({gap_percentage:.1f}%)',
+                    'severity': severity,
+                    'category': 'funding'
                 })
             
-            # Expiring budget
-            if self.days_remaining <= 30 and self.days_remaining > 0:
+            # Time-based alerts
+            if self.days_remaining <= 7 and self.days_remaining > 0:
                 alerts.append({
-                    'type': 'info',
+                    'type': 'warning',
                     'message': f'Budget expires in {self.days_remaining} days',
-                    'severity': 'low'
+                    'severity': 'medium',
+                    'category': 'timeline'
                 })
-            
-            # Expired budget
-            if self.is_expired:
+            elif self.is_expired:
                 alerts.append({
                     'type': 'error',
                     'message': 'Budget period has expired',
-                    'severity': 'high'
+                    'severity': 'high',
+                    'category': 'timeline'
+                })
+            
+            # Performance alerts
+            if self.spending_efficiency < 50:
+                alerts.append({
+                    'type': 'info',
+                    'message': f'Spending efficiency is low ({self.spending_efficiency:.1f}%)',
+                    'severity': 'low',
+                    'category': 'performance'
+                })
+            
+            # Item-level alerts
+            if self.critical_items_count > 0:
+                alerts.append({
+                    'type': 'warning',
+                    'message': f'{self.critical_items_count} budget items in critical status',
+                    'severity': 'medium',
+                    'category': 'items'
                 })
             
         except Exception:
@@ -1891,7 +2183,57 @@ class BudgetItem(models.Model):
 
     @property
     def spent_amount(self):
-        """Calculate total spent from related expenses"""
+        """Calculate total spent from paid expenses only"""
+        try:
+            return self.organizational_expenses.filter(status='paid').aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+    
+    @property
+    def pending_amount(self):
+        """Calculate total pending from draft and pending expenses"""
+        try:
+            return self.organizational_expenses.filter(status__in=['pending', 'draft']).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+        
+    @property
+    def committed_amount(self):
+        """Calculate total committed (approved + paid) expenses"""
+        try:
+            return self.organizational_expenses.filter(status__in=['approved', 'paid']).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def approved_amount(self):
+        """Calculate total approved but not yet paid expenses"""
+        try:
+            return self.organizational_expenses.filter(status='approved').aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def rejected_amount(self):
+        """Calculate total rejected expenses"""
+        try:
+            return self.organizational_expenses.filter(status='rejected').aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def total_requested_amount(self):
+        """Calculate total of all expenses regardless of status"""
         try:
             return self.organizational_expenses.aggregate(
                 total=Sum('amount')
@@ -1900,33 +2242,68 @@ class BudgetItem(models.Model):
             return Decimal('0.00')
 
     @property
-    def utilization_status(self):
-        """Returns budget utilization status"""
-        percentage = self.spent_percentage
-        if percentage >= 100:
-            return 'OVER_BUDGET'
-        elif percentage >= 90:
-            return 'CRITICAL'
-        elif percentage >= 75:
-            return 'WARNING'
-        else:
-            return 'NORMAL'
+    def remaining_amount(self):
+        """Amount remaining after actual spending (paid expenses only)"""
+        budgeted = self.budgeted_amount or Decimal('0.00')
+        spent = self.spent_amount
+        return budgeted - spent
 
     @property
-    def is_over_budget(self):
-        """Check if spending exceeds budget"""
-        return self.spent_amount > (self.budgeted_amount or Decimal('0.00'))
+    def available_amount(self):
+        """Amount available considering committed expenses (approved + paid)"""
+        budgeted = self.budgeted_amount or Decimal('0.00')
+        committed = self.committed_amount
+        return budgeted - committed
+
+    @property
+    def encumbered_amount(self):
+        """Amount encumbered by pending and approved expenses"""
+        return self.pending_amount + self.approved_amount
+
+    @property
+    def truly_available_amount(self):
+        """Amount truly available after all commitments and pending requests"""
+        budgeted = self.budgeted_amount or Decimal('0.00')
+        total_obligations = self.committed_amount + self.pending_amount
+        return budgeted - total_obligations
+
+    @property
+    def spent_percentage(self):
+        """Percentage of budget actually spent (paid expenses only)"""
+        budgeted = self.budgeted_amount or Decimal('0.00')
+        if budgeted > 0:
+            spent = self.spent_amount
+            return float((spent / budgeted) * 100)
+        return 0
+
+    @property
+    def committed_percentage(self):
+        """Percentage of budget committed (approved + paid)"""
+        budgeted = self.budgeted_amount or Decimal('0.00')
+        if budgeted > 0:
+            committed = self.committed_amount
+            return float((committed / budgeted) * 100)
+        return 0
+
+    @property
+    def utilization_percentage(self):
+        """Total utilization including all pending requests"""
+        budgeted = self.budgeted_amount or Decimal('0.00')
+        if budgeted > 0:
+            total_obligations = self.committed_amount + self.pending_amount
+            return float((total_obligations / budgeted) * 100)
+        return 0
 
     @property
     def variance(self):
-        """Budget variance (positive = under budget, negative = over budget)"""
+        """Budget variance based on actual spending (positive = under budget)"""
         budgeted = self.budgeted_amount or Decimal('0.00')
         spent = self.spent_amount
         return budgeted - spent
 
     @property
     def variance_percentage(self):
-        """Variance as percentage"""
+        """Variance as percentage of budget"""
         budgeted = self.budgeted_amount or Decimal('0.00')
         if budgeted > 0:
             variance = self.variance
@@ -1934,51 +2311,142 @@ class BudgetItem(models.Model):
         return 0
 
     @property
-    def remaining_amount(self):
+    def committed_variance(self):
+        """Variance considering committed expenses"""
         budgeted = self.budgeted_amount or Decimal('0.00')
-        spent = self.spent_amount
-        return budgeted - spent
-    
+        committed = self.committed_amount
+        return budgeted - committed
+
     @property
-    def spent_percentage(self):
-        budgeted = self.budgeted_amount or Decimal('0.00')
-        if budgeted > 0:
-            spent = self.spent_amount
-            return float((spent / budgeted) * 100)
-        return 0
-    
+    def utilization_status(self):
+        """Returns budget utilization status based on committed percentage"""
+        percentage = self.committed_percentage
+        if percentage >= 100:
+            return 'OVER_BUDGET'
+        elif percentage >= 90:
+            return 'CRITICAL'
+        elif percentage >= 75:
+            return 'WARNING'
+        elif percentage >= 50:
+            return 'MODERATE'
+        else:
+            return 'NORMAL'
+
+    @property
+    def budget_health(self):
+        """Overall budget health considering all factors"""
+        utilization = self.utilization_percentage
+        if utilization > 100:
+            return 'OVERCOMMITTED'
+        elif utilization > 95:
+            return 'AT_RISK'
+        elif utilization > 80:
+            return 'CAUTION'
+        elif utilization > 50:
+            return 'HEALTHY'
+        else:
+            return 'UNDERUTILIZED'
+
+    @property
+    def is_over_budget(self):
+        """Check if actual spending exceeds budget"""
+        return self.spent_amount > (self.budgeted_amount or Decimal('0.00'))
+
+    @property
+    def is_overcommitted(self):
+        """Check if committed expenses exceed budget"""
+        return self.committed_amount > (self.budgeted_amount or Decimal('0.00'))
+
+    @property
+    def has_pending_requests(self):
+        """Check if there are pending expense requests"""
+        return self.pending_amount > Decimal('0.00')
+
+    @property
+    def can_spend(self):
+        """Check if item allows spending (not locked and has available budget)"""
+        return not self.is_locked and self.truly_available_amount > 0
+
+    @property
+    def requires_approval_for_remaining(self):
+        """Check if remaining expenses require approval"""
+        if not self.approval_required_threshold:
+            return False
+        return self.truly_available_amount > (self.approval_required_threshold or Decimal('0.00'))
+
+    @property
+    def available_without_approval(self):
+        """Maximum amount that can be spent without approval"""
+        if not self.approval_required_threshold:
+            return self.truly_available_amount
+        return min(self.truly_available_amount, self.approval_required_threshold or Decimal('0.00'))
+
+
     @property
     def formatted_amount(self):
+        """Formatted budgeted amount with currency"""
         if self.budget and self.budget.currency:
             return f"{self.budget.currency.code} {self.budgeted_amount:,.2f}"
         return f"{self.budgeted_amount:,.2f}"
 
     @property
     def formatted_spent_amount(self):
+        """Formatted spent amount with currency"""
         if self.budget and self.budget.currency:
             return f"{self.budget.currency.code} {self.spent_amount:,.2f}"
         return f"{self.spent_amount:,.2f}"
 
     @property
     def formatted_remaining_amount(self):
+        """Formatted remaining amount with currency"""
         if self.budget and self.budget.currency:
             return f"{self.budget.currency.code} {self.remaining_amount:,.2f}"
         return f"{self.remaining_amount:,.2f}"
 
     @property
-    def can_spend(self):
-        """Check if item allows spending (not locked and has remaining budget)"""
-        return not self.is_locked and self.remaining_amount > 0
+    def formatted_committed_amount(self):
+        """Formatted committed amount with currency"""
+        if self.budget and self.budget.currency:
+            return f"{self.budget.currency.code} {self.committed_amount:,.2f}"
+        return f"{self.committed_amount:,.2f}"
 
     @property
-    def available_without_approval(self):
-        """Maximum amount that can be spent without approval"""
-        if not self.approval_required_threshold:
-            return self.remaining_amount
-        return min(self.remaining_amount, self.approval_required_threshold or Decimal('0.00'))
-    
+    def formatted_pending_amount(self):
+        """Formatted pending amount with currency"""
+        if self.budget and self.budget.currency:
+            return f"{self.budget.currency.code} {self.pending_amount:,.2f}"
+        return f"{self.pending_amount:,.2f}"
+
+    @property
+    def formatted_available_amount(self):
+        """Formatted available amount with currency"""
+        if self.budget and self.budget.currency:
+            return f"{self.budget.currency.code} {self.truly_available_amount:,.2f}"
+        return f"{self.truly_available_amount:,.2f}"
+
+    @property
+    def total_expenses_count(self):
+        """Total number of expenses"""
+        return self.organizational_expenses.count()
+
+    @property
+    def paid_expenses_count(self):
+        """Number of paid expenses"""
+        return self.organizational_expenses.filter(status='paid').count()
+
+    @property
+    def pending_expenses_count(self):
+        """Number of pending expenses"""
+        return self.organizational_expenses.filter(status__in=['pending', 'draft']).count()
+
+    @property
+    def approved_expenses_count(self):
+        """Number of approved expenses"""
+        return self.organizational_expenses.filter(status='approved').count()
+
     def __str__(self):
         return f"{self.budget.title} - {self.category} ({self.formatted_amount})"
+
 
 class OrganizationalExpense(models.Model):
     """Non-project organizational expenses with multi-currency support"""
