@@ -1255,7 +1255,6 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
                 'allocated_by': allocation.allocated_by.get_full_name if allocation.allocated_by else 'Unknown',
                 'purpose': allocation.purpose or '',
                 'is_active': allocation.is_active,
-                'notes': allocation.notes or ''
             })
 
         return sorted(allocations, key=lambda x: x['amount_allocated'], reverse=True)
