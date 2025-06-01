@@ -439,12 +439,16 @@ class DonationCampaign(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
+    def get_default_currency():
+        from mainapps.common.models import Currency
+        return Currency.objects.get(code='USD').id
     target_currency = models.ForeignKey(
         Currency,
         on_delete=models.PROTECT,
         related_name='campaigns',
         help_text="Currency for the target amount",
         null=True,
+        default=get_default_currency,
         blank=False
     )
     minimum_goal = models.DecimalField(
