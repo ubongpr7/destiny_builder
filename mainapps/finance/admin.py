@@ -30,17 +30,17 @@ class ExchangeRateAdmin(admin.ModelAdmin):
 
 @admin.register(DonationCampaign)
 class DonationCampaignAdmin(admin.ModelAdmin):
-    list_display = ['title', 'target_amount', 'target_currency', 'progress_percentage', 'is_active', 'start_date', 'end_date']
-    list_filter = ['is_active', 'is_featured', 'target_currency', 'start_date']
+    list_display = ['title', 'target_amount', 'target_currency', 'progress_percentage', 'status', 'start_date', 'end_date']
+    list_filter = ['status', 'is_featured', 'target_currency', 'start_date']
     search_fields = ['title', 'description']
-    readonly_fields = ['current_amount_in_target_currency', 'progress_percentage', 'is_completed']
+    readonly_fields = ['current_amount', 'progress_percentage', 'is_target_reached']
 
 @admin.register(Donation)
 class DonationAdmin(admin.ModelAdmin):
     list_display = ['donor_name_display', 'formatted_amount', 'campaign', 'status', 'donation_date']
     list_filter = ['status', 'payment_method', 'currency', 'is_anonymous', 'donation_date']
     search_fields = ['donor_name', 'donor_email', 'transaction_id', 'reference_number']
-    readonly_fields = ['donor_name_display', 'formatted_amount']
+    readonly_fields = ['donor_name_display', 'formatted_amount', 'net_amount', 'formatted_net_amount']
     date_hierarchy = 'donation_date'
 
 @admin.register(RecurringDonation)
@@ -48,12 +48,14 @@ class RecurringDonationAdmin(admin.ModelAdmin):
     list_display = ['donor', 'formatted_amount', 'frequency', 'status', 'next_payment_date']
     list_filter = ['frequency', 'status', 'currency']
     search_fields = ['donor__username', 'donor__email']
+    readonly_fields = ['total_donated', 'formatted_total_donated', 'payment_count']
 
 @admin.register(InKindDonation)
 class InKindDonationAdmin(admin.ModelAdmin):
-    list_display = ['donor_name_display', 'item_description', 'formatted_value', 'status', 'donation_date']
+    list_display = ['donor_name_display', 'item_description', 'formatted_estimated_value', 'status', 'donation_date']
     list_filter = ['status', 'category', 'valuation_currency', 'donation_date']
     search_fields = ['item_description', 'donor_name', 'donor_email']
+    readonly_fields = ['formatted_estimated_value', 'formatted_actual_value', 'formatted_effective_value']
 
 @admin.register(Grant)
 class GrantAdmin(admin.ModelAdmin):

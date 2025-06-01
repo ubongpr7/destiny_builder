@@ -404,10 +404,36 @@ class ExchangeRate(models.Model):
         to_code = self.to_currency.code if self.to_currency else 'N/A'
         return f"1 {from_code} = {self.rate} {to_code}"
 
+
 class DonationCampaign(models.Model):
-    """Fundraising campaigns with multi-currency support"""
+    """Enhanced fundraising campaigns with comprehensive donation tracking"""
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('active', 'Active'),
+        ('paused', 'Paused'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    CAMPAIGN_TYPE_CHOICES = [
+        ('general', 'General Fundraising'),
+        ('emergency', 'Emergency Response'),
+        ('project_specific', 'Project Specific'),
+        ('capacity_building', 'Capacity Building'),
+        ('equipment', 'Equipment Purchase'),
+        ('scholarship', 'Scholarship Fund'),
+        ('research', 'Research Initiative'),
+        ('community_outreach', 'Community Outreach'),
+    ]
+    
+    # Basic Information
     title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True, blank=True)
     description = models.TextField()
+    campaign_type = models.CharField(max_length=20, choices=CAMPAIGN_TYPE_CHOICES, default='general')
+    
+    # Financial Goals
     target_amount = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
@@ -419,11 +445,22 @@ class DonationCampaign(models.Model):
         related_name='campaigns',
         help_text="Currency for the target amount",
         null=True,
-        blank=True
+        blank=False
+    )
+    minimum_goal = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Minimum amount needed for campaign success"
     )
     
+    # Timeline
     start_date = models.DateField()
     end_date = models.DateField()
+    launch_date = models.DateTimeField(null=True, blank=True)
+    
+    # Relationships
     project = models.ForeignKey(
         Project, 
         on_delete=models.SET_NULL, 
@@ -432,18 +469,19 @@ class DonationCampaign(models.Model):
         related_name='campaigns'
     )
     
-    # Bank accounts that can receive donations for this campaign
-    bank_accounts = models.ManyToManyField(
-        BankAccount,
-        through='CampaignBankAccount',
-        related_name='campaigns',
-        blank=True,
-        help_text="Bank accounts that can receive donations for this campaign"
-    )
-    
-    is_active = models.BooleanField(default=True)
+    # Campaign Settings
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     is_featured = models.BooleanField(default=False)
-    image = models.ImageField(upload_to='campaign_images/', blank=True, null=True)
+    allow_anonymous_donations = models.BooleanField(default=True)
+    allow_recurring_donations = models.BooleanField(default=True)
+    allow_in_kind_donations = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    
+    # Media
+    image = models.FileField(upload_to='campaign_images/', blank=True, null=True)
+    video = models.FileField(upload_to='campaign_videos/',blank=True, null=True)
+    
+    # Management
     created_by = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -451,90 +489,432 @@ class DonationCampaign(models.Model):
         blank=True, 
         related_name='created_campaigns'
     )
+    managed_by = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='managed_campaigns',
+        help_text="Users who can manage this campaign"
+    )
+    
+    # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['is_active', 'start_date']),
-            models.Index(fields=['project', 'is_active']),
+            models.Index(fields=['status', 'start_date']),
+            models.Index(fields=['campaign_type', 'status']),
             models.Index(fields=['target_currency']),
+            models.Index(fields=['is_featured', 'status']),
         ]
         verbose_name = "Donation Campaign"
         verbose_name_plural = "Donation Campaigns"
     
+    # ============================================================================
+    # CORE DONATION AMOUNT CALCULATIONS
+    # ============================================================================
+    
     @property
-    def current_amount_in_target_currency(self):
-        """Calculate total raised in campaign's target currency including all donation types"""
-        if not self.target_currency:
-            return Decimal('0.00')
-            
+    def total_donations_amount(self):
+        """Total from one-time donations in target currency"""
         total = Decimal('0.00')
-        
         try:
-            # Regular completed donations
             for donation in self.donations.filter(status='completed'):
-                if donation.currency == self.target_currency:
-                    total += donation.amount or Decimal('0.00')
-                else:
-                    converted_amount = donation.get_amount_in_currency(self.target_currency)
-                    total += converted_amount or Decimal('0.00')
-            
-            # In-kind donations (received)
-            for in_kind in self.in_kind_donations.filter(status='received'):
-                if in_kind.valuation_currency == self.target_currency:
-                    total += in_kind.estimated_value or Decimal('0.00')
-                else:
-                    try:
-                        exchange_rate = ExchangeRate.objects.filter(
-                            from_currency=in_kind.valuation_currency,
-                            to_currency=self.target_currency,
-                            effective_date__lte=in_kind.donation_date
-                        ).order_by('-effective_date').first()
-                        
-                        if exchange_rate and in_kind.estimated_value:
-                            total += in_kind.estimated_value * exchange_rate.rate
-                        else:
-                            total += in_kind.estimated_value or Decimal('0.00')
-                    except Exception:
-                        total += in_kind.estimated_value or Decimal('0.00')
-            
-            # Recurring donations (total donated so far)
-            for recurring in self.recurring_donations.filter(status__in=['active', 'completed']):
-                if recurring.currency == self.target_currency:
-                    total += recurring.total_donated or Decimal('0.00')
-                else:
-                    try:
-                        exchange_rate = ExchangeRate.objects.filter(
-                            from_currency=recurring.currency,
-                            to_currency=self.target_currency
-                        ).order_by('-effective_date').first()
-                        
-                        if exchange_rate and recurring.total_donated:
-                            total += recurring.total_donated * exchange_rate.rate
-                        else:
-                            total += recurring.total_donated or Decimal('0.00')
-                    except Exception:
-                        total += recurring.total_donated or Decimal('0.00')
+                total += self._convert_to_target_currency(
+                    donation.amount, 
+                    donation.currency, 
+                    donation.donation_date
+                )
         except Exception:
             pass
-        
         return total
     
     @property
+    def total_recurring_amount(self):
+        """Total from recurring donations in target currency"""
+        total = Decimal('0.00')
+        try:
+            for recurring in self.recurring_donations.filter(status__in=['active', 'completed']):
+                total += self._convert_to_target_currency(
+                    recurring.total_donated,
+                    recurring.currency,
+                    timezone.now()
+                )
+        except Exception:
+            pass
+        return total
+    
+    @property
+    def total_in_kind_amount(self):
+        """Total from in-kind donations in target currency"""
+        total = Decimal('0.00')
+        try:
+            for in_kind in self.in_kind_donations.filter(status='received'):
+                total += self._convert_to_target_currency(
+                    in_kind.estimated_value,
+                    in_kind.valuation_currency,
+                    in_kind.donation_date
+                )
+        except Exception:
+            pass
+        return total
+    
+    @property
+    def current_amount(self):
+        """Total raised across all donation types in target currency"""
+        return (self.total_donations_amount + 
+                self.total_recurring_amount + 
+                self.total_in_kind_amount)
+    
+    @property
+    def net_donations_amount(self):
+        """Net amount after processor fees from one-time donations"""
+        total = Decimal('0.00')
+        try:
+            for donation in self.donations.filter(status='completed'):
+                net_amount = donation.net_amount
+                total += self._convert_to_target_currency(
+                    net_amount,
+                    donation.currency,
+                    donation.donation_date
+                )
+        except Exception:
+            pass
+        return total
+    
+    # ============================================================================
+    # PROGRESS AND GOAL CALCULATIONS
+    # ============================================================================
+    
+    @property
     def progress_percentage(self):
+        """Progress towards target goal"""
         if self.target_amount and self.target_amount > 0:
-            current = self.current_amount_in_target_currency
-            return min((current / self.target_amount) * 100, 100)
+            return min((self.current_amount / self.target_amount) * 100, 100)
         return 0
     
     @property
-    def is_completed(self):
-        return self.current_amount_in_target_currency >= (self.target_amount or Decimal('0.00'))
+    def minimum_goal_percentage(self):
+        """Progress towards minimum goal"""
+        if self.minimum_goal and self.minimum_goal > 0:
+            return min((self.current_amount / self.minimum_goal) * 100, 100)
+        return 0
+    
+    @property
+    def amount_remaining(self):
+        """Amount remaining to reach target"""
+        remaining = (self.target_amount or Decimal('0.00')) - self.current_amount
+        return max(remaining, Decimal('0.00'))
+    
+    @property
+    def amount_over_target(self):
+        """Amount raised over target (if any)"""
+        over = self.current_amount - (self.target_amount or Decimal('0.00'))
+        return max(over, Decimal('0.00'))
+    
+    @property
+    def is_target_reached(self):
+        """Check if target goal is reached"""
+        return self.current_amount >= (self.target_amount or Decimal('0.00'))
+    
+    @property
+    def is_minimum_reached(self):
+        """Check if minimum goal is reached"""
+        if not self.minimum_goal:
+            return True
+        return self.current_amount >= self.minimum_goal
+    
+    # ============================================================================
+    # DONATION STATISTICS
+    # ============================================================================
+    
+    @property
+    def total_donors_count(self):
+        """Total unique donors across all donation types"""
+        donor_ids = set()
+        
+        # One-time donations
+        for donation in self.donations.filter(status='completed'):
+            if donation.donor_id:
+                donor_ids.add(donation.donor_id)
+        
+        # Recurring donations
+        for recurring in self.recurring_donations.filter(status__in=['active', 'completed']):
+            if recurring.donor_id:
+                donor_ids.add(recurring.donor_id)
+        
+        # In-kind donations
+        for in_kind in self.in_kind_donations.filter(status='received'):
+            if in_kind.donor_id:
+                donor_ids.add(in_kind.donor_id)
+        
+        return len(donor_ids)
+    
+    @property
+    def total_donations_count(self):
+        """Total number of completed donations"""
+        return (self.donations.filter(status='completed').count() +
+                self.recurring_donations.filter(status__in=['active', 'completed']).count() +
+                self.in_kind_donations.filter(status='received').count())
+    
+    @property
+    def average_donation_amount(self):
+        """Average donation amount in target currency"""
+        count = self.donations.filter(status='completed').count()
+        if count > 0:
+            return self.total_donations_amount / count
+        return Decimal('0.00')
+    
+    @property
+    def largest_donation_amount(self):
+        """Largest single donation in target currency"""
+        largest = Decimal('0.00')
+        try:
+            for donation in self.donations.filter(status='completed'):
+                converted = self._convert_to_target_currency(
+                    donation.amount,
+                    donation.currency,
+                    donation.donation_date
+                )
+                if converted > largest:
+                    largest = converted
+        except Exception:
+            pass
+        return largest
+    
+    # ============================================================================
+    # TIME-BASED CALCULATIONS
+    # ============================================================================
+    
+    @property
+    def days_remaining(self):
+        """Days remaining in campaign"""
+        if self.end_date:
+            today = timezone.now().date()
+            if today <= self.end_date:
+                return (self.end_date - today).days
+        return 0
+    
+    @property
+    def days_elapsed(self):
+        """Days since campaign started"""
+        if self.start_date:
+            today = timezone.now().date()
+            if today >= self.start_date:
+                return (today - self.start_date).days
+        return 0
+    
+    @property
+    def total_campaign_days(self):
+        """Total days in campaign period"""
+        if self.start_date and self.end_date:
+            return (self.end_date - self.start_date).days
+        return 0
+    
+    @property
+    def time_progress_percentage(self):
+        """Time progress percentage"""
+        total_days = self.total_campaign_days
+        if total_days > 0:
+            elapsed_days = self.days_elapsed
+            return min(max((elapsed_days / total_days) * 100, 0), 100)
+        return 0
+    
+    @property
+    def daily_fundraising_rate(self):
+        """Average daily fundraising rate"""
+        days_elapsed = self.days_elapsed
+        if days_elapsed > 0:
+            return self.current_amount / days_elapsed
+        return Decimal('0.00')
+    
+    @property
+    def projected_final_amount(self):
+        """Projected final amount based on current rate"""
+        rate = self.daily_fundraising_rate
+        total_days = self.total_campaign_days
+        if rate > 0 and total_days > 0:
+            return rate * total_days
+        return self.current_amount
+    
+    # ============================================================================
+    # STATUS AND HEALTH CHECKS
+    # ============================================================================
+    
+    @property
+    def campaign_status(self):
+        """Enhanced campaign status"""
+        today = timezone.now().date()
+        
+        if self.status == 'cancelled':
+            return 'CANCELLED'
+        elif self.status == 'completed':
+            return 'COMPLETED'
+        elif self.status == 'paused':
+            return 'PAUSED'
+        elif today < self.start_date:
+            return 'UPCOMING'
+        elif today > self.end_date:
+            if self.is_target_reached:
+                return 'SUCCESSFUL'
+            elif self.is_minimum_reached:
+                return 'PARTIALLY_SUCCESSFUL'
+            else:
+                return 'UNSUCCESSFUL'
+        elif self.status == 'active':
+            return 'ACTIVE'
+        else:
+            return 'DRAFT'
+    
+    @property
+    def fundraising_health(self):
+        """Campaign fundraising health assessment"""
+        if self.time_progress_percentage == 0:
+            return 'NOT_STARTED'
+        
+        progress_ratio = self.progress_percentage / max(self.time_progress_percentage, 1)
+        
+        if progress_ratio >= 1.5:
+            return 'EXCELLENT'
+        elif progress_ratio >= 1.2:
+            return 'VERY_GOOD'
+        elif progress_ratio >= 1.0:
+            return 'ON_TRACK'
+        elif progress_ratio >= 0.8:
+            return 'SLIGHTLY_BEHIND'
+        elif progress_ratio >= 0.6:
+            return 'BEHIND'
+        else:
+            return 'SIGNIFICANTLY_BEHIND'
+    
+    @property
+    def is_active_period(self):
+        """Check if campaign is in active period"""
+        today = timezone.now().date()
+        return self.start_date <= today <= self.end_date
+    
+    @property
+    def is_expired(self):
+        """Check if campaign has expired"""
+        return timezone.now().date() > self.end_date
+    
+    @property
+    def can_receive_donations(self):
+        """Check if campaign can receive donations"""
+        return (self.status == 'active' and 
+                self.is_active_period and 
+                not self.is_expired)
+    
+    # ============================================================================
+    # FORMATTING PROPERTIES
+    # ============================================================================
+    
+    @property
+    def formatted_target_amount(self):
+        """Formatted target amount with currency"""
+        return f"{self.target_currency.code} {self.target_amount:,.2f}"
+    
+    @property
+    def formatted_current_amount(self):
+        """Formatted current amount with currency"""
+        return f"{self.target_currency.code} {self.current_amount:,.2f}"
+    
+    @property
+    def formatted_amount_remaining(self):
+        """Formatted remaining amount with currency"""
+        return f"{self.target_currency.code} {self.amount_remaining:,.2f}"
+    
+    @property
+    def formatted_minimum_goal(self):
+        """Formatted minimum goal with currency"""
+        if self.minimum_goal:
+            return f"{self.target_currency.code} {self.minimum_goal:,.2f}"
+        return None
+    
+    # ============================================================================
+    # HELPER METHODS
+    # ============================================================================
+    
+    def _convert_to_target_currency(self, amount, from_currency, conversion_date):
+        """Convert amount to target currency"""
+        if not amount or not from_currency:
+            return Decimal('0.00')
+            
+        if from_currency == self.target_currency:
+            return amount
+        
+        try:
+            # Import here to avoid circular imports
+            
+            exchange_rate = ExchangeRate.objects.filter(
+                from_currency=from_currency,
+                to_currency=self.target_currency,
+                effective_date__lte=conversion_date
+            ).order_by('-effective_date').first()
+            
+            if exchange_rate:
+                return amount * exchange_rate.rate
+        except Exception:
+            pass
+        
+        return amount
+    
+    def update_monetary_fields(self):
+        """Method to recalculate all monetary properties - useful for data migrations"""
+        # This method can be called to refresh calculated values
+        # Useful when exchange rates change or when migrating data
+        pass
+    
+    def get_donation_breakdown(self):
+        """Get detailed breakdown of donations by type"""
+        return {
+            'one_time_donations': {
+                'amount': self.total_donations_amount,
+                'count': self.donations.filter(status='completed').count(),
+                'formatted_amount': f"{self.target_currency.code} {self.total_donations_amount:,.2f}"
+            },
+            'recurring_donations': {
+                'amount': self.total_recurring_amount,
+                'count': self.recurring_donations.filter(status__in=['active', 'completed']).count(),
+                'formatted_amount': f"{self.target_currency.code} {self.total_recurring_amount:,.2f}"
+            },
+            'in_kind_donations': {
+                'amount': self.total_in_kind_amount,
+                'count': self.in_kind_donations.filter(status='received').count(),
+                'formatted_amount': f"{self.target_currency.code} {self.total_in_kind_amount:,.2f}"
+            },
+            'total': {
+                'amount': self.current_amount,
+                'count': self.total_donations_count,
+                'formatted_amount': self.formatted_current_amount
+            }
+        }
+    
+    def get_performance_metrics(self):
+        """Get comprehensive performance metrics"""
+        return {
+            'progress_percentage': round(self.progress_percentage, 2),
+            'time_progress_percentage': round(self.time_progress_percentage, 2),
+            'fundraising_health': self.fundraising_health,
+            'daily_rate': float(self.daily_fundraising_rate),
+            'projected_final': float(self.projected_final_amount),
+            'average_donation': float(self.average_donation_amount),
+            'largest_donation': float(self.largest_donation_amount),
+            'total_donors': self.total_donors_count,
+            'days_remaining': self.days_remaining,
+            'is_target_reached': self.is_target_reached,
+            'is_minimum_reached': self.is_minimum_reached
+        }
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            from django.utils.text import slugify
+            self.slug = slugify(self.title)
+        super().save(*args, **kwargs)
     
     def __str__(self):
-        return self.title
+        return f"{self.title} ({self.formatted_target_amount})"
 
 class CampaignBankAccount(models.Model):
     """Through model for campaign-bank account relationship"""
@@ -720,8 +1100,10 @@ class FundingSource(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_funding_type_display()}) - {self.formatted_amount}"
 
+
 class Donation(models.Model):
-    """One-time donations with full multi-currency support"""
+    """Enhanced one-time donations with comprehensive tracking"""
+    
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('processing', 'Processing'),
@@ -729,6 +1111,7 @@ class Donation(models.Model):
         ('failed', 'Failed'),
         ('refunded', 'Refunded'),
         ('cancelled', 'Cancelled'),
+        ('disputed', 'Disputed'),
     ]
     
     PAYMENT_METHOD_CHOICES = [
@@ -741,10 +1124,24 @@ class Donation(models.Model):
         ('check', 'Check'),
         ('mobile_money', 'Mobile Money'),
         ('cryptocurrency', 'Cryptocurrency'),
+        ('wire_transfer', 'Wire Transfer'),
         ('other', 'Other'),
     ]
     
-    # Donor information
+    DONATION_SOURCE_CHOICES = [
+        ('website', 'Website'),
+        ('mobile_app', 'Mobile App'),
+        ('event', 'Fundraising Event'),
+        ('mail', 'Direct Mail'),
+        ('phone', 'Phone Campaign'),
+        ('social_media', 'Social Media'),
+        ('peer_to_peer', 'Peer-to-Peer'),
+        ('corporate', 'Corporate Partnership'),
+        ('grant', 'Grant/Foundation'),
+        ('other', 'Other'),
+    ]
+    
+    # Donor Information
     donor = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -755,10 +1152,11 @@ class Donation(models.Model):
     is_anonymous = models.BooleanField(default=False)
     donor_name = models.CharField(max_length=200, blank=True, null=True)
     donor_email = models.EmailField(blank=True, null=True)
+    donor_phone = models.CharField(max_length=20, blank=True, null=True)
     
-    # Donation details
+    # Donation Targets
     campaign = models.ForeignKey(
-        DonationCampaign, 
+        'DonationCampaign', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True, 
@@ -772,7 +1170,7 @@ class Donation(models.Model):
         related_name='donations'
     )
     
-    # Amount and currency
+    # Financial Details
     amount = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
@@ -784,10 +1182,11 @@ class Donation(models.Model):
         related_name='donations',
         help_text="Currency of the donation",
         null=True,
-        blank=True
+        blank=False
+
     )
     
-    # Exchange rate and conversion
+    # Exchange Rate Information
     exchange_rate = models.DecimalField(
         max_digits=15,
         decimal_places=8,
@@ -811,14 +1210,8 @@ class Donation(models.Model):
         help_text="Currency after conversion"
     )
     
-    # Transaction details
-    donation_date = models.DateTimeField(null=True, blank=True)
+    # Payment Processing
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
-    transaction_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
-    reference_number = models.CharField(max_length=100, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    
-    # Payment processor details
     processor_fee = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -833,28 +1226,33 @@ class Donation(models.Model):
         related_name='processor_fee_donations'
     )
     
-    # Bank account tracking
-    deposited_to_account = models.ForeignKey(
-        BankAccount,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='donations',
-        help_text="Bank account where this donation was deposited"
-    )
-    deposit_date = models.DateTimeField(
-        blank=True,
-        null=True,
-        help_text="When the donation was actually deposited"
-    )
-    bank_reference = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        help_text="Bank's reference number for the deposit"
-    )
-
-    # Receipt management
+    # Transaction Details
+    transaction_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
+    reference_number = models.CharField(max_length=100, blank=True, null=True)
+    bank_reference = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Dates and Status
+    donation_date = models.DateTimeField(default=timezone.now)
+    processed_date = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # Source and Attribution
+    donation_source = models.CharField(max_length=20, choices=DONATION_SOURCE_CHOICES, default='website')
+    referral_source = models.CharField(max_length=200, blank=True, null=True)
+    utm_source = models.CharField(max_length=100, blank=True, null=True)
+    utm_medium = models.CharField(max_length=100, blank=True, null=True)
+    utm_campaign = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Donor Preferences
+    is_recurring_eligible = models.BooleanField(default=True)
+    marketing_opt_in = models.BooleanField(default=False)
+    newsletter_opt_in = models.BooleanField(default=False)
+    
+    # Receipt and Tax
+    receipt_sent = models.BooleanField(default=False)
+    receipt_number = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    receipt_sent_date = models.DateTimeField(null=True, blank=True)
+    tax_deductible = models.BooleanField(default=True)
     receipt_image = models.ImageField(
         upload_to='donation_receipts/',
         blank=True,
@@ -864,9 +1262,7 @@ class Donation(models.Model):
     
     # Administrative
     notes = models.TextField(blank=True, null=True)
-    receipt_sent = models.BooleanField(default=False)
-    receipt_number = models.CharField(max_length=100, blank=True, null=True, unique=True)
-    tax_deductible = models.BooleanField(default=True)
+    internal_notes = models.TextField(blank=True, null=True)
     processed_by = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -874,6 +1270,8 @@ class Donation(models.Model):
         blank=True, 
         related_name='processed_donations'
     )
+    
+    # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -884,30 +1282,58 @@ class Donation(models.Model):
             models.Index(fields=['donor', 'status']),
             models.Index(fields=['campaign', 'status']),
             models.Index(fields=['currency', 'donation_date']),
+            models.Index(fields=['payment_method', 'status']),
+            models.Index(fields=['donation_source', 'donation_date']),
         ]
         verbose_name = "Donation"
         verbose_name_plural = "Donations"
     
+    # ============================================================================
+    # FINANCIAL CALCULATIONS
+    # ============================================================================
+    
     @property
     def net_amount(self):
-        """Amount after processor fees"""
+        """Amount after processor fees in original currency"""
         amount = self.amount or Decimal('0.00')
+        
+        # Convert processor fee to donation currency if different
         fee = self.processor_fee or Decimal('0.00')
+        if (self.processor_fee_currency and 
+            self.processor_fee_currency != self.currency and 
+            fee > 0):
+            fee = self._convert_currency(
+                fee, 
+                self.processor_fee_currency, 
+                self.currency, 
+                self.donation_date
+            )
+        
         return amount - fee
     
     @property
-    def donor_name_display(self):
-        if self.is_anonymous:
-            return "Anonymous"
-        if self.donor:
-            return self.donor.get_full_name or self.donor.username
-        return self.donor_name or "Unknown"
+    def effective_amount(self):
+        """Amount that actually benefits the organization"""
+        return self.net_amount
     
     @property
-    def formatted_amount(self):
-        if self.currency:
-            return f"{self.currency.code} {self.amount:,.2f}"
-        return f"{self.amount:,.2f}"
+    def processor_fee_percentage(self):
+        """Processor fee as percentage of donation"""
+        if self.amount and self.amount > 0:
+            fee = self.processor_fee or Decimal('0.00')
+            return float((fee / self.amount) * 100)
+        return 0
+    
+    @property
+    def net_percentage(self):
+        """Net amount as percentage of gross donation"""
+        if self.amount and self.amount > 0:
+            return float((self.net_amount / self.amount) * 100)
+        return 0
+    
+    # ============================================================================
+    # CURRENCY CONVERSION METHODS
+    # ============================================================================
     
     def get_amount_in_currency(self, target_currency):
         """Convert donation amount to specified currency"""
@@ -917,35 +1343,234 @@ class Donation(models.Model):
         if self.currency == target_currency:
             return self.amount or Decimal('0.00')
         
+        return self._convert_currency(
+            self.amount,
+            self.currency,
+            target_currency,
+            self.donation_date
+        )
+    
+    def get_net_amount_in_currency(self, target_currency):
+        """Get net amount in specified currency"""
+        if not target_currency or not self.currency:
+            return self.net_amount
+            
+        if self.currency == target_currency:
+            return self.net_amount
+        
+        return self._convert_currency(
+            self.net_amount,
+            self.currency,
+            target_currency,
+            self.donation_date
+        )
+    
+    def _convert_currency(self, amount, from_currency, to_currency, conversion_date):
+        """Helper method for currency conversion"""
+        if not amount or not from_currency or not to_currency:
+            return Decimal('0.00')
+            
+        if from_currency == to_currency:
+            return amount
+        
         try:
+            # Import here to avoid circular imports
+            
             exchange_rate = ExchangeRate.objects.filter(
-                from_currency=self.currency,
-                to_currency=target_currency,
-                effective_date__lte=self.donation_date or timezone.now()
+                from_currency=from_currency,
+                to_currency=to_currency,
+                effective_date__lte=conversion_date
             ).order_by('-effective_date').first()
             
-            if exchange_rate and self.amount:
-                return self.amount * exchange_rate.rate
+            if exchange_rate:
+                return amount * exchange_rate.rate
         except Exception:
             pass
         
-        return self.amount or Decimal('0.00')
+        return amount
+    
+    # ============================================================================
+    # STATUS AND VALIDATION PROPERTIES
+    # ============================================================================
+    
+    @property
+    def is_completed(self):
+        """Check if donation is completed"""
+        return self.status == 'completed'
+    
+    @property
+    def is_refundable(self):
+        """Check if donation can be refunded"""
+        return (self.status == 'completed' and 
+                self.payment_method in ['credit_card', 'debit_card', 'paypal', 'stripe'])
+    
+    @property
+    def is_tax_receipt_eligible(self):
+        """Check if eligible for tax receipt"""
+        return (self.tax_deductible and 
+                self.status == 'completed' and 
+                not self.is_anonymous)
+    
+    @property
+    def requires_receipt(self):
+        """Check if receipt is required but not sent"""
+        return (self.is_tax_receipt_eligible and 
+                not self.receipt_sent and 
+                self.status == 'completed')
+    
+    @property
+    def days_since_donation(self):
+        """Days since donation was made"""
+        if self.donation_date:
+            return (timezone.now() - self.donation_date).days
+        return 0
+    
+    @property
+    def is_recent(self):
+        """Check if donation was made recently (within 7 days)"""
+        return self.days_since_donation <= 7
+    
+    # ============================================================================
+    # DONOR INFORMATION PROPERTIES
+    # ============================================================================
+    
+    @property
+    def donor_name_display(self):
+        """Display name for donor"""
+        if self.is_anonymous:
+            return "Anonymous"
+        if self.donor:
+            return self.donor.get_full_name() or self.donor.username
+        return self.donor_name or "Unknown"
+    
+    @property
+    def donor_email_display(self):
+        """Display email for donor"""
+        if self.is_anonymous:
+            return None
+        if self.donor:
+            return self.donor.email
+        return self.donor_email
+    
+    @property
+    def has_complete_donor_info(self):
+        """Check if donor information is complete"""
+        if self.is_anonymous:
+            return True
+        return bool(self.donor_name_display and self.donor_email_display)
+    
+    # ============================================================================
+    # FORMATTING PROPERTIES
+    # ============================================================================
+    
+    @property
+    def formatted_amount(self):
+        """Formatted amount with currency"""
+        return f"{self.currency.code} {self.amount:,.2f}"
+    
+    @property
+    def formatted_net_amount(self):
+        """Formatted net amount with currency"""
+        return f"{self.currency.code} {self.net_amount:,.2f}"
+    
+    @property
+    def formatted_processor_fee(self):
+        """Formatted processor fee with currency"""
+        if self.processor_fee and self.processor_fee > 0:
+            currency = self.processor_fee_currency or self.currency
+            return f"{currency.code} {self.processor_fee:,.2f}"
+        return None
+    
+    @property
+    def formatted_converted_amount(self):
+        """Formatted converted amount if applicable"""
+        if self.converted_amount and self.converted_currency:
+            return f"{self.converted_currency.code} {self.converted_amount:,.2f}"
+        return None
+    
+    # ============================================================================
+    # BUSINESS LOGIC METHODS
+    # ============================================================================
+    
+    def update_monetary_calculations(self):
+        """Recalculate all monetary fields - useful for data migrations"""
+        # This method can be called to refresh calculated values
+        # Useful when exchange rates change or when migrating data
+        if self.currency and self.campaign and self.campaign.target_currency:
+            if self.currency != self.campaign.target_currency:
+                self.converted_amount = self.get_amount_in_currency(
+                    self.campaign.target_currency
+                )
+                self.converted_currency = self.campaign.target_currency
+    
+    def generate_receipt_number(self):
+        """Generate unique receipt number"""
+        if not self.receipt_number and self.is_tax_receipt_eligible:
+            import uuid
+            year = self.donation_date.year
+            self.receipt_number = f"RCP-{year}-{str(uuid.uuid4())[:8].upper()}"
+    
+    def mark_receipt_sent(self):
+        """Mark receipt as sent"""
+        self.receipt_sent = True
+        self.receipt_sent_date = timezone.now()
+        self.save(update_fields=['receipt_sent', 'receipt_sent_date'])
+    
+    def get_attribution_data(self):
+        """Get attribution and tracking data"""
+        return {
+            'donation_source': self.get_donation_source_display(),
+            'referral_source': self.referral_source,
+            'utm_source': self.utm_source,
+            'utm_medium': self.utm_medium,
+            'utm_campaign': self.utm_campaign,
+            'payment_method': self.get_payment_method_display()
+        }
+    
+    def get_financial_summary(self):
+        """Get comprehensive financial summary"""
+        return {
+            'gross_amount': float(self.amount),
+            'processor_fee': float(self.processor_fee or 0),
+            'net_amount': float(self.net_amount),
+            'processor_fee_percentage': self.processor_fee_percentage,
+            'net_percentage': self.net_percentage,
+            'currency': self.currency.code,
+            'converted_amount': float(self.converted_amount) if self.converted_amount else None,
+            'converted_currency': self.converted_currency.code if self.converted_currency else None,
+            'exchange_rate': float(self.exchange_rate) if self.exchange_rate else None
+        }
     
     def save(self, *args, **kwargs):
+        # Generate receipt number if eligible
+        if (self.status == 'completed' and 
+            self.is_tax_receipt_eligible and 
+            not self.receipt_number):
+            self.generate_receipt_number()
+        
+        # Set processed date when status changes to completed
+        if self.status == 'completed' and not self.processed_date:
+            self.processed_date = timezone.now()
+        
+        # Clean transaction_id
         if self.transaction_id == '':
             self.transaction_id = None
+            
         super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.donor_name_display} - {self.formatted_amount}"
+        return f"{self.donor_name_display} - {self.formatted_amount} ({self.get_status_display()})"
+
 
 class RecurringDonation(models.Model):
-    """Recurring donation subscriptions with multi-currency support"""
+    """Enhanced recurring donation subscriptions"""
+    
     FREQUENCY_CHOICES = [
         ('weekly', 'Weekly'),
+        ('biweekly', 'Bi-weekly'),
         ('monthly', 'Monthly'),
         ('quarterly', 'Quarterly'),
-        ('biannually', 'Biannually'),
+        ('biannually', 'Bi-annually'),
         ('annually', 'Annually'),
     ]
     
@@ -955,15 +1580,20 @@ class RecurringDonation(models.Model):
         ('cancelled', 'Cancelled'),
         ('expired', 'Expired'),
         ('failed', 'Failed'),
+        ('completed', 'Completed'),
     ]
     
-    # Donor information
-    donor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recurring_donations')
+    # Donor Information
+    donor = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='recurring_donations'
+    )
     is_anonymous = models.BooleanField(default=False)
     
-    # Donation targets
+    # Donation Targets
     campaign = models.ForeignKey(
-        DonationCampaign, 
+        'DonationCampaign', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True, 
@@ -977,7 +1607,7 @@ class RecurringDonation(models.Model):
         related_name='recurring_donations'
     )
     
-    # Amount and currency
+    # Financial Details
     amount = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
@@ -988,36 +1618,37 @@ class RecurringDonation(models.Model):
         on_delete=models.PROTECT,
         related_name='recurring_donations',
         null=True,
-        blank=True
+        blank=False
     )
     
-    # Subscription details
+    # Subscription Details
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
     start_date = models.DateField()
     end_date = models.DateField(blank=True, null=True)
     next_payment_date = models.DateField(null=True, blank=True)
+    last_payment_date = models.DateField(blank=True, null=True)
+    
+    # Payment Information
     payment_method = models.CharField(max_length=100)
     subscription_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    payment_processor = models.CharField(max_length=50, blank=True, null=True)
     
-    # Tracking
-    total_donated = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0,
-        validators=[MinValueValidator(Decimal('0.00'))]
-    )
+    # Status and Tracking
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     payment_count = models.PositiveIntegerField(default=0)
+    failed_payment_count = models.PositiveIntegerField(default=0)
+    max_failed_payments = models.PositiveIntegerField(default=3)
+    
+    # Administrative
     notes = models.TextField(blank=True, null=True)
-
-    # Receipt management
     receipt_image = models.ImageField(
         upload_to='recurring_donation_receipts/',
         blank=True,
         null=True,
         help_text="Upload receipt or proof of recurring donation setup"
     )
-
+    
+    # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -1027,30 +1658,333 @@ class RecurringDonation(models.Model):
             models.Index(fields=['status', 'next_payment_date']),
             models.Index(fields=['donor', 'status']),
             models.Index(fields=['currency', 'status']),
+            models.Index(fields=['frequency', 'status']),
         ]
         verbose_name = "Recurring Donation"
         verbose_name_plural = "Recurring Donations"
     
+    # ============================================================================
+    # FINANCIAL CALCULATIONS
+    # ============================================================================
+    
+    @property
+    def total_donated(self):
+        """Total amount donated through this recurring subscription"""
+        return self.related_donations.filter(status='completed').aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+    
+    @property
+    def total_net_donated(self):
+        """Total net amount (after fees) donated"""
+        total = Decimal('0.00')
+        for donation in self.related_donations.filter(status='completed'):
+            total += donation.net_amount
+        return total
+    
+    @property
+    def average_donation_amount(self):
+        """Average amount per successful donation"""
+        if self.payment_count > 0:
+            return self.total_donated / self.payment_count
+        return Decimal('0.00')
+    
+    @property
+    def projected_annual_amount(self):
+        """Projected annual donation amount"""
+        frequency_multipliers = {
+            'weekly': 52,
+            'biweekly': 26,
+            'monthly': 12,
+            'quarterly': 4,
+            'biannually': 2,
+            'annually': 1,
+        }
+        multiplier = frequency_multipliers.get(self.frequency, 12)
+        return self.amount * multiplier
+    
+    @property
+    def lifetime_value(self):
+        """Estimated lifetime value of this recurring donation"""
+        if self.end_date:
+            # Calculate based on end date
+            from dateutil.relativedelta import relativedelta
+            
+            frequency_deltas = {
+                'weekly': relativedelta(weeks=1),
+                'biweekly': relativedelta(weeks=2),
+                'monthly': relativedelta(months=1),
+                'quarterly': relativedelta(months=3),
+                'biannually': relativedelta(months=6),
+                'annually': relativedelta(years=1),
+            }
+            
+            delta = frequency_deltas.get(self.frequency, relativedelta(months=1))
+            current_date = self.start_date
+            total_payments = 0
+            
+            while current_date <= self.end_date:
+                total_payments += 1
+                current_date += delta
+            
+            return self.amount * total_payments
+        else:
+            # Estimate based on average recurring donation lifespan (assume 2 years)
+            return self.projected_annual_amount * 2
+    
+    # ============================================================================
+    # STATUS AND HEALTH CALCULATIONS
+    # ============================================================================
+    
+    @property
+    def success_rate(self):
+        """Success rate of payments"""
+        total_attempts = self.payment_count + self.failed_payment_count
+        if total_attempts > 0:
+            return (self.payment_count / total_attempts) * 100
+        return 0
+    
+    @property
+    def is_healthy(self):
+        """Check if recurring donation is healthy"""
+        return (self.status == 'active' and 
+                self.failed_payment_count < self.max_failed_payments and
+                self.success_rate >= 80)
+    
+    @property
+    def is_at_risk(self):
+        """Check if recurring donation is at risk of cancellation"""
+        return (self.status == 'active' and 
+                (self.failed_payment_count >= (self.max_failed_payments - 1) or
+                 self.success_rate < 50))
+    
+    @property
+    def days_until_next_payment(self):
+        """Days until next payment"""
+        if self.next_payment_date and self.status == 'active':
+            today = timezone.now().date()
+            if self.next_payment_date >= today:
+                return (self.next_payment_date - today).days
+        return None
+    
+    @property
+    def is_payment_due(self):
+        """Check if payment is due"""
+        if self.next_payment_date and self.status == 'active':
+            return timezone.now().date() >= self.next_payment_date
+        return False
+    
+    @property
+    def is_overdue(self):
+        """Check if payment is overdue"""
+        if self.next_payment_date and self.status == 'active':
+            return timezone.now().date() > self.next_payment_date
+        return False
+    
+    @property
+    def subscription_age_days(self):
+        """Age of subscription in days"""
+        return (timezone.now().date() - self.start_date).days
+    
+    @property
+    def subscription_age_months(self):
+        """Age of subscription in months"""
+        return self.subscription_age_days / 30.44  # Average days per month
+    
+    # ============================================================================
+    # CURRENCY CONVERSION METHODS
+    # ============================================================================
+    
+    def get_amount_in_currency(self, target_currency):
+        """Convert recurring amount to specified currency"""
+        if not target_currency or not self.currency:
+            return self.amount
+            
+        if self.currency == target_currency:
+            return self.amount
+        
+        try:
+            # Import here to avoid circular imports
+            
+            exchange_rate = ExchangeRate.objects.filter(
+                from_currency=self.currency,
+                to_currency=target_currency
+            ).order_by('-effective_date').first()
+            
+            if exchange_rate:
+                return self.amount * exchange_rate.rate
+        except Exception:
+            pass
+        
+        return self.amount
+    
+    def get_total_donated_in_currency(self, target_currency):
+        """Get total donated amount in specified currency"""
+        total = Decimal('0.00')
+        for donation in self.related_donations.filter(status='completed'):
+            total += donation.get_amount_in_currency(target_currency)
+        return total
+    
+    # ============================================================================
+    # FORMATTING PROPERTIES
+    # ============================================================================
+    
     @property
     def formatted_amount(self):
-        if self.currency:
-            return f"{self.currency.code} {self.amount:,.2f}"
-        return f"{self.amount:,.2f}"
+        """Formatted amount with currency"""
+        return f"{self.currency.code} {self.amount:,.2f}"
+    
+    @property
+    def formatted_total_donated(self):
+        """Formatted total donated with currency"""
+        return f"{self.currency.code} {self.total_donated:,.2f}"
+    
+    @property
+    def formatted_projected_annual(self):
+        """Formatted projected annual amount"""
+        return f"{self.currency.code} {self.projected_annual_amount:,.2f}"
+    
+    @property
+    def formatted_lifetime_value(self):
+        """Formatted lifetime value"""
+        return f"{self.currency.code} {self.lifetime_value:,.2f}"
+    
+    # ============================================================================
+    # BUSINESS LOGIC METHODS
+    # ============================================================================
+    
+    def calculate_next_payment_date(self):
+        """Calculate next payment date based on frequency"""
+        from dateutil.relativedelta import relativedelta
+        
+        frequency_deltas = {
+            'weekly': relativedelta(weeks=1),
+            'biweekly': relativedelta(weeks=2),
+            'monthly': relativedelta(months=1),
+            'quarterly': relativedelta(months=3),
+            'biannually': relativedelta(months=6),
+            'annually': relativedelta(years=1),
+        }
+        
+        delta = frequency_deltas.get(self.frequency, relativedelta(months=1))
+        
+        if self.last_payment_date:
+            next_date = self.last_payment_date + delta
+        else:
+            next_date = self.start_date + delta
+        
+        # Don't schedule beyond end date
+        if self.end_date and next_date > self.end_date:
+            return None
+            
+        return next_date
+    
+    def record_successful_payment(self, donation):
+        """Record a successful payment"""
+        self.payment_count += 1
+        self.last_payment_date = donation.donation_date.date()
+        self.next_payment_date = self.calculate_next_payment_date()
+        self.failed_payment_count = 0  # Reset failed count on success
+        
+        # Check if subscription should be completed
+        if self.end_date and self.next_payment_date and self.next_payment_date > self.end_date:
+            self.status = 'completed'
+            self.next_payment_date = None
+        
+        self.save()
+    
+    def record_failed_payment(self):
+        """Record a failed payment"""
+        self.failed_payment_count += 1
+        
+        # Cancel if too many failures
+        if self.failed_payment_count >= self.max_failed_payments:
+            self.status = 'failed'
+            self.next_payment_date = None
+        else:
+            # Retry in a few days
+            from datetime import timedelta
+            self.next_payment_date = timezone.now().date() + timedelta(days=3)
+        
+        self.save()
+    
+    def pause_subscription(self, reason=None):
+        """Pause the subscription"""
+        self.status = 'paused'
+        if reason:
+            self.notes = f"{self.notes or ''}\nPaused: {reason}".strip()
+        self.save()
+    
+    def resume_subscription(self):
+        """Resume a paused subscription"""
+        if self.status == 'paused':
+            self.status = 'active'
+            # Recalculate next payment date
+            self.next_payment_date = self.calculate_next_payment_date()
+            self.save()
+    
+    def cancel_subscription(self, reason=None):
+        """Cancel the subscription"""
+        self.status = 'cancelled'
+        self.next_payment_date = None
+        if reason:
+            self.notes = f"{self.notes or ''}\nCancelled: {reason}".strip()
+        self.save()
+    
+    def update_monetary_calculations(self):
+        """Recalculate monetary fields - useful for data migrations"""
+        # This method can be called to refresh calculated values
+        pass
+    
+    def get_performance_summary(self):
+        """Get comprehensive performance summary"""
+        return {
+            'total_donated': float(self.total_donated),
+            'payment_count': self.payment_count,
+            'failed_payment_count': self.failed_payment_count,
+            'success_rate': round(self.success_rate, 2),
+            'average_donation': float(self.average_donation_amount),
+            'projected_annual': float(self.projected_annual_amount),
+            'lifetime_value': float(self.lifetime_value),
+            'subscription_age_months': round(self.subscription_age_months, 1),
+            'is_healthy': self.is_healthy,
+            'is_at_risk': self.is_at_risk,
+            'days_until_next_payment': self.days_until_next_payment,
+            'currency': self.currency.code
+        }
     
     def __str__(self):
-        donor_name = self.donor.get_full_name or self.donor.username
-        return f"{donor_name} - {self.formatted_amount} {self.frequency}"
+        donor_name = self.donor.get_full_name() or self.donor.username
+        return f"{donor_name} - {self.formatted_amount} {self.frequency} ({self.get_status_display()})"
+
 
 class InKindDonation(models.Model):
-    """Non-monetary donations with valuation in multiple currencies"""
+    """Enhanced non-monetary donations with comprehensive valuation"""
+    
     STATUS_CHOICES = [
         ('pledged', 'Pledged'),
+        ('confirmed', 'Confirmed'),
         ('received', 'Received'),
         ('declined', 'Declined'),
         ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
     ]
     
-    # Donor information
+    CATEGORY_CHOICES = [
+        ('equipment', 'Equipment'),
+        ('supplies', 'Supplies'),
+        ('services', 'Professional Services'),
+        ('food', 'Food & Beverages'),
+        ('clothing', 'Clothing'),
+        ('books', 'Books & Educational Materials'),
+        ('technology', 'Technology'),
+        ('vehicles', 'Vehicles'),
+        ('real_estate', 'Real Estate'),
+        ('artwork', 'Artwork'),
+        ('other', 'Other'),
+    ]
+    
+    # Donor Information
     donor = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -1061,10 +1995,12 @@ class InKindDonation(models.Model):
     is_anonymous = models.BooleanField(default=False)
     donor_name = models.CharField(max_length=200, blank=True, null=True)
     donor_email = models.EmailField(blank=True, null=True)
+    donor_phone = models.CharField(max_length=20, blank=True, null=True)
+    donor_organization = models.CharField(max_length=200, blank=True, null=True)
     
-    # Donation targets
+    # Donation Targets
     campaign = models.ForeignKey(
-        DonationCampaign, 
+        'DonationCampaign', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True, 
@@ -1078,10 +2014,13 @@ class InKindDonation(models.Model):
         related_name='in_kind_donations'
     )
     
-    # Item details
+    # Item Details
     item_description = models.TextField()
-    category = models.CharField(max_length=100, blank=True, null=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='other')
+    brand_model = models.CharField(max_length=200, blank=True, null=True)
+    condition = models.CharField(max_length=100, blank=True, null=True)
     quantity = models.PositiveIntegerField(default=1)
+    unit_of_measure = models.CharField(max_length=50, blank=True, null=True)
     
     # Valuation
     estimated_value = models.DecimalField(
@@ -1094,60 +2033,382 @@ class InKindDonation(models.Model):
         on_delete=models.PROTECT,
         related_name='in_kind_donations',
         null=True,
-        blank=True
+        blank=False
+    )
+    valuation_method = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="How the value was determined"
+    )
+    market_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Current market value if different from estimated"
     )
     
-    # Dates and status
-    donation_date = models.DateField()
+    # Dates and Status
+    pledge_date = models.DateField(default=timezone.now)
+    expected_delivery_date = models.DateField(null=True, blank=True)
     received_date = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pledged')
+    
+    # Logistics
+    pickup_required = models.BooleanField(default=False)
+    delivery_address = models.TextField(blank=True, null=True)
+    special_handling_requirements = models.TextField(blank=True, null=True)
+    storage_requirements = models.TextField(blank=True, null=True)
+    
+    # Processing
     received_by = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True, 
-        related_name='received_donations'
+        related_name='received_in_kind_donations'
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pledged')
+    condition_on_receipt = models.TextField(blank=True, null=True)
+    actual_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Actual value assessed upon receipt"
+    )
     
-    # Administrative
-    notes = models.TextField(blank=True, null=True)
+    # Tax and Receipt
     receipt_sent = models.BooleanField(default=False)
     receipt_number = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    receipt_sent_date = models.DateTimeField(null=True, blank=True)
+    tax_deductible = models.BooleanField(default=True)
     receipt_image = models.ImageField(
         upload_to='in_kind_donation_receipts/', 
         blank=True, 
         null=True,
         help_text="Upload receipt or photo of in-kind donation"
     )
+    
+    # Documentation
+    photos = models.FileField(
+        upload_to='in_kind_donation_photos/',
+        blank=True,
+        null=True,
+        help_text="Photos of the donated items"
+    )
+    documentation = models.FileField(
+        upload_to='in_kind_donation_docs/',
+        blank=True,
+        null=True,
+        help_text="Additional documentation (certificates, warranties, etc.)"
+    )
+    donation_date = models.DateTimeField(default=timezone.now)
+    
+    # Administrative
+    notes = models.TextField(blank=True, null=True)
+    internal_notes = models.TextField(blank=True, null=True)
+    
+    # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['-donation_date']
+        ordering = ['-pledge_date']
         indexes = [
-            models.Index(fields=['status', 'donation_date']),
+            models.Index(fields=['status', 'pledge_date']),
             models.Index(fields=['donor', 'status']),
+            models.Index(fields=['category', 'status']),
             models.Index(fields=['valuation_currency']),
         ]
         verbose_name = "In-Kind Donation"
         verbose_name_plural = "In-Kind Donations"
     
+    # ============================================================================
+    # VALUATION CALCULATIONS
+    # ============================================================================
+    @property
+    def formatted_value(self):
+        """Legacy property for admin compatibility"""
+        return self.formatted_estimated_value
+    
+    @property
+    def total_estimated_value(self):
+        """Total estimated value (quantity × unit value)"""
+        return (self.estimated_value or Decimal('0.00')) * self.quantity
+    
+    @property
+    def total_actual_value(self):
+        """Total actual value if assessed"""
+        if self.actual_value:
+            return self.actual_value * self.quantity
+        return self.total_estimated_value
+    
+    @property
+    def total_market_value(self):
+        """Total market value if provided"""
+        if self.market_value:
+            return self.market_value * self.quantity
+        return self.total_estimated_value
+    
+    @property
+    def value_variance(self):
+        """Difference between estimated and actual value"""
+        if self.actual_value:
+            return self.total_actual_value - self.total_estimated_value
+        return Decimal('0.00')
+    
+    @property
+    def value_variance_percentage(self):
+        """Value variance as percentage"""
+        if self.total_estimated_value > 0 and self.actual_value:
+            return float((self.value_variance / self.total_estimated_value) * 100)
+        return 0
+    
+    @property
+    def effective_value(self):
+        """The value that should be used for reporting"""
+        if self.status == 'received' and self.actual_value:
+            return self.total_actual_value
+        return self.total_estimated_value
+    
+    # ============================================================================
+    # CURRENCY CONVERSION METHODS
+    # ============================================================================
+    
+    def get_value_in_currency(self, target_currency, use_actual_value=False):
+        """Convert donation value to specified currency"""
+        if not target_currency or not self.valuation_currency:
+            return self.effective_value
+            
+        if self.valuation_currency == target_currency:
+            return self.effective_value
+        
+        value_to_convert = self.total_actual_value if use_actual_value and self.actual_value else self.total_estimated_value
+        
+        try:
+            # Import here to avoid circular imports
+            
+            conversion_date = self.received_date or self.pledge_date
+            exchange_rate = ExchangeRate.objects.filter(
+                from_currency=self.valuation_currency,
+                to_currency=target_currency,
+                effective_date__lte=conversion_date
+            ).order_by('-effective_date').first()
+            
+            if exchange_rate:
+                return value_to_convert * exchange_rate.rate
+        except Exception:
+            pass
+        
+        return value_to_convert
+    
+    # ============================================================================
+    # STATUS AND VALIDATION PROPERTIES
+    # ============================================================================
+    
+    @property
+    def is_received(self):
+        """Check if donation has been received"""
+        return self.status == 'received'
+    
+    @property
+    def is_pending_receipt(self):
+        """Check if donation is confirmed but not yet received"""
+        return self.status in ['pledged', 'confirmed']
+    
+    @property
+    def is_overdue(self):
+        """Check if expected delivery date has passed"""
+        if self.expected_delivery_date and self.status in ['pledged', 'confirmed']:
+            return timezone.now().date() > self.expected_delivery_date
+        return False
+    
+    @property
+    def days_since_pledge(self):
+        """Days since pledge was made"""
+        if self.pledge_date:
+            return (timezone.now().date() - self.pledge_date).days
+        return 0
+    
+    @property
+    def days_until_expected_delivery(self):
+        """Days until expected delivery"""
+        if self.expected_delivery_date and self.status in ['pledged', 'confirmed']:
+            today = timezone.now().date()
+            if self.expected_delivery_date >= today:
+                return (self.expected_delivery_date - today).days
+        return None
+    
+    @property
+    def processing_time_days(self):
+        """Days from pledge to receipt"""
+        if self.received_date and self.pledge_date:
+            return (self.received_date - self.pledge_date).days
+        return None
+    
+    @property
+    def is_tax_receipt_eligible(self):
+        """Check if eligible for tax receipt"""
+        return (self.tax_deductible and 
+                self.status == 'received' and 
+                not self.is_anonymous)
+    
+    @property
+    def requires_receipt(self):
+        """Check if receipt is required but not sent"""
+        return (self.is_tax_receipt_eligible and 
+                not self.receipt_sent)
+    
+    # ============================================================================
+    # DONOR INFORMATION PROPERTIES
+    # ============================================================================
+    
     @property
     def donor_name_display(self):
+        """Display name for donor"""
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name or self.donor.username
+            return self.donor.get_full_name() or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
-    def formatted_value(self):
-        if self.valuation_currency:
-            return f"{self.valuation_currency.code} {self.estimated_value:,.2f}"
-        return f"{self.estimated_value:,.2f}"
+    def donor_contact_display(self):
+        """Display contact for donor"""
+        if self.is_anonymous:
+            return None
+        if self.donor:
+            return self.donor.email
+        return self.donor_email
+    
+    @property
+    def has_complete_donor_info(self):
+        """Check if donor information is complete"""
+        if self.is_anonymous:
+            return True
+        return bool(self.donor_name_display and self.donor_contact_display)
+    
+    # ============================================================================
+    # FORMATTING PROPERTIES
+    # ============================================================================
+    
+    @property
+    def formatted_estimated_value(self):
+        """Formatted estimated value with currency"""
+        return f"{self.valuation_currency.code} {self.total_estimated_value:,.2f}"
+    
+    @property
+    def formatted_actual_value(self):
+        """Formatted actual value with currency"""
+        if self.actual_value:
+            return f"{self.valuation_currency.code} {self.total_actual_value:,.2f}"
+        return None
+    
+    @property
+    def formatted_effective_value(self):
+        """Formatted effective value with currency"""
+        return f"{self.valuation_currency.code} {self.effective_value:,.2f}"
+    
+    @property
+    def formatted_market_value(self):
+        """Formatted market value with currency"""
+        if self.market_value:
+            return f"{self.valuation_currency.code} {self.total_market_value:,.2f}"
+        return None
+    
+    @property
+    def formatted_value_variance(self):
+        """Formatted value variance with currency and sign"""
+        if self.actual_value:
+            variance = self.value_variance
+            sign = "+" if variance >= 0 else ""
+            return f"{sign}{self.valuation_currency.code} {variance:,.2f}"
+        return None
+    
+    @property
+    def item_summary(self):
+        """Summary description of the item"""
+        summary = f"{self.quantity} × {self.item_description}"
+        if self.brand_model:
+            summary += f" ({self.brand_model})"
+        if self.condition:
+            summary += f" - {self.condition}"
+        return summary
+    
+    # ============================================================================
+    # BUSINESS LOGIC METHODS
+    # ============================================================================
+    
+    def update_monetary_calculations(self):
+        """Recalculate all monetary fields - useful for data migrations"""
+        # This method can be called to refresh calculated values
+        # Useful when exchange rates change or when migrating data
+        pass
+    
+    def generate_receipt_number(self):
+        """Generate unique receipt number"""
+        if not self.receipt_number and self.is_tax_receipt_eligible:
+            import uuid
+            year = self.pledge_date.year
+            self.receipt_number = f"IKD-{year}-{str(uuid.uuid4())[:8].upper()}"
+    
+    def mark_as_received(self, received_by_user, condition_notes=None, actual_value=None):
+        """Mark donation as received"""
+        self.status = 'received'
+        self.received_date = timezone.now().date()
+        self.received_by = received_by_user
+        if condition_notes:
+            self.condition_on_receipt = condition_notes
+        if actual_value:
+            self.actual_value = actual_value
+        self.save()
+    
+    def mark_receipt_sent(self):
+        """Mark receipt as sent"""
+        self.receipt_sent = True
+        self.receipt_sent_date = timezone.now()
+        self.save(update_fields=['receipt_sent', 'receipt_sent_date'])
+    
+    def get_logistics_summary(self):
+        """Get logistics and handling summary"""
+        return {
+            'pickup_required': self.pickup_required,
+            'delivery_address': self.delivery_address,
+            'special_handling': bool(self.special_handling_requirements),
+            'storage_requirements': bool(self.storage_requirements),
+            'expected_delivery_date': self.expected_delivery_date.isoformat() if self.expected_delivery_date else None,
+            'days_until_delivery': self.days_until_expected_delivery,
+            'is_overdue': self.is_overdue
+        }
+    
+    def get_valuation_summary(self):
+        """Get comprehensive valuation summary"""
+        return {
+            'estimated_value': float(self.total_estimated_value),
+            'actual_value': float(self.total_actual_value) if self.actual_value else None,
+            'market_value': float(self.total_market_value) if self.market_value else None,
+            'effective_value': float(self.effective_value),
+            'value_variance': float(self.value_variance) if self.actual_value else None,
+            'value_variance_percentage': self.value_variance_percentage if self.actual_value else None,
+            'valuation_method': self.valuation_method,
+            'currency': self.valuation_currency.code,
+            'quantity': self.quantity,
+            'unit_value': float(self.estimated_value)
+        }
+    
+    def save(self, *args, **kwargs):
+        # Generate receipt number if eligible
+        if (self.status == 'received' and 
+            self.is_tax_receipt_eligible and 
+            not self.receipt_number):
+            self.generate_receipt_number()
+            
+        super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.item_description} - {self.formatted_value}"
+        return f"{self.donor_name_display} - {self.item_summary} ({self.formatted_effective_value})"
+
 
 class Grant(models.Model):
     """Grants received by the organization with multi-currency support"""
