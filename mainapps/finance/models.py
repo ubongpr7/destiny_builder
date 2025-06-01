@@ -1442,7 +1442,7 @@ class Donation(models.Model):
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name() or self.donor.username
+            return self.donor.get_full_name or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
@@ -1956,7 +1956,7 @@ class RecurringDonation(models.Model):
         }
     
     def __str__(self):
-        donor_name = self.donor.get_full_name() or self.donor.username
+        donor_name = self.donor.get_full_name or self.donor.username
         return f"{donor_name} - {self.formatted_amount} {self.frequency} ({self.get_status_display()})"
 
 
@@ -2272,7 +2272,7 @@ class InKindDonation(models.Model):
         if self.is_anonymous:
             return "Anonymous"
         if self.donor:
-            return self.donor.get_full_name() or self.donor.username
+            return self.donor.get_full_name or self.donor.username
         return self.donor_name or "Unknown"
     
     @property
@@ -3633,8 +3633,8 @@ class Budget(models.Model):
                     'currency_code': allocation.source_account.currency.code if allocation.source_account.currency else None,
                     'formatted_amount': allocation.formatted_amount,
                     'allocation_date': allocation.allocation_date.isoformat(),
-                    'allocated_by': allocation.allocated_by.get_full_name() if allocation.allocated_by else 'Unknown',
-                    'approved_by': allocation.approved_by.get_full_name() if allocation.approved_by else None,
+                    'allocated_by': allocation.allocated_by.get_full_name if allocation.allocated_by else 'Unknown',
+                    'approved_by': allocation.approved_by.get_full_name if allocation.approved_by else None,
                     'purpose': allocation.purpose,
                     'is_active': allocation.is_active,
                     'days_since_allocation': (timezone.now().date() - allocation.allocation_date.date()).days
@@ -3847,7 +3847,7 @@ class Budget(models.Model):
                     'is_over_budget': item.is_over_budget,
                     'is_overcommitted': item.is_overcommitted,
                     'has_pending_requests': item.has_pending_requests,
-                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
+                    'responsible_person': item.responsible_person.get_full_name if item.responsible_person else None
                 })
             return items_data
         except Exception as e:
