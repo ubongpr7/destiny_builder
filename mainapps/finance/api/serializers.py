@@ -252,7 +252,7 @@ class DonationCampaignListSerializer(serializers.ModelSerializer):
             'id', 'title', 'slug', 'description', 'campaign_type', 'target_amount', 
             'target_currency', 'target_currency_id', 'minimum_goal', 'start_date', 
             'end_date', 'project', 'project_id', 'status', 'is_active', 'is_featured',
-            'image', 'created_by', 'created_at', 'updated_at',
+            'image','video', 'created_by', 'created_at', 'updated_at',
             # Enhanced properties
             'current_amount', 'progress_percentage', 'amount_remaining',
             'formatted_target_amount', 'formatted_current_amount', 'campaign_status',
@@ -334,7 +334,7 @@ class DonationCampaignDetailSerializer(serializers.ModelSerializer):
             'target_currency', 'target_currency_id', 'minimum_goal', 'start_date',
             'end_date', 'launch_date', 'project', 'project_id', 'status', 'is_active',
             'is_featured', 'allow_anonymous_donations', 'allow_recurring_donations',
-            'allow_in_kind_donations', 'image', 'video_url', 'created_by', 'managed_by',
+            'allow_in_kind_donations', 'image', 'video', 'created_by', 'managed_by',
             'created_at', 'updated_at',
             # Enhanced financial metrics
             'current_amount', 'total_donations_amount', 'total_recurring_amount',
