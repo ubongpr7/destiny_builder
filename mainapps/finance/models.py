@@ -428,7 +428,7 @@ class DonationCampaign(models.Model):
     ]
     
     # Basic Information
-    title = models.CharField(max_length=200)
+    title = models.CharField(max_length=300)
     slug = models.SlugField(unique=True, blank=True)
     description = models.TextField()
     campaign_type = models.CharField(max_length=100, choices=CAMPAIGN_TYPE_CHOICES, default='general')
@@ -470,7 +470,7 @@ class DonationCampaign(models.Model):
     )
     
     # Campaign Settings
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='draft')
     is_featured = models.BooleanField(default=False)
     allow_anonymous_donations = models.BooleanField(default=True)
     allow_recurring_donations = models.BooleanField(default=True)
