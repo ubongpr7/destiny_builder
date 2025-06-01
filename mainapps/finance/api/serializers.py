@@ -509,7 +509,7 @@ class DonationDetailSerializer(serializers.ModelSerializer):
     # Comprehensive data
     attribution_data = serializers.ReadOnlyField()
     financial_summary = serializers.ReadOnlyField()
-    
+    d_type=serializers.SerializerMethodField()
     class Meta:
         model = Donation
         fields = [
@@ -529,10 +529,11 @@ class DonationDetailSerializer(serializers.ModelSerializer):
             'days_since_donation', 'is_recent', 'donor_name_display', 'donor_email_display',
             'has_complete_donor_info', 'formatted_amount', 'formatted_net_amount',
             'formatted_processor_fee', 'formatted_converted_amount', 'attribution_data',
-            'financial_summary'
+            'financial_summary','d_type'
         ]
         read_only_fields = ['id', 'processed_by', 'created_at', 'updated_at']
-
+    def get_d_type(self,obj):
+        return 'one-time'
 # ============================================================================
 # RECURRING DONATION SERIALIZERS
 # ============================================================================
@@ -605,6 +606,7 @@ class RecurringDonationDetailSerializer(serializers.ModelSerializer):
     formatted_total_donated = serializers.ReadOnlyField()
     formatted_projected_annual = serializers.ReadOnlyField()
     formatted_lifetime_value = serializers.ReadOnlyField()
+    d_type=serializers.SerializerMethodField()
     
     # Comprehensive data
     performance_summary = serializers.ReadOnlyField()
@@ -624,9 +626,11 @@ class RecurringDonationDetailSerializer(serializers.ModelSerializer):
             'is_at_risk', 'days_until_next_payment', 'is_payment_due', 'is_overdue',
             'subscription_age_days', 'subscription_age_months', 'formatted_amount',
             'formatted_total_donated', 'formatted_projected_annual', 'formatted_lifetime_value',
-            'performance_summary'
+            'performance_summary','d_type'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    def get_d_type(self,obj):
+        return 'recurring'
 
 # ============================================================================
 # IN-KIND DONATION SERIALIZERS
