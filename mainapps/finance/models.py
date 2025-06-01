@@ -2447,7 +2447,190 @@ class Budget(models.Model):
         except Exception as e:
             print(f"Error in get_allocation_utilization_analysis: {e}")
             return {}
+     
+    def get_funding_breakdown(self):
+        """Get detailed funding breakdown by source"""
+        try:
+            funding_data = []
+            for funding in self.budget_funding.select_related('funding_source', 'funding_source__currency'):
+                funding_data.append({
+                    'source_name': funding.funding_source.name,
+                    'source_type': funding.funding_source.get_funding_type_display(),
+                    'amount_allocated': str(funding.amount_allocated),
+                    'currency': funding.funding_source.currency.code if funding.funding_source.currency else None,
+                    'allocation_date': funding.allocation_date.isoformat() if funding.allocation_date else None,
+                    'percentage_of_budget': float((funding.amount_allocated / self.total_amount) * 100) if self.total_amount > 0 else 0,
+                    'is_active': funding.funding_source.is_active,
+                    'notes': funding.notes if hasattr(funding, 'notes') else ''
+                })
+            return funding_data
+        except Exception as e:
+            print(f"Error in get_funding_breakdown: {e}")
+            return []
     
+    def get_spending_by_category(self):
+        """Get spending breakdown by budget item category"""
+        try:
+            from django.db.models import Sum
+            from collections import defaultdict
+            
+            # Get all budget items grouped by category
+            categories = self.items.values('category').annotate(
+                total_budgeted=Sum('budgeted_amount')
+            ).order_by('category')
+            
+            category_data = []
+            for category in categories:
+                category_name = category['category']
+                budgeted = category['total_budgeted'] or Decimal('0.00')
+                
+                # Get all items in this category
+                category_items = self.items.filter(category=category_name)
+                
+                # Calculate totals by iterating through items and using their properties
+                total_spent = Decimal('0.00')
+                total_committed = Decimal('0.00')
+                total_pending = Decimal('0.00')
+                
+                for item in category_items:
+                    total_spent += item.spent_amount
+                    total_committed += item.committed_amount
+                    total_pending += item.pending_amount
+                
+                remaining = budgeted - total_spent
+                
+                category_data.append({
+                    'category': category_name,
+                    'budgeted_amount': str(budgeted),
+                    'spent_amount': str(total_spent),
+                    'committed_amount': str(total_committed),
+                    'pending_amount': str(total_pending),
+                    'remaining_amount': str(remaining),
+                    'spent_percentage': float((total_spent / budgeted) * 100) if budgeted > 0 else 0,
+                    'committed_percentage': float((total_committed / budgeted) * 100) if budgeted > 0 else 0,
+                    'utilization_percentage': float(((total_committed + total_pending) / budgeted) * 100) if budgeted > 0 else 0
+                })
+            return category_data
+        except Exception as e:
+            print(f"Error in get_spending_by_category: {e}")
+            return []
+    
+    def get_monthly_spending_trend(self):
+        """Get monthly spending trend for this budget"""
+        try:
+            from django.db.models import Sum
+            from django.db.models.functions import TruncMonth
+        
+            # Get spending data for the budget period
+            start_date = self.start_date
+            end_date = min(self.end_date, timezone.now().date())
+        
+            # Get monthly data from organizational expenses through budget items
+            monthly_data = OrganizationalExpense.objects.filter(
+                budget_item__budget=self,
+                expense_date__gte=start_date,
+                expense_date__lte=end_date,
+                status='paid'
+            ).annotate(
+                month=TruncMonth('expense_date')
+            ).values('month').annotate(
+                total_spent=Sum('amount')
+            ).order_by('month')
+        
+            trend_data = []
+            for month_data in monthly_data:
+                if month_data['month']:
+                    trend_data.append({
+                        'month': month_data['month'].strftime('%Y-%m'),
+                        'spent_amount': str(month_data['total_spent'] or Decimal('0.00')),
+                        'currency': self.currency.code if self.currency else None
+                    })
+            return trend_data
+        except Exception as e:
+            print(f"Error in get_monthly_spending_trend: {e}")
+            return []
+    
+    def get_budget_utilization_by_item(self):
+        """Get utilization percentage for each budget item"""
+        try:
+            items_data = []
+            for item in self.items.all():
+                spent_utilization = 0
+                committed_utilization = 0
+                total_utilization = 0
+                
+                if item.budgeted_amount and item.budgeted_amount > 0:
+                    spent_utilization = float((item.spent_amount / item.budgeted_amount) * 100)
+                    committed_utilization = float((item.committed_amount / item.budgeted_amount) * 100)
+                    total_utilization = float((item.utilization_percentage))
+                
+                items_data.append({
+                    'id': item.id,
+                    'category': item.category,
+                    'subcategory': item.subcategory or '',
+                    'description': item.description,
+                    'budgeted_amount': str(item.budgeted_amount),
+                    'spent_amount': str(item.spent_amount),
+                    'committed_amount': str(item.committed_amount),
+                    'pending_amount': str(item.pending_amount),
+                    'remaining_amount': str(item.remaining_amount),
+                    'truly_available_amount': str(item.truly_available_amount),
+                    'spent_percentage': spent_utilization,
+                    'committed_percentage': committed_utilization,
+                    'utilization_percentage': total_utilization,
+                    'status': item.utilization_status,
+                    'budget_health': item.budget_health,
+                    'is_locked': item.is_locked,
+                    'is_over_budget': item.is_over_budget,
+                    'is_overcommitted': item.is_overcommitted,
+                    'has_pending_requests': item.has_pending_requests,
+                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
+                })
+            return items_data
+        except Exception as e:
+            print(f"Error in get_budget_utilization_by_item: {e}")
+            return []
+    
+    def get_funding_vs_spending_analysis(self):
+        """Compare funding received vs actual spending"""
+        try:
+            total_budget = self.total_amount or Decimal('0.00')
+            total_funded = self.total_funding_allocated
+            total_spent = self.spent_amount
+            total_committed = self.committed_amount
+            total_pending = self.pending_amount
+            funding_gap = self.funding_gap
+            
+            return {
+                'total_budget': str(total_budget),
+                'total_funded': str(total_funded),
+                'total_spent': str(total_spent),
+                'total_committed': str(total_committed),
+                'total_pending': str(total_pending),
+                'funding_gap': str(funding_gap),
+                'funding_surplus': str(self.funding_surplus),
+                'spending_vs_funding_ratio': float((total_spent / total_funded) * 100) if total_funded > 0 else 0,
+                'committed_vs_funding_ratio': float((total_committed / total_funded) * 100) if total_funded > 0 else 0,
+                'budget_utilization': self.spent_percentage,
+                'committed_utilization': self.committed_percentage,
+                'total_utilization': self.utilization_percentage,
+                'funding_utilization': float((total_funded / total_budget) * 100) if total_budget > 0 else 0,
+                'funding_efficiency': self.funding_efficiency,
+                'spending_efficiency': self.spending_efficiency,
+                'is_overspent': self.is_over_budget,
+                'is_overcommitted': self.is_overcommitted,
+                'is_underfunded': not self.is_fully_funded,
+                'has_pending_requests': self.has_pending_requests,
+                'currency': self.currency.code if self.currency else None
+            }
+        except Exception as e:
+            print(f"Error in get_funding_vs_spending_analysis: {e}")
+            return {}
+    
+       
+    def __str__(self):
+        return f"{self.title} - {self.get_budget_type_display()} ({self.formatted_amount})"
+
     def __str__(self):
         return f"{self.title} - {self.get_budget_type_display()} ({self.formatted_amount})"
 
