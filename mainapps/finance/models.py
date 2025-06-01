@@ -813,7 +813,9 @@ class DonationCampaign(models.Model):
     @property
     def formatted_target_amount(self):
         """Formatted target amount with currency"""
-        return f"{self.target_currency.code} {self.target_amount:,.2f}"
+        if self.target_currency:
+            return f"{self.target_currency.code} {self.target_amount:,.2f}"
+        return f"{self.target_amount:,.2f}"
     
     @property
     def formatted_current_amount(self):
