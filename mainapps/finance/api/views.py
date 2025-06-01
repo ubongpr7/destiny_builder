@@ -1110,194 +1110,194 @@ class RecurringDonationViewSet(viewsets.ModelViewSet):
 # IN-KIND DONATION VIEWSET
 # ============================================================================
 
-# class InKindDonationViewSet(viewsets.ModelViewSet):
-#     """
-#     Comprehensive ViewSet for In-Kind Donations
-#     """
-#     queryset = InKindDonation.objects.select_related(
-#         'donor', 'campaign', 'project', 'valuation_currency', 'received_by'
-#     )
+class InKindDonationViewSet(viewsets.ModelViewSet):
+    """
+    Comprehensive ViewSet for In-Kind Donations
+    """
+    queryset = InKindDonation.objects.select_related(
+        'donor', 'campaign', 'project', 'valuation_currency', 'received_by'
+    )
     
-#     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-#     # filterset_class = InKindDonationFilter
-#     search_fields = ['item_description', 'donor_name', 'donor_email', 'brand_model']
-#     ordering_fields = [
-#         'donation_date', 'estimated_value', 'status', 'created_at',
-#         'received_date', 'effective_value'
-#     ]
-#     ordering = ['-donation_date']
-#     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    # filterset_class = InKindDonationFilter
+    search_fields = ['item_description', 'donor_name', 'donor_email', 'brand_model']
+    ordering_fields = [
+        'donation_date', 'estimated_value', 'status', 'created_at',
+        'received_date', 'effective_value'
+    ]
+    ordering = ['-donation_date']
+    permission_classes = [IsAuthenticated]
 
-#     def get_serializer_class(self):
-#         if self.action == 'list':
-#             return InKindDonationListSerializer
-#         return InKindDonationDetailSerializer
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InKindDonationListSerializer
+        return InKindDonationDetailSerializer
 
-#     def get_queryset(self):
-#         queryset = super().get_queryset()
+    def get_queryset(self):
+        queryset = super().get_queryset()
         
-#         # Filter by value range
-#         min_value = self.request.query_params.get('min_value')
-#         max_value = self.request.query_params.get('max_value')
-#         if min_value:
-#             queryset = queryset.filter(estimated_value__gte=min_value)
-#         if max_value:
-#             queryset = queryset.filter(estimated_value__lte=max_value)
+        # Filter by value range
+        min_value = self.request.query_params.get('min_value')
+        max_value = self.request.query_params.get('max_value')
+        if min_value:
+            queryset = queryset.filter(estimated_value__gte=min_value)
+        if max_value:
+            queryset = queryset.filter(estimated_value__lte=max_value)
         
-#         # Filter by receipt status
-#         receipt_status = self.request.query_params.get('receipt_status')
-#         if receipt_status == 'pending':
-#             queryset = queryset.filter(status='received', receipt_sent=False)
-#         elif receipt_status == 'sent':
-#             queryset = queryset.filter(receipt_sent=True)
+        # Filter by receipt status
+        receipt_status = self.request.query_params.get('receipt_status')
+        if receipt_status == 'pending':
+            queryset = queryset.filter(status='received', receipt_sent=False)
+        elif receipt_status == 'sent':
+            queryset = queryset.filter(receipt_sent=True)
         
-#         # Filter by logistics
-#         pickup_required = self.request.query_params.get('pickup_required')
-#         if pickup_required == 'true':
-#             queryset = queryset.filter(pickup_required=True)
+        # Filter by logistics
+        pickup_required = self.request.query_params.get('pickup_required')
+        if pickup_required == 'true':
+            queryset = queryset.filter(pickup_required=True)
         
-#         return queryset
+        return queryset
 
-#     @action(detail=True, methods=['post'])
-#     def mark_received(self, request, pk=None):
-#         """Mark in-kind donation as received"""
-#         in_kind_donation = self.get_object()
+    @action(detail=True, methods=['post'])
+    def mark_received(self, request, pk=None):
+        """Mark in-kind donation as received"""
+        in_kind_donation = self.get_object()
         
-#         condition_notes = request.data.get('condition_notes')
-#         actual_value = request.data.get('actual_value')
+        condition_notes = request.data.get('condition_notes')
+        actual_value = request.data.get('actual_value')
         
-#         if actual_value:
-#             try:
-#                 actual_value = Decimal(str(actual_value))
-#             except (ValueError, TypeError):
-#                 return Response({'error': 'Invalid actual_value'}, status=400)
+        if actual_value:
+            try:
+                actual_value = Decimal(str(actual_value))
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid actual_value'}, status=400)
         
-#         in_kind_donation.mark_as_received(
-#             received_by_user=request.user,
-#             condition_notes=condition_notes,
-#             actual_value=actual_value
-#         )
+        in_kind_donation.mark_as_received(
+            received_by_user=request.user,
+            condition_notes=condition_notes,
+            actual_value=actual_value
+        )
         
-#         return Response({
-#             'message': 'In-kind donation marked as received',
-#             'status': in_kind_donation.status,
-#             'received_date': in_kind_donation.received_date,
-#             'effective_value': in_kind_donation.effective_value
-#         })
+        return Response({
+            'message': 'In-kind donation marked as received',
+            'status': in_kind_donation.status,
+            'received_date': in_kind_donation.received_date,
+            'effective_value': in_kind_donation.effective_value
+        })
 
-#     @action(detail=True, methods=['post'])
-#     def mark_receipt_sent(self, request, pk=None):
-#         """Mark receipt as sent"""
-#         in_kind_donation = self.get_object()
-#         in_kind_donation.mark_receipt_sent()
+    @action(detail=True, methods=['post'])
+    def mark_receipt_sent(self, request, pk=None):
+        """Mark receipt as sent"""
+        in_kind_donation = self.get_object()
+        in_kind_donation.mark_receipt_sent()
         
-#         return Response({'message': 'Receipt marked as sent'})
+        return Response({'message': 'Receipt marked as sent'})
 
-#     @action(detail=True, methods=['get'])
-#     def valuation_history(self, request, pk=None):
-#         """Get valuation history and variance analysis"""
-#         in_kind_donation = self.get_object()
+    @action(detail=True, methods=['get'])
+    def valuation_history(self, request, pk=None):
+        """Get valuation history and variance analysis"""
+        in_kind_donation = self.get_object()
         
-#         valuation_data = {
-#             'estimated_value': in_kind_donation.total_estimated_value,
-#             'market_value': in_kind_donation.total_market_value,
-#             'actual_value': in_kind_donation.total_actual_value,
-#             'effective_value': in_kind_donation.effective_value,
-#             'value_variance': in_kind_donation.value_variance,
-#             'value_variance_percentage': in_kind_donation.value_variance_percentage,
-#             'valuation_method': in_kind_donation.valuation_method,
-#             'currency': in_kind_donation.valuation_currency.code,
-#             'quantity': in_kind_donation.quantity,
-#         }
+        valuation_data = {
+            'estimated_value': in_kind_donation.total_estimated_value,
+            'market_value': in_kind_donation.total_market_value,
+            'actual_value': in_kind_donation.total_actual_value,
+            'effective_value': in_kind_donation.effective_value,
+            'value_variance': in_kind_donation.value_variance,
+            'value_variance_percentage': in_kind_donation.value_variance_percentage,
+            'valuation_method': in_kind_donation.valuation_method,
+            'currency': in_kind_donation.valuation_currency.code,
+            'quantity': in_kind_donation.quantity,
+        }
         
-#         return Response(valuation_data)
+        return Response(valuation_data)
 
-#     @action(detail=False, methods=['get'])
-#     def category_analysis(self, request):
-#         """Analyze in-kind donations by category"""
-#         queryset = self.filter_queryset(self.get_queryset())
+    @action(detail=False, methods=['get'])
+    def category_analysis(self, request):
+        """Analyze in-kind donations by category"""
+        queryset = self.filter_queryset(self.get_queryset())
         
-#         category_stats = queryset.filter(status='received').values(
-#             'category'
-#         ).annotate(
-#             count=Count('id'),
-#             total_estimated=Sum('estimated_value'),
-#             total_actual=Sum('actual_value'),
-#             avg_estimated=Avg('estimated_value'),
-#             avg_actual=Avg('actual_value')
-#         ).order_by('-total_estimated')
+        category_stats = queryset.filter(status='received').values(
+            'category'
+        ).annotate(
+            count=Count('id'),
+            total_estimated=Sum('estimated_value'),
+            total_actual=Sum('actual_value'),
+            avg_estimated=Avg('estimated_value'),
+            avg_actual=Avg('actual_value')
+        ).order_by('-total_estimated')
         
-#         return Response(list(category_stats))
+        return Response(list(category_stats))
 
-#     @action(detail=False, methods=['get'])
-#     def logistics_report(self, request):
-#         """Get logistics and handling report"""
-#         queryset = self.filter_queryset(self.get_queryset())
+    @action(detail=False, methods=['get'])
+    def logistics_report(self, request):
+        """Get logistics and handling report"""
+        queryset = self.filter_queryset(self.get_queryset())
         
-#         logistics_stats = {
-#             'total_items': queryset.count(),
-#             'pickup_required': queryset.filter(pickup_required=True).count(),
-#             'special_handling': queryset.exclude(special_handling_requirements='').count(),
-#             'storage_requirements': queryset.exclude(storage_requirements='').count(),
-#         }
+        logistics_stats = {
+            'total_items': queryset.count(),
+            'pickup_required': queryset.filter(pickup_required=True).count(),
+            'special_handling': queryset.exclude(special_handling_requirements='').count(),
+            'storage_requirements': queryset.exclude(storage_requirements='').count(),
+        }
         
-#         # Status breakdown
-#         status_breakdown = queryset.values('status').annotate(
-#             count=Count('id')
-#         ).order_by('-count')
+        # Status breakdown
+        status_breakdown = queryset.values('status').annotate(
+            count=Count('id')
+        ).order_by('-count')
         
-#         # Overdue items
-#         overdue_items = queryset.filter(
-#             status__in=['pledged', 'confirmed'],
-#             expected_delivery_date__lt=timezone.now().date()
-#         ).count()
+        # Overdue items
+        overdue_items = queryset.filter(
+            status__in=['pledged', 'confirmed'],
+            expected_delivery_date__lt=timezone.now().date()
+        ).count()
         
-#         logistics_stats.update({
-#             'status_breakdown': list(status_breakdown),
-#             'overdue_items': overdue_items
-#         })
+        logistics_stats.update({
+            'status_breakdown': list(status_breakdown),
+            'overdue_items': overdue_items
+        })
         
-#         return Response(logistics_stats)
+        return Response(logistics_stats)
 
-#     @action(detail=False, methods=['get'])
-#     def valuation_summary(self, request):
-#         """Get comprehensive valuation summary"""
-#         queryset = self.filter_queryset(self.get_queryset())
-#         received_items = queryset.filter(status='received')
+    @action(detail=False, methods=['get'])
+    def valuation_summary(self, request):
+        """Get comprehensive valuation summary"""
+        queryset = self.filter_queryset(self.get_queryset())
+        received_items = queryset.filter(status='received')
         
-#         valuation_stats = received_items.aggregate(
-#             total_estimated=Sum('estimated_value'),
-#             total_actual=Sum('actual_value'),
-#             avg_estimated=Avg('estimated_value'),
-#             avg_actual=Avg('actual_value'),
-#             count=Count('id')
-#         )
+        valuation_stats = received_items.aggregate(
+            total_estimated=Sum('estimated_value'),
+            total_actual=Sum('actual_value'),
+            avg_estimated=Avg('estimated_value'),
+            avg_actual=Avg('actual_value'),
+            count=Count('id')
+        )
         
-#         # Calculate variance statistics
-#         items_with_actual = received_items.exclude(actual_value__isnull=True)
-#         variance_stats = {
-#             'items_revalued': items_with_actual.count(),
-#             'revaluation_rate': (items_with_actual.count() / max(received_items.count(), 1)) * 100
-#         }
+        # Calculate variance statistics
+        items_with_actual = received_items.exclude(actual_value__isnull=True)
+        variance_stats = {
+            'items_revalued': items_with_actual.count(),
+            'revaluation_rate': (items_with_actual.count() / max(received_items.count(), 1)) * 100
+        }
         
-#         # Value variance analysis
-#         positive_variance = items_with_actual.filter(
-#             actual_value__gt=models.F('estimated_value')
-#         ).count()
+        # Value variance analysis
+        positive_variance = items_with_actual.filter(
+            actual_value__gt=models.F('estimated_value')
+        ).count()
         
-#         negative_variance = items_with_actual.filter(
-#             actual_value__lt=models.F('estimated_value')
-#         ).count()
+        negative_variance = items_with_actual.filter(
+            actual_value__lt=models.F('estimated_value')
+        ).count()
         
-#         variance_stats.update({
-#             'positive_variance_count': positive_variance,
-#             'negative_variance_count': negative_variance,
-#             'accurate_valuations': items_with_actual.count() - positive_variance - negative_variance
-#         })
+        variance_stats.update({
+            'positive_variance_count': positive_variance,
+            'negative_variance_count': negative_variance,
+            'accurate_valuations': items_with_actual.count() - positive_variance - negative_variance
+        })
         
-#         valuation_stats.update(variance_stats)
+        valuation_stats.update(variance_stats)
         
-#         return Response(valuation_stats)
+        return Response(valuation_stats)
 
 # ============================================================================
 # GRANT VIEWSET

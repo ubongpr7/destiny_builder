@@ -1,12 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    BudgetFundingViewSet, FinancialInstitutionViewSet, BankAccountViewSet, ExchangeRateViewSet,
+    BudgetFundingViewSet, FinancialInstitutionViewSet, BankAccountViewSet, 
     DonationCampaignViewSet, DonationViewSet, RecurringDonationViewSet,
      GrantViewSet, GrantReportViewSet,
     FundingSourceViewSet, BudgetViewSet, BudgetItemViewSet,
     OrganizationalExpenseViewSet, AccountTransactionViewSet,
-    FundAllocationViewSet, DashboardViewSet
+    FundAllocationViewSet, DashboardViewSet,InKindDonationViewSet
 )
 
 # Create router and register viewsets
@@ -15,13 +15,13 @@ router = DefaultRouter()
 # Financial Infrastructure
 router.register(r'financial-institutions', FinancialInstitutionViewSet)
 router.register(r'bank-accounts', BankAccountViewSet)
-router.register(r'exchange-rates', ExchangeRateViewSet)
+# router.register(r'exchange-rates', ExchangeRateViewSet)
 
 # Donations & Campaigns
 router.register(r'donation-campaigns', DonationCampaignViewSet)
 router.register(r'donations', DonationViewSet)
 router.register(r'recurring-donations', RecurringDonationViewSet)
-# router.register(r'in-kind-donations', InKindDonationViewSet)
+router.register(r'in-kind-donations', InKindDonationViewSet)
 
 # Grants & Reports
 router.register(r'grants', GrantViewSet)
