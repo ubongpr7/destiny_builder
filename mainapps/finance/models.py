@@ -1332,7 +1332,7 @@ class GrantReport(models.Model):
     
     def __str__(self):
         return f"{self.grant.title} - {self.title}"
-
+    
 
 class Budget(models.Model):
     """Enhanced Budget model with comprehensive financial tracking"""
@@ -1674,6 +1674,158 @@ class Budget(models.Model):
         return 0
 
     # ============================================================================
+    # ENHANCED FUNDING CALCULATIONS (Including Fund Allocations)
+    # ============================================================================
+
+    @property
+    def total_fund_allocations(self):
+        """Total amount actually allocated from bank accounts"""
+        try:
+            return self.fund_allocations.filter(is_active=True).aggregate(
+                total=Sum('amount_allocated')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def active_fund_allocations(self):
+        """Total from active fund allocations only"""
+        try:
+            return self.fund_allocations.filter(
+                is_active=True,
+                allocation_date__lte=timezone.now()
+            ).aggregate(
+                total=Sum('amount_allocated')
+            )['total'] or Decimal('0.00')
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def funding_vs_allocation_gap(self):
+        """Gap between planned funding and actual allocations"""
+        planned_funding = self.total_funding_allocated
+        actual_allocations = self.total_fund_allocations
+        return planned_funding - actual_allocations
+
+    @property
+    def allocation_coverage_percentage(self):
+        """Percentage of budget covered by actual allocations"""
+        total = self.total_amount or Decimal('0.00')
+        if total > 0:
+            allocations = self.total_fund_allocations
+            return float((allocations / total) * 100)
+        return 0
+
+    @property
+    def funding_realization_percentage(self):
+        """Percentage of planned funding that has been actually allocated"""
+        planned = self.total_funding_allocated
+        if planned > 0:
+            actual = self.total_fund_allocations
+            return float((actual / planned) * 100)
+        return 0
+
+    @property
+    def allocation_utilization_percentage(self):
+        """Percentage of allocated funds that have been spent"""
+        allocated = self.total_fund_allocations
+        if allocated > 0:
+            spent = self.spent_amount
+            return float((spent / allocated) * 100)
+        return 0
+
+    @property
+    def allocation_gap(self):
+        """Amount still needed from allocations to cover budget"""
+        total = self.total_amount or Decimal('0.00')
+        allocated = self.total_fund_allocations
+        gap = total - allocated
+        return max(Decimal('0.00'), gap)
+
+    @property
+    def allocation_surplus(self):
+        """Amount over-allocated (if any)"""
+        allocated = self.total_fund_allocations
+        total = self.total_amount or Decimal('0.00')
+        surplus = allocated - total
+        return max(Decimal('0.00'), surplus)
+
+    @property
+    def is_fully_allocated_from_accounts(self):
+        """Check if budget is fully covered by account allocations"""
+        return self.total_fund_allocations >= (self.total_amount or Decimal('0.00'))
+
+    @property
+    def allocation_status(self):
+        """Status based on actual fund allocations"""
+        if self.allocation_gap > 0:
+            gap_percentage = float((self.allocation_gap / self.total_amount) * 100)
+            if gap_percentage > 50:
+                return 'SEVERELY_UNDER_ALLOCATED'
+            elif gap_percentage > 25:
+                return 'UNDER_ALLOCATED'
+            else:
+                return 'PARTIALLY_ALLOCATED'
+        elif self.allocation_surplus > 0:
+            return 'OVER_ALLOCATED'
+        else:
+            return 'FULLY_ALLOCATED'
+
+    @property
+    def comprehensive_funding_status(self):
+        """Enhanced funding status considering both sources and allocations"""
+        funding_status = self.funding_status
+        allocation_status = self.allocation_status
+        
+        if funding_status in ['SEVERELY_UNDERFUNDED', 'UNDERFUNDED'] and allocation_status in ['SEVERELY_UNDER_ALLOCATED', 'UNDER_ALLOCATED']:
+            return 'CRITICALLY_UNDERFUNDED'
+        elif funding_status == 'FULLY_FUNDED' and allocation_status == 'FULLY_ALLOCATED':
+            return 'FULLY_FUNDED_AND_ALLOCATED'
+        elif funding_status == 'FULLY_FUNDED' and allocation_status in ['UNDER_ALLOCATED', 'SEVERELY_UNDER_ALLOCATED']:
+            return 'FUNDED_BUT_NOT_ALLOCATED'
+        elif funding_status in ['UNDERFUNDED', 'PARTIALLY_FUNDED'] and allocation_status == 'FULLY_ALLOCATED':
+            return 'ALLOCATED_BEYOND_FUNDING'
+        else:
+            return f"{funding_status}_{allocation_status}"
+
+    @property
+    def available_from_allocations(self):
+        """Amount available for spending from actual allocations"""
+        allocated = self.total_fund_allocations
+        spent = self.spent_amount
+        return allocated - spent
+
+    @property
+    def truly_available_from_allocations(self):
+        """Amount truly available considering allocations and commitments"""
+        allocated = self.total_fund_allocations
+        total_obligations = self.committed_amount + self.pending_amount
+        return allocated - total_obligations
+
+    @property
+    def formatted_total_fund_allocations(self):
+        """Formatted total fund allocations with currency"""
+        if self.currency:
+            return f"{self.currency.code} {self.total_fund_allocations:,.2f}"
+        return f"{self.total_fund_allocations:,.2f}"
+
+    @property
+    def formatted_allocation_gap(self):
+        """Formatted allocation gap with currency"""
+        if self.currency:
+            return f"{self.currency.code} {self.allocation_gap:,.2f}"
+        return f"{self.allocation_gap:,.2f}"
+
+    @property
+    def formatted_funding_vs_allocation_gap(self):
+        """Formatted gap between funding and allocations with currency and sign"""
+        gap = self.funding_vs_allocation_gap
+        sign = "+" if gap >= 0 else ""
+        if self.currency:
+            return f"{sign}{self.currency.code} {gap:,.2f}"
+        return f"{sign}{gap:,.2f}"
+
+    # ============================================================================
     # STATUS AND HEALTH CALCULATIONS
     # ============================================================================
     
@@ -1709,7 +1861,7 @@ class Budget(models.Model):
     
     @property
     def funding_status(self):
-        """Funding status assessment"""
+        """Funding status assessment (legacy - use comprehensive_funding_status for enhanced view)"""
         if self.funding_gap > 0:
             gap_percentage = float((self.funding_gap / self.total_amount) * 100)
             if gap_percentage > 50:
@@ -2010,12 +2162,59 @@ class Budget(models.Model):
             'progress_percentage': self.progress_percentage
         }
 
+    @property
+    def allocation_summary(self):
+        """Comprehensive allocation summary"""
+        return {
+            'total_budget': self.total_amount,
+            'total_fund_allocations': self.total_fund_allocations,
+            'active_fund_allocations': self.active_fund_allocations,
+            'allocation_gap': self.allocation_gap,
+            'allocation_surplus': self.allocation_surplus,
+            'allocation_coverage_percentage': self.allocation_coverage_percentage,
+            'allocation_utilization_percentage': self.allocation_utilization_percentage,
+            'available_from_allocations': self.available_from_allocations,
+            'truly_available_from_allocations': self.truly_available_from_allocations,
+            'allocation_status': self.allocation_status,
+            'currency': self.currency.code if self.currency else None
+        }
+
+    @property
+    def funding_vs_allocation_analysis(self):
+        """Analysis comparing planned funding vs actual allocations"""
+        return {
+            'planned_funding': self.total_funding_allocated,
+            'actual_allocations': self.total_fund_allocations,
+            'funding_vs_allocation_gap': self.funding_vs_allocation_gap,
+            'funding_realization_percentage': self.funding_realization_percentage,
+            'allocation_coverage_percentage': self.allocation_coverage_percentage,
+            'comprehensive_funding_status': self.comprehensive_funding_status,
+            'is_funding_realized': self.funding_realization_percentage >= 100,
+            'is_budget_covered': self.allocation_coverage_percentage >= 100,
+            'currency': self.currency.code if self.currency else None
+        }
+
+    @property
+    def enhanced_financial_summary(self):
+        """Enhanced financial summary including allocations"""
+        base_summary = self.financial_summary
+        base_summary.update({
+            'total_fund_allocations': self.total_fund_allocations,
+            'allocation_gap': self.allocation_gap,
+            'allocation_coverage_percentage': self.allocation_coverage_percentage,
+            'funding_realization_percentage': self.funding_realization_percentage,
+            'comprehensive_funding_status': self.comprehensive_funding_status,
+            'available_from_allocations': self.available_from_allocations,
+            'truly_available_from_allocations': self.truly_available_from_allocations
+        })
+        return base_summary
+
     # ============================================================================
     # EXISTING METHODS (Enhanced)
     # ============================================================================
     
     def get_budget_alerts(self):
-        """Get comprehensive budget alerts and warnings"""
+        """Get comprehensive budget alerts and warnings including allocation alerts"""
         alerts = []
         
         try:
@@ -2062,6 +2261,53 @@ class Budget(models.Model):
                     'severity': severity,
                     'category': 'funding'
                 })
+
+            # Allocation-specific alerts
+            if self.allocation_gap > 0:
+                gap_percentage = float((self.allocation_gap / self.total_amount) * 100)
+                severity = 'high' if gap_percentage > 25 else 'medium'
+                alerts.append({
+                    'type': 'warning',
+                    'message': f'Allocation gap of {self.formatted_allocation_gap} ({gap_percentage:.1f}%)',
+                    'severity': severity,
+                    'category': 'allocation'
+                })
+        
+            # Funding vs allocation mismatch
+            if abs(self.funding_vs_allocation_gap) > (self.total_amount * Decimal('0.1')):  # 10% threshold
+                gap = self.funding_vs_allocation_gap
+                if gap > 0:
+                    alerts.append({
+                        'type': 'warning',
+                        'message': f'Planned funding exceeds allocations by {self.formatted_funding_vs_allocation_gap}',
+                        'severity': 'medium',
+                        'category': 'funding_allocation_mismatch'
+                    })
+                else:
+                    alerts.append({
+                        'type': 'warning',
+                        'message': f'Allocations exceed planned funding by {self.formatted_funding_vs_allocation_gap}',
+                        'severity': 'medium',
+                        'category': 'funding_allocation_mismatch'
+                    })
+        
+            # Low funding realization
+            if self.funding_realization_percentage < 50 and self.total_funding_allocated > 0:
+                alerts.append({
+                    'type': 'warning',
+                    'message': f'Only {self.funding_realization_percentage:.1f}% of planned funding has been allocated',
+                    'severity': 'medium',
+                    'category': 'funding_realization'
+                })
+        
+            # Over-allocation warning
+            if self.allocation_surplus > 0:
+                alerts.append({
+                    'type': 'info',
+                    'message': f'Budget is over-allocated by {self.currency.code if self.currency else ""} {self.allocation_surplus:,.2f}',
+                    'severity': 'low',
+                    'category': 'over_allocation'
+                })
             
             # Time-based alerts
             if self.days_remaining <= 7 and self.days_remaining > 0:
@@ -2101,189 +2347,110 @@ class Budget(models.Model):
             pass
         
         return alerts
- 
-    def get_funding_breakdown(self):
-        """Get detailed funding breakdown by source"""
+    
+    def get_fund_allocations_breakdown(self):
+        """Get detailed breakdown of fund allocations by account"""
         try:
-            funding_data = []
-            for funding in self.budget_funding.select_related('funding_source', 'funding_source__currency'):
-                funding_data.append({
-                    'source_name': funding.funding_source.name,
-                    'source_type': funding.funding_source.get_funding_type_display(),
-                    'amount_allocated': str(funding.amount_allocated),
+            allocations_data = []
+            total_allocated = self.total_fund_allocations
+            
+            for allocation in self.fund_allocations.filter(is_active=True).select_related(
+                'source_account', 'source_account__currency', 'allocated_by'
+            ).order_by('-allocation_date'):
+                
+                amount = float(allocation.amount_allocated)
+                percentage = (amount / float(total_allocated)) * 100 if total_allocated > 0 else 0
+                
+                allocations_data.append({
+                    'id': allocation.id,
+                    'account_name': allocation.source_account.name,
+                    'account_type': allocation.source_account.get_account_type_display(),
+                    'amount_allocated': amount,
+                    'percentage_of_total': round(percentage, 2),
+                    'currency_code': allocation.source_account.currency.code if allocation.source_account.currency else None,
+                    'formatted_amount': allocation.formatted_amount,
+                    'allocation_date': allocation.allocation_date.isoformat(),
+                    'allocated_by': allocation.allocated_by.get_full_name() if allocation.allocated_by else 'Unknown',
+                    'approved_by': allocation.approved_by.get_full_name() if allocation.approved_by else None,
+                    'purpose': allocation.purpose,
+                    'is_active': allocation.is_active,
+                    'days_since_allocation': (timezone.now().date() - allocation.allocation_date.date()).days
+                })
+            
+            return allocations_data
+        except Exception as e:
+            print(f"Error in get_fund_allocations_breakdown: {e}")
+            return []
+
+    def get_funding_vs_allocation_timeline(self):
+        """Get timeline comparing funding sources vs actual allocations"""
+        try:
+            timeline_data = []
+            
+            # Add funding source events
+            for funding in self.budget_funding.select_related('funding_source'):
+                timeline_data.append({
+                    'date': funding.allocation_date.isoformat() if funding.allocation_date else None,
+                    'type': 'funding_source',
+                    'description': f"Funding from {funding.funding_source.name}",
+                    'amount': float(funding.amount_allocated),
                     'currency': funding.funding_source.currency.code if funding.funding_source.currency else None,
-                    'allocation_date': funding.allocation_date.isoformat() if funding.allocation_date else None,
-                    'percentage_of_budget': float((funding.amount_allocated / self.total_amount) * 100) if self.total_amount > 0 else 0,
-                    'is_active': funding.funding_source.is_active,
-                    'notes': funding.notes if hasattr(funding, 'notes') else ''
+                    'status': 'planned',
+                    'source': funding.funding_source.name
                 })
-            return funding_data
-        except Exception as e:
-            print(f"Error in get_funding_breakdown: {e}")
-            return []
-    
-    def get_spending_by_category(self):
-        """Get spending breakdown by budget item category"""
-        try:
-            from django.db.models import Sum
-            from collections import defaultdict
             
-            # Get all budget items grouped by category
-            categories = self.items.values('category').annotate(
-                total_budgeted=Sum('budgeted_amount')
-            ).order_by('category')
+            # Add allocation events
+            for allocation in self.fund_allocations.filter(is_active=True).select_related('source_account'):
+                timeline_data.append({
+                    'date': allocation.allocation_date.isoformat(),
+                    'type': 'fund_allocation',
+                    'description': f"Allocation from {allocation.source_account.name}",
+                    'amount': float(allocation.amount_allocated),
+                    'currency': allocation.source_account.currency.code if allocation.source_account.currency else None,
+                    'status': 'allocated',
+                    'source': allocation.source_account.name,
+                    'purpose': allocation.purpose
+                })
             
-            category_data = []
-            for category in categories:
-                category_name = category['category']
-                budgeted = category['total_budgeted'] or Decimal('0.00')
-                
-                # Get all items in this category
-                category_items = self.items.filter(category=category_name)
-                
-                # Calculate totals by iterating through items and using their properties
-                total_spent = Decimal('0.00')
-                total_committed = Decimal('0.00')
-                total_pending = Decimal('0.00')
-                
-                for item in category_items:
-                    total_spent += item.spent_amount
-                    total_committed += item.committed_amount
-                    total_pending += item.pending_amount
-                
-                remaining = budgeted - total_spent
-                
-                category_data.append({
-                    'category': category_name,
-                    'budgeted_amount': str(budgeted),
-                    'spent_amount': str(total_spent),
-                    'committed_amount': str(total_committed),
-                    'pending_amount': str(total_pending),
-                    'remaining_amount': str(remaining),
-                    'spent_percentage': float((total_spent / budgeted) * 100) if budgeted > 0 else 0,
-                    'committed_percentage': float((total_committed / budgeted) * 100) if budgeted > 0 else 0,
-                    'utilization_percentage': float(((total_committed + total_pending) / budgeted) * 100) if budgeted > 0 else 0
-                })
-            return category_data
+            # Sort by date
+            timeline_data.sort(key=lambda x: x['date'] or '1900-01-01')
+            
+            return timeline_data
         except Exception as e:
-            print(f"Error in get_spending_by_category: {e}")
+            print(f"Error in get_funding_vs_allocation_timeline: {e}")
             return []
-    
-    def get_monthly_spending_trend(self):
-        """Get monthly spending trend for this budget"""
+
+    def get_allocation_utilization_analysis(self):
+        """Analyze how allocated funds are being utilized"""
         try:
-            from django.db.models import Sum
-            from django.db.models.functions import TruncMonth
-        
-            # Get spending data for the budget period
-            start_date = self.start_date
-            end_date = min(self.end_date, timezone.now().date())
-        
-            # Get monthly data from organizational expenses through budget items
-            monthly_data = OrganizationalExpense.objects.filter(
-                budget_item__budget=self,
-                expense_date__gte=start_date,
-                expense_date__lte=end_date,
-                status='paid'
-            ).annotate(
-                month=TruncMonth('expense_date')
-            ).values('month').annotate(
-                total_spent=Sum('amount')
-            ).order_by('month')
-        
-            trend_data = []
-            for month_data in monthly_data:
-                if month_data['month']:
-                    trend_data.append({
-                        'month': month_data['month'].strftime('%Y-%m'),
-                        'spent_amount': str(month_data['total_spent'] or Decimal('0.00')),
-                        'currency': self.currency.code if self.currency else None
-                    })
-            return trend_data
-        except Exception as e:
-            print(f"Error in get_monthly_spending_trend: {e}")
-            return []
-    
-    def get_budget_utilization_by_item(self):
-        """Get utilization percentage for each budget item"""
-        try:
-            items_data = []
-            for item in self.items.all():
-                spent_utilization = 0
-                committed_utilization = 0
-                total_utilization = 0
-                
-                if item.budgeted_amount and item.budgeted_amount > 0:
-                    spent_utilization = float((item.spent_amount / item.budgeted_amount) * 100)
-                    committed_utilization = float((item.committed_amount / item.budgeted_amount) * 100)
-                    total_utilization = float((item.utilization_percentage))
-                
-                items_data.append({
-                    'id': item.id,
-                    'category': item.category,
-                    'subcategory': item.subcategory or '',
-                    'description': item.description,
-                    'budgeted_amount': str(item.budgeted_amount),
-                    'spent_amount': str(item.spent_amount),
-                    'committed_amount': str(item.committed_amount),
-                    'pending_amount': str(item.pending_amount),
-                    'remaining_amount': str(item.remaining_amount),
-                    'truly_available_amount': str(item.truly_available_amount),
-                    'spent_percentage': spent_utilization,
-                    'committed_percentage': committed_utilization,
-                    'utilization_percentage': total_utilization,
-                    'status': item.utilization_status,
-                    'budget_health': item.budget_health,
-                    'is_locked': item.is_locked,
-                    'is_over_budget': item.is_over_budget,
-                    'is_overcommitted': item.is_overcommitted,
-                    'has_pending_requests': item.has_pending_requests,
-                    'responsible_person': item.responsible_person.get_full_name() if item.responsible_person else None
-                })
-            return items_data
-        except Exception as e:
-            print(f"Error in get_budget_utilization_by_item: {e}")
-            return []
-    
-    def get_funding_vs_spending_analysis(self):
-        """Compare funding received vs actual spending"""
-        try:
-            total_budget = self.total_amount or Decimal('0.00')
-            total_funded = self.total_funding_allocated
+            total_allocated = self.total_fund_allocations
             total_spent = self.spent_amount
             total_committed = self.committed_amount
             total_pending = self.pending_amount
-            funding_gap = self.funding_gap
             
             return {
-                'total_budget': str(total_budget),
-                'total_funded': str(total_funded),
-                'total_spent': str(total_spent),
-                'total_committed': str(total_committed),
-                'total_pending': str(total_pending),
-                'funding_gap': str(funding_gap),
-                'funding_surplus': str(self.funding_surplus),
-                'spending_vs_funding_ratio': float((total_spent / total_funded) * 100) if total_funded > 0 else 0,
-                'committed_vs_funding_ratio': float((total_committed / total_funded) * 100) if total_funded > 0 else 0,
-                'budget_utilization': self.spent_percentage,
-                'committed_utilization': self.committed_percentage,
-                'total_utilization': self.utilization_percentage,
-                'funding_utilization': float((total_funded / total_budget) * 100) if total_budget > 0 else 0,
-                'funding_efficiency': self.funding_efficiency,
-                'spending_efficiency': self.spending_efficiency,
-                'is_overspent': self.is_over_budget,
-                'is_overcommitted': self.is_overcommitted,
-                'is_underfunded': not self.is_fully_funded,
-                'has_pending_requests': self.has_pending_requests,
+                'total_allocated': float(total_allocated),
+                'total_spent': float(total_spent),
+                'total_committed': float(total_committed),
+                'total_pending': float(total_pending),
+                'spent_percentage': float((total_spent / total_allocated) * 100) if total_allocated > 0 else 0,
+                'committed_percentage': float((total_committed / total_allocated) * 100) if total_allocated > 0 else 0,
+                'utilization_percentage': float(((total_committed + total_pending) / total_allocated) * 100) if total_allocated > 0 else 0,
+                'remaining_allocated': float(total_allocated - total_spent),
+                'available_allocated': float(total_allocated - total_committed),
+                'truly_available_allocated': float(total_allocated - total_committed - total_pending),
+                'allocation_efficiency': self.allocation_utilization_percentage,
+                'is_over_allocated': total_committed > total_allocated,
+                'is_allocation_exhausted': total_allocated <= total_committed,
                 'currency': self.currency.code if self.currency else None
             }
         except Exception as e:
-            print(f"Error in get_funding_vs_spending_analysis: {e}")
+            print(f"Error in get_allocation_utilization_analysis: {e}")
             return {}
     
-       
     def __str__(self):
         return f"{self.title} - {self.get_budget_type_display()} ({self.formatted_amount})"
+
 
 class BudgetFunding(models.Model):
     """Through model for budget funding sources"""
@@ -2931,3 +3098,5 @@ class FundAllocation(models.Model):
     
     def __str__(self):
         return f"{self.source_account.name} → {self.budget.title} ({self.formatted_amount})"
+
+
