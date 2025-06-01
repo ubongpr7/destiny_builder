@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -27,7 +28,7 @@ from .serializers import (
       DonationListSerializer, FinancialInstitutionSerializer, BankAccountSerializer,
         ExchangeRateSerializer,
       GrantDetailSerializer, GrantListSerializer, GrantReportDetailSerializer,
-        GrantReportListSerializer, InKindDonationDetailSerializer, InKindDonationListSerializer, 
+        GrantReportListSerializer, InKindDonationDetailSerializer, InKindDonationListSerializer, PaymentStatusUpdateSerializer, 
         RecurringDonationDetailSerializer, RecurringDonationListSerializer, 
       GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
@@ -1258,6 +1259,43 @@ class DonationViewSet(viewsets.ModelViewSet):
     ordering = ['-donation_date']
     permission_classes = [IsAuthenticated]
 
+   
+    @action(detail=True, methods=['patch'], url_path='payment-status')
+    def update_payment_status(self, request, pk=None):
+        """Update payment status for one-time donation"""
+        donation = get_object_or_404(Donation, pk=pk)
+        
+        serializer = PaymentStatusUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            # Update donation status (using 'status' field, not 'payment_status')
+            donation.status = serializer.validated_data['status']
+            
+            # Store transaction data in notes or create a separate transaction log
+            transaction_data = serializer.validated_data.get('transaction_data', {})
+            if transaction_data:
+                donation.transaction_id = transaction_data.get('transaction_id')
+                donation.reference_number = transaction_data.get('flutterwave_ref')
+                donation.bank_reference = transaction_data.get('tx_ref')
+                
+                # Add transaction details to notes
+                transaction_notes = f"Flutterwave Transaction: {transaction_data.get('transaction_id', 'N/A')}"
+                donation.notes = f"{donation.notes or ''}\n{transaction_notes}".strip()
+            
+            # Update timestamps based on status
+            if donation.status == 'completed':
+                donation.processed_date = timezone.now()
+            
+            donation.save()
+            
+            return Response({
+                'message': 'Payment status updated successfully',
+                'donation_id': donation.id,
+                'status': donation.status
+            }, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
     def get_serializer_class(self):
         if self.action == 'list':
             return DonationListSerializer
@@ -1479,6 +1517,7 @@ class RecurringDonationViewSet(viewsets.ModelViewSet):
             )
         
         return queryset
+    
 
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
@@ -1492,6 +1531,70 @@ class RecurringDonationViewSet(viewsets.ModelViewSet):
             'message': 'Recurring donation paused',
             'status': recurring_donation.status
         })
+
+    @action(detail=True, methods=['patch'], url_path='payment-status')
+    def update_payment_status(self, request, pk=None):
+        """Update payment status for recurring donation"""
+        recurring_donation = get_object_or_404(RecurringDonation, pk=pk)
+        
+        serializer = PaymentStatusUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            # Update recurring donation status
+            new_status = serializer.validated_data['status']
+            transaction_data = serializer.validated_data.get('transaction_data', {})
+            
+            # Map payment status to recurring donation status
+            if new_status == 'completed':
+                recurring_donation.status = 'active'
+                # Create a related one-time donation record for this payment
+                self._create_recurring_payment_record(recurring_donation, transaction_data)
+            elif new_status == 'failed':
+                recurring_donation.record_failed_payment()
+                return Response({
+                    'message': 'Failed payment recorded',
+                    'recurring_donation_id': recurring_donation.id,
+                    'status': recurring_donation.status
+                }, status=status.HTTP_200_OK)
+            
+            # Store transaction reference
+            if transaction_data:
+                recurring_donation.subscription_id = transaction_data.get('flutterwave_ref')
+                transaction_notes = f"Flutterwave Subscription: {transaction_data.get('transaction_id', 'N/A')}"
+                recurring_donation.notes = f"{recurring_donation.notes or ''}\n{transaction_notes}".strip()
+            
+            recurring_donation.save()
+            
+            return Response({
+                'message': 'Recurring donation payment status updated successfully',
+                'recurring_donation_id': recurring_donation.id,
+                'status': recurring_donation.status
+            }, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _create_recurring_payment_record(self, recurring_donation, transaction_data):
+        """Create a donation record for this recurring payment"""
+        donation = Donation.objects.create(
+            donor=recurring_donation.donor,
+            is_anonymous=recurring_donation.is_anonymous,
+            campaign=recurring_donation.campaign,
+            project=recurring_donation.project,
+            amount=recurring_donation.amount,
+            currency=recurring_donation.currency,
+            payment_method=recurring_donation.payment_method,
+            transaction_id=transaction_data.get('transaction_id'),
+            reference_number=transaction_data.get('flutterwave_ref'),
+            bank_reference=transaction_data.get('tx_ref'),
+            status='completed',
+            processed_date=timezone.now(),
+            donation_source='website',
+            notes=f"Recurring donation payment #{recurring_donation.payment_count + 1}"
+        )
+        
+        # Update recurring donation with successful payment
+        recurring_donation.record_successful_payment(donation)
+        
+        return donation
 
     @action(detail=True, methods=['post'])
     def resume(self, request, pk=None):
@@ -1697,6 +1800,39 @@ class InKindDonationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(pickup_required=True)
         
         return queryset
+
+    
+    @action(detail=True, methods=['patch'], url_path='payment-status')
+    def update_payment_status(self, request, pk=None):
+        """Update payment status for in-kind donation (processing fees, etc.)"""
+        in_kind_donation = get_object_or_404(InKindDonation, pk=pk)
+        
+        serializer = PaymentStatusUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            # Update in-kind donation status
+            new_status = serializer.validated_data['status']
+            transaction_data = serializer.validated_data.get('transaction_data', {})
+            
+            # Map payment status to in-kind donation status
+            if new_status == 'completed':
+                in_kind_donation.status = 'confirmed'
+            elif new_status == 'failed':
+                in_kind_donation.status = 'pledged'  # Reset to pledged if payment failed
+            
+            # Store transaction data
+            if transaction_data:
+                transaction_notes = f"Processing fee payment: {transaction_data.get('transaction_id', 'N/A')}"
+                in_kind_donation.notes = f"{in_kind_donation.notes or ''}\n{transaction_notes}".strip()
+            
+            in_kind_donation.save()
+            
+            return Response({
+                'message': 'In-kind donation payment status updated successfully',
+                'in_kind_donation_id': in_kind_donation.id,
+                'status': in_kind_donation.status
+            }, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def mark_received(self, request, pk=None):

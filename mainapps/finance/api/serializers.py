@@ -1696,3 +1696,35 @@ class BudgetUtilizationSerializer(serializers.Serializer):
     remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     utilization_percentage = serializers.DecimalField(max_digits=5, decimal_places=2)
     currency_code = serializers.CharField()
+
+
+
+class PaymentStatusUpdateSerializer(serializers.Serializer):
+    """Serializer for payment status updates"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+        ('refunded', 'Refunded'),
+    ]
+    
+    status = serializers.ChoiceField(choices=STATUS_CHOICES)
+    transaction_data = serializers.JSONField(required=False, default=dict)
+    
+    def validate_transaction_data(self, value):
+        """Validate transaction data structure"""
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Transaction data must be a dictionary")
+        
+        # Optional: Add specific validation for expected fields
+        allowed_fields = [
+            'flutterwave_ref', 'transaction_id', 'tx_ref', 'amount', 
+            'currency', 'payment_method', 'processed_at', 'error_message', 
+            'failed_at'
+        ]
+        
+        # You can add validation logic here if needed
+        return value
