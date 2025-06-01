@@ -136,9 +136,9 @@ class BankAccountSerializer(serializers.ModelSerializer):
             'transactions_count'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'api_key': {'write_only': True},
-        }
+        # extra_kwargs = {
+        #     'api_key': {'write_only': True},
+        # }
     
     def get_transactions_count(self, obj):
         return obj.transactions.count()
