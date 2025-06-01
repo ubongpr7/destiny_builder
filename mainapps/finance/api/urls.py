@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     BudgetFundingViewSet, FinancialInstitutionViewSet, BankAccountViewSet, ExchangeRateViewSet,
     DonationCampaignViewSet, DonationViewSet, RecurringDonationViewSet,
-    InKindDonationViewSet, GrantViewSet, GrantReportViewSet,
+     GrantViewSet, GrantReportViewSet,
     FundingSourceViewSet, BudgetViewSet, BudgetItemViewSet,
     OrganizationalExpenseViewSet, AccountTransactionViewSet,
     FundAllocationViewSet, DashboardViewSet
@@ -21,7 +21,7 @@ router.register(r'exchange-rates', ExchangeRateViewSet)
 router.register(r'donation-campaigns', DonationCampaignViewSet)
 router.register(r'donations', DonationViewSet)
 router.register(r'recurring-donations', RecurringDonationViewSet)
-router.register(r'in-kind-donations', InKindDonationViewSet)
+# router.register(r'in-kind-donations', InKindDonationViewSet)
 
 # Grants & Reports
 router.register(r'grants', GrantViewSet)
