@@ -431,7 +431,7 @@ class DonationCampaign(models.Model):
     title = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, blank=True)
     description = models.TextField()
-    campaign_type = models.CharField(max_length=20, choices=CAMPAIGN_TYPE_CHOICES, default='general')
+    campaign_type = models.CharField(max_length=100, choices=CAMPAIGN_TYPE_CHOICES, default='general')
     
     # Financial Goals
     target_amount = models.DecimalField(
