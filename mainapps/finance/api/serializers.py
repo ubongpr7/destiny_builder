@@ -881,9 +881,8 @@ class FundAllocationDetailSerializer(serializers.ModelSerializer):
             'allocation_date', 'purpose', 'allocated_by', 'approved_by',
             'is_active', 'created_at'
         ]
-
 class BudgetDetailSerializer(serializers.ModelSerializer):
-    """Enhanced Budget serializer with comprehensive financial tracking"""
+    """Enhanced Budget serializer with comprehensive financial tracking including fund allocations"""
     
     # Basic relationships
     project = ProjectMinimalSerializer(read_only=True)
@@ -933,7 +932,7 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     allocation_variance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     
     # ============================================================================
-    # FUNDING CALCULATIONS
+    # FUNDING CALCULATIONS (ORIGINAL)
     # ============================================================================
     total_funding_allocated = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     funding_gap = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
@@ -941,11 +940,26 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     funding_utilization_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     
     # ============================================================================
+    # FUND ALLOCATION CALCULATIONS (NEW)
+    # ============================================================================
+    total_fund_allocations = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    active_fund_allocations = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    allocation_gap = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    allocation_surplus = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    allocation_coverage_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    funding_realization_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    allocation_utilization_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    available_from_allocations = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    truly_available_from_allocations = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
+    # ============================================================================
     # STATUS AND HEALTH
     # ============================================================================
     budget_health = serializers.CharField(read_only=True)
     utilization_status = serializers.CharField(read_only=True)
     funding_status = serializers.CharField(read_only=True)
+    allocation_status = serializers.CharField(read_only=True)
+    comprehensive_funding_status = serializers.CharField(read_only=True)
     
     # ============================================================================
     # BOOLEAN STATUS CHECKS
@@ -954,6 +968,7 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     is_overcommitted = serializers.BooleanField(read_only=True)
     is_fully_allocated = serializers.BooleanField(read_only=True)
     is_fully_funded = serializers.BooleanField(read_only=True)
+    is_fully_allocated_from_accounts = serializers.BooleanField(read_only=True)
     has_pending_requests = serializers.BooleanField(read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
     is_active_period = serializers.BooleanField(read_only=True)
@@ -997,6 +1012,9 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     formatted_available_amount = serializers.CharField(read_only=True)
     formatted_variance = serializers.CharField(read_only=True)
     formatted_funding_gap = serializers.CharField(read_only=True)
+    formatted_allocation_gap = serializers.CharField(read_only=True)
+    formatted_total_fund_allocations = serializers.CharField(read_only=True)
+    formatted_available_from_allocations = serializers.CharField(read_only=True)
     
     # ============================================================================
     # COMPREHENSIVE SUMMARIES
@@ -1004,6 +1022,9 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     financial_summary = serializers.SerializerMethodField()
     performance_metrics = serializers.SerializerMethodField()
     status_summary = serializers.SerializerMethodField()
+    allocation_summary = serializers.SerializerMethodField()
+    enhanced_financial_summary = serializers.SerializerMethodField()
+    funding_vs_allocation_analysis = serializers.SerializerMethodField()
     
     # ============================================================================
     # ENHANCED RELATIONSHIPS
@@ -1016,15 +1037,17 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     # DETAILED ANALYSIS METHODS
     # ============================================================================
     funding_breakdown = serializers.SerializerMethodField()
+    fund_allocations_breakdown = serializers.SerializerMethodField()
     expense_summary = serializers.SerializerMethodField()
     category_breakdown = serializers.SerializerMethodField()
     monthly_spending_trend = serializers.SerializerMethodField()
     budget_utilization_by_item = serializers.SerializerMethodField()
     funding_vs_spending_analysis = serializers.SerializerMethodField()
+    allocation_utilization_analysis = serializers.SerializerMethodField()
+    funding_vs_allocation_timeline = serializers.SerializerMethodField()
     budget_alerts = serializers.SerializerMethodField()
     recent_expenses = serializers.SerializerMethodField()
     funding_sources_summary = serializers.SerializerMethodField()
-    allocation_summary = serializers.SerializerMethodField()
     
     # ============================================================================
     # STATISTICS
@@ -1033,6 +1056,7 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     expenses_count = serializers.SerializerMethodField()
     funding_sources_count = serializers.SerializerMethodField()
     allocations_count = serializers.SerializerMethodField()
+    active_allocations_count = serializers.SerializerMethodField()
     paid_expenses_count = serializers.SerializerMethodField()
     pending_expenses_count = serializers.SerializerMethodField()
     approved_expenses_count = serializers.SerializerMethodField()
@@ -1060,16 +1084,20 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
             # Variance calculations
             'variance', 'variance_percentage', 'committed_variance', 'allocation_variance',
             
-            # Funding calculations
+            # Funding calculations (original)
             'total_funding_allocated', 'funding_gap', 'funding_surplus', 'funding_utilization_percentage',
             
+            # Fund allocation calculations (new)
+            'total_fund_allocations', 'active_fund_allocations', 'allocation_gap', 'allocation_surplus',
+            'allocation_coverage_percentage', 'funding_realization_percentage', 'allocation_utilization_percentage',
+            'available_from_allocations', 'truly_available_from_allocations',
+            
             # Status and health
-            'budget_health', 'utilization_status', 'funding_status',
+            'budget_health', 'utilization_status', 'funding_status', 'allocation_status', 'comprehensive_funding_status',
             
             # Boolean status checks
-            'is_over_budget', 'is_overcommitted', 'is_fully_allocated', 'is_fully_funded',
-            'has_pending_requests', 'is_expired', 'is_active_period', 'can_allocate_more',
-            'is_locked_for_allocation',
+            'is_over_budget', 'is_overcommitted', 'is_fully_allocated', 'is_fully_funded', 'is_fully_allocated_from_accounts',
+            'has_pending_requests', 'is_expired', 'is_active_period', 'can_allocate_more', 'is_locked_for_allocation',
             
             # Time-based calculations
             'days_remaining', 'days_elapsed', 'total_budget_days', 'progress_percentage',
@@ -1085,22 +1113,25 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
             # Formatting properties
             'formatted_amount', 'formatted_spent_amount', 'formatted_committed_amount',
             'formatted_pending_amount', 'formatted_remaining_amount', 'formatted_available_amount',
-            'formatted_variance', 'formatted_funding_gap',
+            'formatted_variance', 'formatted_funding_gap', 'formatted_allocation_gap',
+            'formatted_total_fund_allocations', 'formatted_available_from_allocations',
             
             # Comprehensive summaries
-            'financial_summary', 'performance_metrics', 'status_summary',
+            'financial_summary', 'performance_metrics', 'status_summary', 'allocation_summary',
+            'enhanced_financial_summary', 'funding_vs_allocation_analysis',
             
             # Relationships
             'items', 'budget_funding', 'fund_allocations',
             
             # Detailed analysis
-            'funding_breakdown', 'expense_summary', 'category_breakdown', 'monthly_spending_trend',
-            'budget_utilization_by_item', 'funding_vs_spending_analysis', 'budget_alerts',
-            'recent_expenses', 'funding_sources_summary', 'allocation_summary',
+            'funding_breakdown', 'fund_allocations_breakdown', 'expense_summary', 'category_breakdown', 
+            'monthly_spending_trend', 'budget_utilization_by_item', 'funding_vs_spending_analysis',
+            'allocation_utilization_analysis', 'funding_vs_allocation_timeline', 'budget_alerts',
+            'recent_expenses', 'funding_sources_summary',
             
             # Statistics
             'items_count', 'expenses_count', 'funding_sources_count', 'allocations_count',
-            'paid_expenses_count', 'pending_expenses_count', 'approved_expenses_count'
+            'active_allocations_count', 'paid_expenses_count', 'pending_expenses_count', 'approved_expenses_count'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
     
@@ -1112,6 +1143,10 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
         """Get comprehensive financial summary"""
         return obj.financial_summary
     
+    def get_enhanced_financial_summary(self, obj):
+        """Get enhanced financial summary including allocations"""
+        return obj.enhanced_financial_summary
+    
     def get_performance_metrics(self, obj):
         """Get performance and efficiency metrics"""
         return obj.performance_metrics
@@ -1120,6 +1155,14 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
         """Get status and health summary"""
         return obj.status_summary
     
+    def get_allocation_summary(self, obj):
+        """Get allocation summary"""
+        return obj.allocation_summary
+    
+    def get_funding_vs_allocation_analysis(self, obj):
+        """Get funding vs allocation analysis"""
+        return obj.funding_vs_allocation_analysis
+    
     # ============================================================================
     # DETAILED ANALYSIS METHODS
     # ============================================================================
@@ -1127,6 +1170,18 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     def get_funding_breakdown(self, obj):
         """Get detailed funding breakdown"""
         return obj.get_funding_breakdown()
+    
+    def get_fund_allocations_breakdown(self, obj):
+        """Get detailed fund allocations breakdown"""
+        return obj.get_fund_allocations_breakdown()
+    
+    def get_allocation_utilization_analysis(self, obj):
+        """Get allocation utilization analysis"""
+        return obj.get_allocation_utilization_analysis()
+    
+    def get_funding_vs_allocation_timeline(self, obj):
+        """Get funding vs allocation timeline"""
+        return obj.get_funding_vs_allocation_timeline()
     
     def get_category_breakdown(self, obj):
         """Get spending breakdown by category"""
@@ -1229,36 +1284,6 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
         
         return sorted(funding_sources, key=lambda x: x['amount_allocated'], reverse=True)
     
-    def get_allocation_summary(self, obj):
-        """Get enhanced allocation summary"""
-        allocations_qs = obj.fund_allocations.select_related(
-            'source_account', 'source_account__currency', 'allocated_by'
-        )
-
-        total_allocated = sum(allocation.amount_allocated for allocation in allocations_qs)
-        
-        allocations = []
-        for allocation in allocations_qs:
-            amount = float(allocation.amount_allocated)
-            percentage = (amount / float(total_allocated)) * 100 if total_allocated > 0 else 0
-
-            allocations.append({
-                'id': allocation.id,
-                'account_name': allocation.source_account.name,
-                'account_type': allocation.source_account.account_type,
-                'account_type_display': allocation.source_account.get_account_type_display(),
-                'amount_allocated': amount,
-                'percentage': round(percentage, 2),
-                'currency_code': allocation.source_account.currency.code if allocation.source_account.currency else None,
-                'formatted_amount': f"{allocation.source_account.currency.code} {allocation.amount_allocated:,.2f}" if allocation.source_account.currency else f"{allocation.amount_allocated:,.2f}",
-                'allocation_date': allocation.allocation_date.isoformat(),
-                'allocated_by': allocation.allocated_by.get_full_name if allocation.allocated_by else 'Unknown',
-                'purpose': allocation.purpose or '',
-                'is_active': allocation.is_active,
-            })
-
-        return sorted(allocations, key=lambda x: x['amount_allocated'], reverse=True)
-    
     # ============================================================================
     # STATISTICS METHODS
     # ============================================================================
@@ -1283,6 +1308,11 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     
     def get_allocations_count(self, obj):
         return obj.fund_allocations.count()
+    
+    def get_active_allocations_count(self, obj):
+        return obj.fund_allocations.filter(is_active=True).count()
+
+
 
 class OrganizationalExpenseSerializer(serializers.ModelSerializer):
     budget_item = BudgetItemSerializer
