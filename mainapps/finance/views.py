@@ -151,6 +151,7 @@ class FlutterwaveWebhookView(View):
             secret_hash = getattr(settings, 'FLUTTERWAVE_SECRET_HASH', None)
             if not secret_hash:
                 secret_hash = os.getenv('FLUTTERWAVE_SECRET_HASH')
+            print(secret_hash)
             
             logger.info(f"Secret hash configured: {'Yes' if secret_hash else 'No'}")
             
@@ -163,6 +164,7 @@ class FlutterwaveWebhookView(View):
             
             for header_name in possible_headers:
                 signature = request.headers.get(header_name)
+                
                 if signature:
                     logger.info(f"Found signature in header '{header_name}': {signature[:10]}...")
                     break
@@ -210,7 +212,7 @@ class FlutterwaveWebhookView(View):
             except Exception as e:
                 logger.error(f"Method 3 verification error: {e}")
             
-            return False, f"Signature verification failed with all methods. Received: {signature[:10]}..."
+            return False, f"Signature verification failed with all methods. Received: {signature}..."
             
         except Exception as e:
             logger.error(f"Signature verification exception: {e}")
