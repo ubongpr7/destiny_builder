@@ -481,7 +481,6 @@ class DonationDetailSerializer(serializers.ModelSerializer):
     processor_fee_currency = CurrencySerializer(read_only=True)
     processed_by = UserBasicSerializer(read_only=True)
     
-    # Financial calculations
     net_amount = serializers.ReadOnlyField()
     effective_amount = serializers.ReadOnlyField()
     processor_fee_percentage = serializers.ReadOnlyField()
