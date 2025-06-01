@@ -886,7 +886,6 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     'amount': float(donation.amount),
                     'currency': {
                         'code': donation.currency.code if donation.currency else 'USD',
-                        'symbol': donation.currency.symbol if donation.currency else '$',
                     },
                     'status': donation.status,
                     'donation_date': donation.donation_date.isoformat() if donation.donation_date else None,
@@ -910,7 +909,6 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     'amount': float(donation.amount),
                     'currency': {
                         'code': donation.currency.code if donation.currency else 'USD',
-                        'symbol': donation.currency.symbol if donation.currency else '$',
                     },
                     'status': donation.status,
                     'donation_date': donation.created_at.isoformat() if donation.created_at else None,
@@ -936,7 +934,6 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     'amount': float(getattr(donation, 'estimated_value', 0)),
                     'currency': {
                         'code': 'USD',  # Default for in-kind
-                        'symbol': '$',
                     },
                     'status': donation.status,
                     'donation_date': donation.donation_date.isoformat() if donation.donation_date else None,
