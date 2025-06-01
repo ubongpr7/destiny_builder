@@ -216,286 +216,189 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
 
-class DonationSerializer(serializers.ModelSerializer):
-    donor = UserBasicSerializer(read_only=True)
-    donor_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    campaign = serializers.StringRelatedField(read_only=True)
-    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    project = serializers.StringRelatedField(read_only=True)
-    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    currency = CurrencySerializer(read_only=True)
-    currency_id = serializers.IntegerField(write_only=True)
-    converted_currency = CurrencySerializer(read_only=True)
-    converted_currency_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    processor_fee_currency = CurrencySerializer(read_only=True)
-    processor_fee_currency_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    deposited_to_account = serializers.StringRelatedField(read_only=True)
-    deposited_to_account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    processed_by = UserBasicSerializer(read_only=True)
-    donor_name_display = serializers.CharField(read_only=True)
-    formatted_amount = serializers.CharField(read_only=True)
-    
-    class Meta:
-        model = Donation
-        fields = [
-            'id', 'donor', 'donor_id', 'is_anonymous', 'donor_name', 'donor_email',
-            'campaign', 'campaign_id', 'project', 'project_id', 'amount', 'currency',
-            'currency_id', 'exchange_rate', 'converted_amount', 'converted_currency',
-            'converted_currency_id', 'donation_date', 'payment_method', 'transaction_id',
-            'reference_number', 'status', 'processor_fee', 'processor_fee_currency',
-            'processor_fee_currency_id', 'net_amount', 'deposited_to_account',
-            'deposited_to_account_id', 'deposit_date', 'bank_reference', 'receipt_image',
-            'notes', 'receipt_sent', 'receipt_number', 'tax_deductible', 'processed_by',
-            'created_at', 'updated_at', 'donor_name_display', 'formatted_amount'
-        ]
-        read_only_fields = ['id', 'processed_by', 'created_at', 'updated_at']
-
-class RecurringDonationSerializer(serializers.ModelSerializer):
-    donor = UserBasicSerializer(read_only=True)
-    donor_id = serializers.IntegerField(write_only=True)
-    campaign = serializers.StringRelatedField(read_only=True)
-    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    project = serializers.StringRelatedField(read_only=True)
-    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    currency = CurrencySerializer(read_only=True)
-    currency_id = serializers.IntegerField(write_only=True)
-    formatted_amount = serializers.CharField(read_only=True)
-    
-    class Meta:
-        model = RecurringDonation
-        fields = [
-            'id', 'donor', 'donor_id', 'is_anonymous', 'campaign', 'campaign_id', 'project',
-            'project_id', 'amount', 'currency', 'currency_id', 'frequency',
-            'start_date', 'end_date', 'next_payment_date', 'payment_method',
-            'subscription_id', 'status', 'total_donated', 'payment_count',
-            'notes', 'receipt_image', 'created_at', 'updated_at', 'formatted_amount'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-class InKindDonationSerializer(serializers.ModelSerializer):
-    donor = UserBasicSerializer(read_only=True)
-    donor_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    campaign = serializers.StringRelatedField(read_only=True)
-    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    project = serializers.StringRelatedField(read_only=True)
-    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    valuation_currency = CurrencySerializer(read_only=True)
-    valuation_currency_id = serializers.IntegerField(write_only=True)
-    received_by = UserBasicSerializer(read_only=True)
-    received_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    donor_name_display = serializers.CharField(read_only=True)
-    formatted_value = serializers.CharField(read_only=True)
-    
-    class Meta:
-        model = InKindDonation
-        fields = [
-            'id', 'donor', 'donor_id', 'is_anonymous', 'donor_name', 'donor_email',
-            'campaign', 'campaign_id', 'project', 'project_id', 'item_description',
-            'category', 'quantity', 'estimated_value', 'valuation_currency',
-            'valuation_currency_id', 'donation_date', 'received_date', 'received_by',
-            'received_by_id', 'status', 'notes', 'receipt_sent', 'receipt_number',
-            'receipt_image', 'created_at', 'updated_at', 'donor_name_display', 'formatted_value'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-class DonationCampaignSerializer(serializers.ModelSerializer):
+class DonationCampaignListSerializer(serializers.ModelSerializer):
+    """List serializer for donation campaigns - optimized for performance"""
     target_currency = CurrencySerializer(read_only=True)
     target_currency_id = serializers.IntegerField(write_only=True)
     project = ProjectMinimalSerializer(read_only=True)
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserBasicSerializer(read_only=True)
-    current_amount_in_target_currency = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
-    )
-    progress_percentage = serializers.DecimalField(
-        max_digits=5, decimal_places=2, read_only=True
-    )
-    is_completed = serializers.BooleanField(read_only=True)
-    donations_count = serializers.SerializerMethodField()
-    donors_count = serializers.SerializerMethodField()
+    
+    # Core financial metrics (properties from enhanced model)
+    current_amount = serializers.ReadOnlyField()
+    progress_percentage = serializers.ReadOnlyField()
+    amount_remaining = serializers.ReadOnlyField()
+    formatted_target_amount = serializers.ReadOnlyField()
+    formatted_current_amount = serializers.ReadOnlyField()
+    
+    # Status and health
+    campaign_status = serializers.ReadOnlyField()
+    fundraising_health = serializers.ReadOnlyField()
+    is_target_reached = serializers.ReadOnlyField()
+    can_receive_donations = serializers.ReadOnlyField()
+    
+    # Time-based metrics
+    days_remaining = serializers.ReadOnlyField()
+    days_elapsed = serializers.ReadOnlyField()
+    time_progress_percentage = serializers.ReadOnlyField()
+    
+    # Basic statistics
+    total_donors_count = serializers.ReadOnlyField()
+    total_donations_count = serializers.ReadOnlyField()
     
     class Meta:
         model = DonationCampaign
         fields = [
-            'id', 'title', 'description', 'target_amount', 'target_currency',
-            'target_currency_id', 'start_date', 'end_date', 'project', 'project_id',
-            'is_active', 'is_featured', 'image', 'created_by', 'created_at',
-            'updated_at', 'current_amount_in_target_currency', 'progress_percentage',
-            'is_completed', 'donations_count', 'donors_count'
+            'id', 'title', 'slug', 'description', 'campaign_type', 'target_amount', 
+            'target_currency', 'target_currency_id', 'minimum_goal', 'start_date', 
+            'end_date', 'project', 'project_id', 'status', 'is_active', 'is_featured',
+            'image', 'created_by', 'created_at', 'updated_at',
+            # Enhanced properties
+            'current_amount', 'progress_percentage', 'amount_remaining',
+            'formatted_target_amount', 'formatted_current_amount', 'campaign_status',
+            'fundraising_health', 'is_target_reached', 'can_receive_donations',
+            'days_remaining', 'days_elapsed', 'time_progress_percentage',
+            'total_donors_count', 'total_donations_count'
         ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
-    
-    def get_donations_count(self, obj):
-        return obj.donations.filter(status='completed').count()
-    
-    def get_donors_count(self, obj):
-        """Get unique donors across all donation types"""
-        regular_donors = set(obj.donations.filter(status='completed').values_list('donor', flat=True))
-        recurring_donors = set(obj.recurring_donations.filter(status__in=['active', 'completed']).values_list('donor', flat=True))
-        in_kind_donors = set(obj.in_kind_donations.filter(status='received').values_list('donor', flat=True))
-        
-        # Remove None values and combine
-        all_donors = (regular_donors | recurring_donors | in_kind_donors) - {None}
-        return len(all_donors)
+        read_only_fields = ['id', 'slug', 'created_by', 'created_at', 'updated_at']
 
-class DonationDetailCampaignSerializer(serializers.ModelSerializer):
+class DonationCampaignDetailSerializer(serializers.ModelSerializer):
+    """Comprehensive detail serializer for donation campaigns"""
     target_currency = CurrencySerializer(read_only=True)
     target_currency_id = serializers.IntegerField(write_only=True)
     project = ProjectMinimalSerializer(read_only=True)
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserBasicSerializer(read_only=True)
-    current_amount_in_target_currency = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
-    )
-    progress_percentage = serializers.DecimalField(
-        max_digits=5, decimal_places=2, read_only=True
-    )
-    is_completed = serializers.BooleanField(read_only=True)
+    managed_by = UserBasicSerializer(many=True, read_only=True)
     
-    # Bank accounts for donations
-    campaign_bank_accounts = CampaignBankAccountSerializer(many=True, read_only=True)
-    available_bank_accounts = serializers.SerializerMethodField()
-    bank_accounts_by_currency = serializers.SerializerMethodField()
+    # Core financial metrics
+    current_amount = serializers.ReadOnlyField()
+    total_donations_amount = serializers.ReadOnlyField()
+    total_recurring_amount = serializers.ReadOnlyField()
+    total_in_kind_amount = serializers.ReadOnlyField()
+    net_donations_amount = serializers.ReadOnlyField()
     
-    # Enhanced counts and statistics including all donation types
-    donations_count = serializers.SerializerMethodField()
-    donors_count = serializers.SerializerMethodField()
-    recurring_donors_count = serializers.SerializerMethodField()
-    in_kind_donors_count = serializers.SerializerMethodField()
-    total_estimated_in_kind_value = serializers.SerializerMethodField()
-    total_recurring_donated = serializers.SerializerMethodField()
-    average_donation_amount = serializers.SerializerMethodField()
-    days_remaining = serializers.SerializerMethodField()
-    days_active = serializers.SerializerMethodField()
+    # Progress and goals
+    progress_percentage = serializers.ReadOnlyField()
+    minimum_goal_percentage = serializers.ReadOnlyField()
+    amount_remaining = serializers.ReadOnlyField()
+    amount_over_target = serializers.ReadOnlyField()
+    is_target_reached = serializers.ReadOnlyField()
+    is_minimum_reached = serializers.ReadOnlyField()
     
-    # Related data
-    in_kind_donations = serializers.SerializerMethodField()
-    recurring_donations = serializers.SerializerMethodField()
-    donations = serializers.SerializerMethodField()
+    # Donation statistics
+    total_donors_count = serializers.ReadOnlyField()
+    total_donations_count = serializers.ReadOnlyField()
+    average_donation_amount = serializers.ReadOnlyField()
+    largest_donation_amount = serializers.ReadOnlyField()
+    
+    # Time-based calculations
+    days_remaining = serializers.ReadOnlyField()
+    days_elapsed = serializers.ReadOnlyField()
+    total_campaign_days = serializers.ReadOnlyField()
+    time_progress_percentage = serializers.ReadOnlyField()
+    daily_fundraising_rate = serializers.ReadOnlyField()
+    projected_final_amount = serializers.ReadOnlyField()
+    
+    # Status and health
+    campaign_status = serializers.ReadOnlyField()
+    fundraising_health = serializers.ReadOnlyField()
+    is_active_period = serializers.ReadOnlyField()
+    is_expired = serializers.ReadOnlyField()
+    can_receive_donations = serializers.ReadOnlyField()
+    
+    # Formatted properties
+    formatted_target_amount = serializers.ReadOnlyField()
+    formatted_current_amount = serializers.ReadOnlyField()
+    formatted_amount_remaining = serializers.ReadOnlyField()
+    formatted_minimum_goal = serializers.ReadOnlyField()
+    
+    # Comprehensive data methods
+    donation_breakdown = serializers.ReadOnlyField()
+    performance_metrics = serializers.ReadOnlyField()
+    
+    # Recent donations (limited for performance)
+    recent_donations = serializers.SerializerMethodField()
+    recent_recurring_donations = serializers.SerializerMethodField()
+    recent_in_kind_donations = serializers.SerializerMethodField()
     
     # Analytics data
     donation_trends = serializers.SerializerMethodField()
     donor_segments = serializers.SerializerMethodField()
     payment_method_breakdown = serializers.SerializerMethodField()
-    geographic_distribution = serializers.SerializerMethodField()
-    
-    # Comprehensive donation breakdown
-    donation_breakdown = serializers.SerializerMethodField()
     
     class Meta:
         model = DonationCampaign
         fields = [
-            'id', 'title', 'description', 'target_amount', 'target_currency',
-            'target_currency_id', 'start_date', 'end_date', 'project', 'project_id',
-            'is_active', 'is_featured', 'image', 'created_by', 'created_at',
-            'updated_at', 'current_amount_in_target_currency', 'progress_percentage',
-            'is_completed', 'campaign_bank_accounts', 'available_bank_accounts',
-            'bank_accounts_by_currency', 'donations_count', 'donors_count', 'recurring_donors_count',
-            'in_kind_donors_count', 'total_estimated_in_kind_value', 'total_recurring_donated', 
-            'average_donation_amount', 'days_remaining', 'days_active', 'in_kind_donations', 
-            'recurring_donations', 'donations', 'donation_trends', 'donor_segments', 
-            'payment_method_breakdown', 'geographic_distribution', 'donation_breakdown'
+            'id', 'title', 'slug', 'description', 'campaign_type', 'target_amount',
+            'target_currency', 'target_currency_id', 'minimum_goal', 'start_date',
+            'end_date', 'launch_date', 'project', 'project_id', 'status', 'is_active',
+            'is_featured', 'allow_anonymous_donations', 'allow_recurring_donations',
+            'allow_in_kind_donations', 'image', 'video_url', 'created_by', 'managed_by',
+            'created_at', 'updated_at',
+            # Enhanced financial metrics
+            'current_amount', 'total_donations_amount', 'total_recurring_amount',
+            'total_in_kind_amount', 'net_donations_amount',
+            # Progress and goals
+            'progress_percentage', 'minimum_goal_percentage', 'amount_remaining',
+            'amount_over_target', 'is_target_reached', 'is_minimum_reached',
+            # Statistics
+            'total_donors_count', 'total_donations_count', 'average_donation_amount',
+            'largest_donation_amount',
+            # Time-based
+            'days_remaining', 'days_elapsed', 'total_campaign_days',
+            'time_progress_percentage', 'daily_fundraising_rate', 'projected_final_amount',
+            # Status and health
+            'campaign_status', 'fundraising_health', 'is_active_period', 'is_expired',
+            'can_receive_donations',
+            # Formatted
+            'formatted_target_amount', 'formatted_current_amount', 'formatted_amount_remaining',
+            'formatted_minimum_goal',
+            # Comprehensive data
+            'donation_breakdown', 'performance_metrics',
+            # Related data
+            'recent_donations', 'recent_recurring_donations', 'recent_in_kind_donations',
+            # Analytics
+            'donation_trends', 'donor_segments', 'payment_method_breakdown'
         ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'slug', 'created_by', 'created_at', 'updated_at']
     
-    def get_available_bank_accounts(self, obj):
-        """Get available bank accounts for donations"""
-        accounts = obj.get_available_bank_accounts()
-        return BankAccountMinimalSerializer(accounts, many=True).data
+    def get_recent_donations(self, obj):
+        """Get recent completed donations"""
+        donations = obj.donations.filter(status='completed').select_related(
+            'donor', 'currency'
+        ).order_by('-donation_date')[:10]
+        return DonationListSerializer(donations, many=True).data
     
-    def get_bank_accounts_by_currency(self, obj):
-        """Get bank accounts grouped by currency"""
-        return obj.get_bank_accounts_by_currency()
+    def get_recent_recurring_donations(self, obj):
+        """Get recent active recurring donations"""
+        recurring = obj.recurring_donations.filter(
+            status__in=['active', 'completed']
+        ).select_related('donor', 'currency').order_by('-created_at')[:10]
+        return RecurringDonationListSerializer(recurring, many=True).data
     
-    def get_donations_count(self, obj):
-        return obj.donations.filter(status='completed').count()
-    
-    def get_donors_count(self, obj):
-        """Get unique donors across all donation types"""
-        regular_donors = set(obj.donations.filter(status='completed').values_list('donor', flat=True))
-        recurring_donors = set(obj.recurring_donations.filter(status__in=['active', 'completed']).values_list('donor', flat=True))
-        in_kind_donors = set(obj.in_kind_donations.filter(status='received').values_list('donor', flat=True))
-        
-        # Remove None values and combine
-        all_donors = (regular_donors | recurring_donors | in_kind_donors) - {None}
-        return len(all_donors)
-    
-    def get_recurring_donors_count(self, obj):
-        return obj.recurring_donations.filter(status__in=['active', 'completed']).values('donor').distinct().count()
-    
-    def get_in_kind_donors_count(self, obj):
-        return obj.in_kind_donations.filter(status='received').values('donor').distinct().count()
-    
-    def get_total_estimated_in_kind_value(self, obj):
-        """Get total in-kind value in target currency"""
-        total = 0
-        for in_kind in obj.in_kind_donations.filter(status='received'):
-            if in_kind.valuation_currency == obj.target_currency:
-                total += in_kind.estimated_value
-            else:
-                # Convert using exchange rate (simplified)
-                total += in_kind.estimated_value  # Would need proper conversion
-        return total
-    
-    def get_total_recurring_donated(self, obj):
-        """Get total from recurring donations in target currency"""
-        total = 0
-        for recurring in obj.recurring_donations.filter(status__in=['active', 'completed']):
-            if recurring.currency == obj.target_currency:
-                total += recurring.total_donated
-            else:
-                # Convert using exchange rate (simplified)
-                total += recurring.total_donated  # Would need proper conversion
-        return total
-    
-    def get_average_donation_amount(self, obj):
-        return obj.donations.filter(status='completed').aggregate(
-            avg=Avg('amount')
-        )['avg'] or 0
-    
-    def get_days_remaining(self, obj):
-        from django.utils import timezone
-        if obj.end_date:
-            remaining = (obj.end_date - timezone.now().date()).days
-            return max(0, remaining)
-        return 0
-    
-    def get_days_active(self, obj):
-        from django.utils import timezone
-        return (timezone.now().date() - obj.start_date).days + 1
-    
-    def get_in_kind_donations(self, obj):
-        in_kind = obj.in_kind_donations.select_related(
+    def get_recent_in_kind_donations(self, obj):
+        """Get recent received in-kind donations"""
+        in_kind = obj.in_kind_donations.filter(status='received').select_related(
             'donor', 'valuation_currency'
-        ).order_by('-donation_date')[:10]  # Latest 10
-        return InKindDonationSerializer(in_kind, many=True).data
-    
-    def get_recurring_donations(self, obj):
-        recurring = obj.recurring_donations.select_related(
-            'donor', 'currency'
-        ).filter(status__in=['active', 'completed']).order_by('-created_at')[:10]  # Latest 10
-        return RecurringDonationSerializer(recurring, many=True).data
-    
-    def get_donations(self, obj):
-        donations = obj.donations.select_related(
-            'donor', 'currency'
-        ).filter(status='completed').order_by('-donation_date')[:20]  # Latest 20
-        return DonationSerializer(donations, many=True).data
+        ).order_by('-donation_date')[:10]
+        return InKindDonationListSerializer(in_kind, many=True).data
     
     def get_donation_trends(self, obj):
-        """Get daily donation trends for the last 30 days"""
+        """Get donation trends over time"""
         from django.utils import timezone
         from datetime import timedelta
         
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=30)
         
+        # Daily donation totals for the last 30 days
         donations = obj.donations.filter(
             status='completed',
-            donation_date__gte=start_date,
-            donation_date__lte=end_date
+            donation_date__date__gte=start_date,
+            donation_date__date__lte=end_date
         ).extra(
-            select={'day': 'date(donation_date)'}
+            select={'day': 'DATE(donation_date)'}
         ).values('day').annotate(
             count=Count('id'),
             total=Sum('amount')
@@ -504,7 +407,7 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
         return list(donations)
     
     def get_donor_segments(self, obj):
-        """Segment donors by donation amount"""
+        """Segment donors by donation amount ranges"""
         donations = obj.donations.filter(status='completed')
         
         segments = {
@@ -521,64 +424,374 @@ class DonationDetailCampaignSerializer(serializers.ModelSerializer):
         """Get breakdown by payment method"""
         return list(obj.donations.filter(status='completed').values('payment_method').annotate(
             count=Count('id'),
-            total=Sum('amount')
+            total=Sum('amount'),
+            avg=Avg('amount')
         ).order_by('-total'))
-    
-    def get_geographic_distribution(self, obj):
-        """Get geographic distribution of donors (if available)"""
-        # This would require additional user profile fields
-        # For now, return empty list
-        return []
-    
-    def get_donation_breakdown(self, obj):
-        """Get comprehensive breakdown of all donation types"""
-        # Regular donations
-        regular_total = obj.donations.filter(status='completed').aggregate(
-            total=Sum('amount'), count=Count('id')
-        )
-        
-        # In-kind donations
-        in_kind_total = obj.in_kind_donations.filter(status='received').aggregate(
-            total=Sum('estimated_value'), count=Count('id')
-        )
-        
-        # Recurring donations
-        recurring_total = obj.recurring_donations.filter(
-            status__in=['active', 'completed']
-        ).aggregate(
-            total=Sum('total_donated'), count=Count('id')
-        )
-        
-        return {
-            'regular_donations': {
-                'count': regular_total['count'] or 0,
-                'total': float(regular_total['total'] or 0),
-                'percentage': 0  # Will be calculated on frontend
-            },
-            'in_kind_donations': {
-                'count': in_kind_total['count'] or 0,
-                'total': float(in_kind_total['total'] or 0),
-                'percentage': 0  # Will be calculated on frontend
-            },
-            'recurring_donations': {
-                'count': recurring_total['count'] or 0,
-                'total': float(recurring_total['total'] or 0),
-                'percentage': 0  
-            }
-        }
 
-class GrantSerializer(serializers.ModelSerializer):
+# ============================================================================
+# DONATION SERIALIZERS
+# ============================================================================
+
+class DonationListSerializer(serializers.ModelSerializer):
+    """List serializer for donations - optimized for performance"""
+    donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    campaign = serializers.StringRelatedField(read_only=True)
+    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    project = serializers.StringRelatedField(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    currency = CurrencySerializer(read_only=True)
+    currency_id = serializers.IntegerField(write_only=True)
+    
+    # Enhanced properties from model
+    donor_name_display = serializers.ReadOnlyField()
+    formatted_amount = serializers.ReadOnlyField()
+    formatted_net_amount = serializers.ReadOnlyField()
+    net_amount = serializers.ReadOnlyField()
+    processor_fee_percentage = serializers.ReadOnlyField()
+    is_completed = serializers.ReadOnlyField()
+    is_recent = serializers.ReadOnlyField()
+    days_since_donation = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Donation
+        fields = [
+            'id', 'donor', 'donor_id', 'is_anonymous', 'donor_name', 'donor_email',
+            'campaign', 'campaign_id', 'project', 'project_id', 'amount', 'currency',
+            'currency_id', 'payment_method', 'donation_date', 'status',
+            'processor_fee', 'tax_deductible', 'receipt_sent', 'created_at',
+            # Enhanced properties
+            'donor_name_display', 'formatted_amount', 'formatted_net_amount',
+            'net_amount', 'processor_fee_percentage', 'is_completed', 'is_recent',
+            'days_since_donation'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+class DonationDetailSerializer(serializers.ModelSerializer):
+    """Comprehensive detail serializer for donations"""
+    donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    campaign = DonationCampaignListSerializer(read_only=True)
+    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    currency = CurrencySerializer(read_only=True)
+    currency_id = serializers.IntegerField(write_only=True)
+    converted_currency = CurrencySerializer(read_only=True)
+    processor_fee_currency = CurrencySerializer(read_only=True)
+    processed_by = UserBasicSerializer(read_only=True)
+    
+    # Financial calculations
+    net_amount = serializers.ReadOnlyField()
+    effective_amount = serializers.ReadOnlyField()
+    processor_fee_percentage = serializers.ReadOnlyField()
+    net_percentage = serializers.ReadOnlyField()
+    
+    # Status and validation
+    is_completed = serializers.ReadOnlyField()
+    is_refundable = serializers.ReadOnlyField()
+    is_tax_receipt_eligible = serializers.ReadOnlyField()
+    requires_receipt = serializers.ReadOnlyField()
+    days_since_donation = serializers.ReadOnlyField()
+    is_recent = serializers.ReadOnlyField()
+    
+    # Donor information
+    donor_name_display = serializers.ReadOnlyField()
+    donor_email_display = serializers.ReadOnlyField()
+    has_complete_donor_info = serializers.ReadOnlyField()
+    
+    # Formatted properties
+    formatted_amount = serializers.ReadOnlyField()
+    formatted_net_amount = serializers.ReadOnlyField()
+    formatted_processor_fee = serializers.ReadOnlyField()
+    formatted_converted_amount = serializers.ReadOnlyField()
+    
+    # Comprehensive data
+    attribution_data = serializers.ReadOnlyField()
+    financial_summary = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Donation
+        fields = [
+            'id', 'donor', 'donor_id', 'is_anonymous', 'donor_name', 'donor_email',
+            'donor_phone', 'campaign', 'campaign_id', 'project', 'project_id',
+            'amount', 'currency', 'currency_id', 'exchange_rate', 'converted_amount',
+            'converted_currency', 'payment_method', 'processor_fee', 'processor_fee_currency',
+            'transaction_id', 'reference_number', 'bank_reference', 'donation_date',
+            'processed_date', 'status', 'donation_source', 'referral_source',
+            'utm_source', 'utm_medium', 'utm_campaign', 'is_recurring_eligible',
+            'marketing_opt_in', 'newsletter_opt_in', 'receipt_sent', 'receipt_number',
+            'receipt_sent_date', 'tax_deductible', 'receipt_image', 'notes',
+            'internal_notes', 'processed_by', 'created_at', 'updated_at',
+            # Enhanced properties
+            'net_amount', 'effective_amount', 'processor_fee_percentage', 'net_percentage',
+            'is_completed', 'is_refundable', 'is_tax_receipt_eligible', 'requires_receipt',
+            'days_since_donation', 'is_recent', 'donor_name_display', 'donor_email_display',
+            'has_complete_donor_info', 'formatted_amount', 'formatted_net_amount',
+            'formatted_processor_fee', 'formatted_converted_amount', 'attribution_data',
+            'financial_summary'
+        ]
+        read_only_fields = ['id', 'processed_by', 'created_at', 'updated_at']
+
+# ============================================================================
+# RECURRING DONATION SERIALIZERS
+# ============================================================================
+
+class RecurringDonationListSerializer(serializers.ModelSerializer):
+    """List serializer for recurring donations"""
+    donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True)
+    campaign = serializers.StringRelatedField(read_only=True)
+    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    project = serializers.StringRelatedField(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    currency = CurrencySerializer(read_only=True)
+    currency_id = serializers.IntegerField(write_only=True)
+    
+    # Enhanced properties
+    formatted_amount = serializers.ReadOnlyField()
+    total_donated = serializers.ReadOnlyField()
+    formatted_total_donated = serializers.ReadOnlyField()
+    success_rate = serializers.ReadOnlyField()
+    is_healthy = serializers.ReadOnlyField()
+    is_at_risk = serializers.ReadOnlyField()
+    days_until_next_payment = serializers.ReadOnlyField()
+    subscription_age_months = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = RecurringDonation
+        fields = [
+            'id', 'donor', 'donor_id', 'is_anonymous', 'campaign', 'campaign_id',
+            'project', 'project_id', 'amount', 'currency', 'currency_id',
+            'frequency', 'start_date', 'end_date', 'next_payment_date',
+            'status', 'payment_count', 'failed_payment_count', 'created_at',
+            # Enhanced properties
+            'formatted_amount', 'total_donated', 'formatted_total_donated',
+            'success_rate', 'is_healthy', 'is_at_risk', 'days_until_next_payment',
+            'subscription_age_months'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+class RecurringDonationDetailSerializer(serializers.ModelSerializer):
+    """Comprehensive detail serializer for recurring donations"""
+    donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True)
+    campaign = DonationCampaignListSerializer(read_only=True)
+    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    currency = CurrencySerializer(read_only=True)
+    currency_id = serializers.IntegerField(write_only=True)
+    
+    # Financial calculations
+    total_donated = serializers.ReadOnlyField()
+    total_net_donated = serializers.ReadOnlyField()
+    average_donation_amount = serializers.ReadOnlyField()
+    projected_annual_amount = serializers.ReadOnlyField()
+    lifetime_value = serializers.ReadOnlyField()
+    
+    # Status and health
+    success_rate = serializers.ReadOnlyField()
+    is_healthy = serializers.ReadOnlyField()
+    is_at_risk = serializers.ReadOnlyField()
+    days_until_next_payment = serializers.ReadOnlyField()
+    is_payment_due = serializers.ReadOnlyField()
+    is_overdue = serializers.ReadOnlyField()
+    subscription_age_days = serializers.ReadOnlyField()
+    subscription_age_months = serializers.ReadOnlyField()
+    
+    # Formatted properties
+    formatted_amount = serializers.ReadOnlyField()
+    formatted_total_donated = serializers.ReadOnlyField()
+    formatted_projected_annual = serializers.ReadOnlyField()
+    formatted_lifetime_value = serializers.ReadOnlyField()
+    
+    # Comprehensive data
+    performance_summary = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = RecurringDonation
+        fields = [
+            'id', 'donor', 'donor_id', 'is_anonymous', 'campaign', 'campaign_id',
+            'project', 'project_id', 'amount', 'currency', 'currency_id',
+            'frequency', 'start_date', 'end_date', 'next_payment_date',
+            'last_payment_date', 'payment_method', 'subscription_id',
+            'payment_processor', 'status', 'payment_count', 'failed_payment_count',
+            'max_failed_payments', 'notes', 'receipt_image', 'created_at', 'updated_at',
+            # Enhanced properties
+            'total_donated', 'total_net_donated', 'average_donation_amount',
+            'projected_annual_amount', 'lifetime_value', 'success_rate', 'is_healthy',
+            'is_at_risk', 'days_until_next_payment', 'is_payment_due', 'is_overdue',
+            'subscription_age_days', 'subscription_age_months', 'formatted_amount',
+            'formatted_total_donated', 'formatted_projected_annual', 'formatted_lifetime_value',
+            'performance_summary'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+# ============================================================================
+# IN-KIND DONATION SERIALIZERS
+# ============================================================================
+
+class InKindDonationListSerializer(serializers.ModelSerializer):
+    """List serializer for in-kind donations"""
+    donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    campaign = serializers.StringRelatedField(read_only=True)
+    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    project = serializers.StringRelatedField(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    valuation_currency = CurrencySerializer(read_only=True)
+    valuation_currency_id = serializers.IntegerField(write_only=True)
+    
+    # Enhanced properties
+    donor_name_display = serializers.ReadOnlyField()
+    formatted_estimated_value = serializers.ReadOnlyField()
+    formatted_effective_value = serializers.ReadOnlyField()
+    effective_value = serializers.ReadOnlyField()
+    item_summary = serializers.ReadOnlyField()
+    is_received = serializers.ReadOnlyField()
+    is_overdue = serializers.ReadOnlyField()
+    days_since_pledge = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = InKindDonation
+        fields = [
+            'id', 'donor', 'donor_id', 'is_anonymous', 'donor_name', 'donor_email',
+            'campaign', 'campaign_id', 'project', 'project_id', 'item_description',
+            'category', 'quantity', 'estimated_value', 'valuation_currency',
+            'valuation_currency_id', 'donation_date', 'received_date', 'status',
+            'created_at',
+            # Enhanced properties
+            'donor_name_display', 'formatted_estimated_value', 'formatted_effective_value',
+            'effective_value', 'item_summary', 'is_received', 'is_overdue',
+            'days_since_pledge'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+class InKindDonationDetailSerializer(serializers.ModelSerializer):
+    """Comprehensive detail serializer for in-kind donations"""
+    donor = UserBasicSerializer(read_only=True)
+    donor_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    campaign = DonationCampaignListSerializer(read_only=True)
+    campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    valuation_currency = CurrencySerializer(read_only=True)
+    valuation_currency_id = serializers.IntegerField(write_only=True)
+    received_by = UserBasicSerializer(read_only=True)
+    
+    # Valuation calculations
+    total_estimated_value = serializers.ReadOnlyField()
+    total_actual_value = serializers.ReadOnlyField()
+    total_market_value = serializers.ReadOnlyField()
+    value_variance = serializers.ReadOnlyField()
+    value_variance_percentage = serializers.ReadOnlyField()
+    effective_value = serializers.ReadOnlyField()
+    
+    # Status and validation
+    is_received = serializers.ReadOnlyField()
+    is_pending_receipt = serializers.ReadOnlyField()
+    is_overdue = serializers.ReadOnlyField()
+    days_since_pledge = serializers.ReadOnlyField()
+    days_until_expected_delivery = serializers.ReadOnlyField()
+    processing_time_days = serializers.ReadOnlyField()
+    is_tax_receipt_eligible = serializers.ReadOnlyField()
+    requires_receipt = serializers.ReadOnlyField()
+    
+    # Donor information
+    donor_name_display = serializers.ReadOnlyField()
+    donor_contact_display = serializers.ReadOnlyField()
+    has_complete_donor_info = serializers.ReadOnlyField()
+    
+    # Formatted properties
+    formatted_estimated_value = serializers.ReadOnlyField()
+    formatted_actual_value = serializers.ReadOnlyField()
+    formatted_effective_value = serializers.ReadOnlyField()
+    formatted_market_value = serializers.ReadOnlyField()
+    formatted_value_variance = serializers.ReadOnlyField()
+    item_summary = serializers.ReadOnlyField()
+    
+    # Comprehensive data
+    logistics_summary = serializers.ReadOnlyField()
+    valuation_summary = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = InKindDonation
+        fields = [
+            'id', 'donor', 'donor_id', 'is_anonymous', 'donor_name', 'donor_email',
+            'donor_phone', 'donor_organization', 'campaign', 'campaign_id', 'project',
+            'project_id', 'item_description', 'category', 'brand_model', 'condition',
+            'quantity', 'unit_of_measure', 'estimated_value', 'valuation_currency',
+            'valuation_currency_id', 'valuation_method', 'market_value', 'donation_date',
+            'pledge_date', 'expected_delivery_date', 'received_date', 'status',
+            'pickup_required', 'delivery_address', 'special_handling_requirements',
+            'storage_requirements', 'received_by', 'condition_on_receipt', 'actual_value',
+            'receipt_sent', 'receipt_number', 'receipt_sent_date', 'tax_deductible',
+            'receipt_image', 'photos', 'documentation', 'notes', 'internal_notes',
+            'created_at', 'updated_at',
+            # Enhanced properties
+            'total_estimated_value', 'total_actual_value', 'total_market_value',
+            'value_variance', 'value_variance_percentage', 'effective_value',
+            'is_received', 'is_pending_receipt', 'is_overdue', 'days_since_pledge',
+            'days_until_expected_delivery', 'processing_time_days', 'is_tax_receipt_eligible',
+            'requires_receipt', 'donor_name_display', 'donor_contact_display',
+            'has_complete_donor_info', 'formatted_estimated_value', 'formatted_actual_value',
+            'formatted_effective_value', 'formatted_market_value', 'formatted_value_variance',
+            'item_summary', 'logistics_summary', 'valuation_summary'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+# ============================================================================
+# GRANT SERIALIZERS
+# ============================================================================
+
+class GrantListSerializer(serializers.ModelSerializer):
+    """List serializer for grants"""
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
     project = serializers.StringRelatedField(read_only=True)
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    designated_account = serializers.StringRelatedField(read_only=True)
-    designated_account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    created_by = UserBasicSerializer(read_only=True)
+    managed_by = UserBasicSerializer(read_only=True)
+    
+    # Enhanced properties
+    remaining_amount = serializers.ReadOnlyField()
+    formatted_amount = serializers.ReadOnlyField()
+    
+    # Basic counts
+    reports_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Grant
+        fields = [
+            'id', 'title', 'grantor', 'grantor_type', 'amount', 'currency',
+            'currency_id', 'amount_received', 'start_date', 'end_date',
+            'project', 'project_id', 'status', 'created_by', 'managed_by',
+            'created_at', 'updated_at',
+            # Enhanced properties
+            'remaining_amount', 'formatted_amount', 'reports_count'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+    
+    def get_reports_count(self, obj):
+        return obj.reports.count()
+
+class GrantDetailSerializer(serializers.ModelSerializer):
+    """Comprehensive detail serializer for grants"""
+    currency = CurrencySerializer(read_only=True)
+    currency_id = serializers.IntegerField(write_only=True)
+    project = ProjectMinimalSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserBasicSerializer(read_only=True)
     managed_by = UserBasicSerializer(read_only=True)
     managed_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    formatted_amount = serializers.CharField(read_only=True)
+    
+    # Enhanced properties
+    remaining_amount = serializers.ReadOnlyField()
+    formatted_amount = serializers.ReadOnlyField()
+    
+    # Related data
+    reports = serializers.SerializerMethodField()
     reports_count = serializers.SerializerMethodField()
     
     class Meta:
@@ -587,16 +800,77 @@ class GrantSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'grantor', 'grantor_type', 'amount',
             'currency', 'currency_id', 'amount_received', 'submission_date',
             'approval_date', 'start_date', 'end_date', 'application_deadline',
-            'project', 'project_id', 'designated_account', 'designated_account_id',
-            'status', 'requirements', 'reporting_frequency', 'disbursement_schedule',
-            'contact_person', 'contact_email', 'contact_phone', 'notes',
-            'created_by', 'managed_by', 'managed_by_id', 'created_at', 'updated_at',
-            'remaining_amount', 'formatted_amount', 'reports_count'
+            'project', 'project_id', 'status', 'requirements', 'reporting_frequency',
+            'disbursement_schedule', 'contact_person', 'contact_email', 'contact_phone',
+            'notes', 'created_by', 'managed_by', 'managed_by_id', 'created_at',
+            'updated_at',
+            # Enhanced properties
+            'remaining_amount', 'formatted_amount', 'reports', 'reports_count'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
     
+    def get_reports(self, obj):
+        """Get recent grant reports"""
+        reports = obj.reports.order_by('-created_at')[:5]
+        return GrantReportListSerializer(reports, many=True).data
+    
     def get_reports_count(self, obj):
         return obj.reports.count()
+
+# ============================================================================
+# GRANT REPORT SERIALIZERS
+# ============================================================================
+
+class GrantReportListSerializer(serializers.ModelSerializer):
+    """List serializer for grant reports"""
+    grant = serializers.StringRelatedField(read_only=True)
+    grant_id = serializers.IntegerField(write_only=True)
+    submitted_by = UserBasicSerializer(read_only=True)
+    
+    class Meta:
+        model = GrantReport
+        fields = [
+            'id', 'grant', 'grant_id', 'title', 'report_type', 'reporting_period_start',
+            'reporting_period_end', 'due_date', 'submission_date', 'submitted_by',
+            'status', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'submitted_by', 'created_at', 'updated_at']
+
+class GrantReportDetailSerializer(serializers.ModelSerializer):
+    """Comprehensive detail serializer for grant reports"""
+    grant = GrantListSerializer(read_only=True)
+    grant_id = serializers.IntegerField(write_only=True)
+    submitted_by = UserBasicSerializer(read_only=True)
+    
+    class Meta:
+        model = GrantReport
+        fields = [
+            'id', 'grant', 'grant_id', 'title', 'report_type', 'reporting_period_start',
+            'reporting_period_end', 'due_date', 'submission_date', 'submitted_by',
+            'status', 'narrative', 'financial_report', 'outcomes', 'challenges',
+            'next_steps', 'feedback', 'attachments', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'submitted_by', 'created_at', 'updated_at']
+
+# ============================================================================
+# UTILITY SERIALIZERS FOR CURRENCY CONVERSION
+# ============================================================================
+
+class CurrencyConversionSerializer(serializers.Serializer):
+    """Serializer for currency conversion requests"""
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    from_currency_id = serializers.IntegerField()
+    to_currency_id = serializers.IntegerField()
+    conversion_date = serializers.DateField(required=False)
+
+class DonationStatsSerializer(serializers.Serializer):
+    """Serializer for donation statistics"""
+    total_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_count = serializers.IntegerField()
+    average_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    currency_code = serializers.CharField()
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
 
 class GrantReportSerializer(serializers.ModelSerializer):
     grant = serializers.StringRelatedField(read_only=True)
@@ -622,11 +896,11 @@ class MiniBudgetFundingSerializer(serializers.ModelSerializer):
 class FundingSourceSerializer(serializers.ModelSerializer):
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
-    donation = DonationSerializer(read_only=True)
+    donation = DonationListSerializer(read_only=True)
     donation_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    campaign = DonationCampaignSerializer(read_only=True)
+    campaign = DonationCampaignListSerializer(read_only=True)
     campaign_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    grant = GrantSerializer(read_only=True)
+    grant = GrantListSerializer(read_only=True)
     grant_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserBasicSerializer(read_only=True)
     amount_remaining = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)

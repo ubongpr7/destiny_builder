@@ -1,9 +1,9 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated,IsAuthenticatedOrReadOnly
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Avg, Q, F, Case, When, Value, DecimalField, FloatField
+from django.db.models import Sum, Count, Avg, Q, F,Min, Case, When, Value, DecimalField, FloatField
 from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -21,9 +21,14 @@ from ..models import (
     AccountTransaction, FundAllocation
 )
 from .serializers import (
-    BudgetDetailSerializer, BudgetItemDetailSerializer, FinancialInstitutionSerializer, BankAccountSerializer, ExchangeRateSerializer,
-    DonationCampaignSerializer, DonationDetailCampaignSerializer, DonationSerializer, RecurringDonationSerializer,
-    InKindDonationSerializer, GrantSerializer, GrantReportSerializer,
+    BudgetDetailSerializer, BudgetItemDetailSerializer, CurrencyConversionSerializer,
+      DonationCampaignDetailSerializer, DonationCampaignListSerializer, DonationDetailSerializer, 
+      DonationListSerializer, FinancialInstitutionSerializer, BankAccountSerializer,
+        ExchangeRateSerializer,
+      GrantDetailSerializer, GrantListSerializer, GrantReportDetailSerializer,
+        GrantReportListSerializer, InKindDonationDetailSerializer, InKindDonationListSerializer, 
+        RecurringDonationDetailSerializer, RecurringDonationListSerializer, 
+    InKindDonationSerializer,  GrantReportSerializer,
     FundingSourceSerializer, BudgetSerializer, BudgetFundingSerializer,
     BudgetItemSerializer, OrganizationalExpenseSerializer, AccountTransactionSerializer,
     FundAllocationSerializer, FinancialSummarySerializer, DonationStatsSerializer,
@@ -363,1266 +368,1137 @@ class BankAccountViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             )
         })
 
-class ExchangeRateViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
-    """Enhanced Exchange Rate ViewSet with comprehensive currency management"""
-    queryset = ExchangeRate.objects.select_related('from_currency', 'to_currency', 'created_by')
-    serializer_class = ExchangeRateSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['from_currency', 'to_currency']
-    search_fields = ['from_currency__code', 'to_currency__code', 'source']
-    ordering_fields = ['effective_date', 'rate', 'created_at']
-    ordering = ['-effective_date']
+
+class DonationCampaignViewSet(viewsets.ModelViewSet):
+    """
+    Comprehensive ViewSet for Donation Campaigns with enhanced analytics
+    """
+    queryset = DonationCampaign.objects.select_related(
+        'target_currency', 'project', 'created_by'
+    ).prefetch_related('managed_by')
     
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    # filterset_class = DonationCampaignFilter
+    search_fields = ['title', 'description', 'campaign_type']
+    ordering_fields = [
+        'created_at', 'start_date', 'end_date', 'target_amount', 
+        'progress_percentage', 'current_amount'
+    ]
+    ordering = ['-created_at']
+
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return DonationCampaignListSerializer
+        return DonationCampaignDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by status
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        # Filter by campaign health
+        health_filter = self.request.query_params.get('health')
+        if health_filter:
+            # This would require custom filtering based on calculated properties
+            pass
+        
+        # Filter by progress range
+        min_progress = self.request.query_params.get('min_progress')
+        max_progress = self.request.query_params.get('max_progress')
+        if min_progress or max_progress:
+            # Custom filtering would be implemented here
+            pass
+        
+        return queryset
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-    
-    @action(detail=False, methods=['get'])
-    def latest_rates(self, request):
-        """Get latest exchange rates for all currency pairs"""
-        # Get the most recent rate for each currency pair
-        latest_rates = ExchangeRate.objects.values(
-            'from_currency__code', 'to_currency__code'
-        ).annotate(
-            latest_date=Max('effective_date')
-        )
+
+    @action(detail=True, methods=['get'])
+    def analytics(self, request, pk=None):
+        """Get comprehensive analytics for a campaign"""
+        campaign = self.get_object()
         
-        # Get the actual rate records
-        rates = []
-        for rate_info in latest_rates:
-            try:
-                rate = ExchangeRate.objects.get(
-                    from_currency__code=rate_info['from_currency__code'],
-                    to_currency__code=rate_info['to_currency__code'],
-                    effective_date=rate_info['latest_date']
-                )
-                rates.append(rate)
-            except ExchangeRate.DoesNotExist:
-                continue
+        # Cache key for analytics
+        cache_key = f"campaign_analytics_{pk}_{timezone.now().date()}"
+        cached_data = cache.get(cache_key)
         
-        serializer = self.get_serializer(rates, many=True)
-        return Response({
-            'count': len(rates),
-            'last_updated': max(rate.effective_date for rate in rates) if rates else None,
-            'rates': serializer.data
-        })
-    
-    @action(detail=False, methods=['get'])
-    def convert(self, request):
-        """Convert amount between currencies using latest rates"""
-        from_currency = request.query_params.get('from_currency')
-        to_currency = request.query_params.get('to_currency')
-        amount = request.query_params.get('amount')
-        date = request.query_params.get('date')  # Optional historical date
+        if cached_data:
+            return Response(cached_data)
         
-        if not all([from_currency, to_currency, amount]):
-            return Response({
-                'error': 'from_currency, to_currency, and amount are required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            amount = Decimal(amount)
-        except (ValueError, TypeError):
-            return Response({
-                'error': 'Invalid amount format'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # If same currency, return original amount
-        if from_currency == to_currency:
-            return Response({
-                'from_currency': from_currency,
-                'to_currency': to_currency,
-                'original_amount': float(amount),
-                'converted_amount': float(amount),
-                'exchange_rate': 1.0,
-                'rate_date': date or timezone.now().date(),
-                'conversion_type': 'same_currency'
-            })
-        
-        # Find exchange rate
-        rate_filter = {
-            'from_currency__code': from_currency,
-            'to_currency__code': to_currency
+        analytics_data = {
+            'financial_metrics': {
+                'current_amount': campaign.current_amount,
+                'total_donations_amount': campaign.total_donations_amount,
+                'total_recurring_amount': campaign.total_recurring_amount,
+                'total_in_kind_amount': campaign.total_in_kind_amount,
+                'net_donations_amount': campaign.net_donations_amount,
+                'progress_percentage': campaign.progress_percentage,
+                'amount_remaining': campaign.amount_remaining,
+                'daily_fundraising_rate': campaign.daily_fundraising_rate,
+                'projected_final_amount': campaign.projected_final_amount,
+            },
+            'donor_metrics': {
+                'total_donors_count': campaign.total_donors_count,
+                'total_donations_count': campaign.total_donations_count,
+                'average_donation_amount': campaign.average_donation_amount,
+                'largest_donation_amount': campaign.largest_donation_amount,
+            },
+            'time_metrics': {
+                'days_remaining': campaign.days_remaining,
+                'days_elapsed': campaign.days_elapsed,
+                'time_progress_percentage': campaign.time_progress_percentage,
+                'campaign_status': campaign.campaign_status,
+                'fundraising_health': campaign.fundraising_health,
+            },
+            'breakdown': campaign.get_donation_breakdown(),
+            'performance': campaign.get_performance_metrics(),
         }
         
-        if date:
-            try:
-                target_date = datetime.strptime(date, '%Y-%m-%d').date()
-                rate_filter['effective_date__lte'] = target_date
-            except ValueError:
-                return Response({
-                    'error': 'Invalid date format. Use YYYY-MM-DD'
-                }, status=status.HTTP_400_BAD_REQUEST)
+        # Cache for 1 hour
+        cache.set(cache_key, analytics_data, 3600)
+        
+        return Response(analytics_data)
+
+    @action(detail=True, methods=['get'])
+    def donation_trends(self, request, pk=None):
+        """Get donation trends over time"""
+        campaign = self.get_object()
+        period = request.query_params.get('period', '30')  # days
         
         try:
-            exchange_rate = ExchangeRate.objects.filter(**rate_filter).latest('effective_date')
-            converted_amount = amount * exchange_rate.rate
-            
-            return Response({
-                'from_currency': from_currency,
-                'to_currency': to_currency,
-                'original_amount': float(amount),
-                'converted_amount': float(converted_amount),
-                'exchange_rate': float(exchange_rate.rate),
-                'rate_date': exchange_rate.effective_date,
-                'rate_source': exchange_rate.source,
-                'conversion_type': 'direct'
-            })
-            
-        except ExchangeRate.DoesNotExist:
-            # Try reverse rate
-            reverse_filter = {
-                'from_currency__code': to_currency,
-                'to_currency__code': from_currency
-            }
-            if date:
-                reverse_filter['effective_date__lte'] = target_date
-            
-            try:
-                reverse_rate = ExchangeRate.objects.filter(**reverse_filter).latest('effective_date')
-                converted_amount = amount / reverse_rate.rate
-                
-                return Response({
-                    'from_currency': from_currency,
-                    'to_currency': to_currency,
-                    'original_amount': float(amount),
-                    'converted_amount': float(converted_amount),
-                    'exchange_rate': float(1 / reverse_rate.rate),
-                    'rate_date': reverse_rate.effective_date,
-                    'rate_source': reverse_rate.source,
-                    'conversion_type': 'reverse',
-                    'note': 'Used reverse exchange rate'
-                })
-            except ExchangeRate.DoesNotExist:
-                return Response({
-                    'error': f'No exchange rate found for {from_currency} to {to_currency}',
-                    'suggestion': 'Please add exchange rates for this currency pair'
-                }, status=status.HTTP_404_NOT_FOUND)
-    
-    @action(detail=False, methods=['get'])
-    def historical_rates(self, request):
-        """Get historical exchange rates for a currency pair"""
-        from_currency = request.query_params.get('from_currency')
-        to_currency = request.query_params.get('to_currency')
-        days = int(request.query_params.get('days', 30))
-        
-        if not all([from_currency, to_currency]):
-            return Response({
-                'error': 'from_currency and to_currency are required'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            days = int(period)
+        except ValueError:
+            days = 30
         
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=days)
         
-        rates = ExchangeRate.objects.filter(
-            from_currency__code=from_currency,
-            to_currency__code=to_currency,
-            effective_date__gte=start_date,
-            effective_date__lte=end_date
-        ).order_by('effective_date')
+        # Daily donation totals
+        daily_donations = campaign.donations.filter(
+            status='completed',
+            donation_date__date__gte=start_date,
+            donation_date__date__lte=end_date
+        ).extra(
+            select={'day': 'DATE(donation_date)'}
+        ).values('day').annotate(
+            count=Count('id'),
+            total=Sum('amount'),
+            avg=Avg('amount')
+        ).order_by('day')
         
-        if not rates.exists():
-            return Response({
-                'error': f'No historical rates found for {from_currency} to {to_currency}',
-                'suggestion': 'Try a longer time period or check if exchange rates exist for this pair'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Calculate statistics
-        rate_values = [rate.rate for rate in rates]
-        min_rate = min(rate_values)
-        max_rate = max(rate_values)
-        avg_rate = sum(rate_values) / len(rate_values)
-        
-        # Format for chart display
-        historical_data = []
-        for rate in rates:
-            historical_data.append({
-                'date': rate.effective_date.isoformat(),
-                'rate': float(rate.rate),
-                'formatted_rate': f"1 {from_currency} = {rate.rate} {to_currency}",
-                'source': rate.source
-            })
-        
-        return Response({
-            'currency_pair': f"{from_currency}/{to_currency}",
-            'period_days': days,
-            'start_date': start_date.isoformat(),
-            'end_date': end_date.isoformat(),
-            'rates_count': len(historical_data),
-            'statistics': {
-                'min_rate': float(min_rate),
-                'max_rate': float(max_rate),
-                'avg_rate': float(avg_rate),
-                'volatility': float((max_rate - min_rate) / avg_rate * 100)
-            },
-            'historical_rates': historical_data
-        })
-
-class DonationCampaignViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
-    """Enhanced Campaign ViewSet with comprehensive donation type support and bank account management"""
-    queryset = DonationCampaign.objects.select_related(
-        'target_currency', 'project', 'created_by'
-    ).prefetch_related(
-        'donations', 'recurring_donations', 'in_kind_donations',
-        'campaign_bank_accounts__bank_account__financial_institution',
-        'campaign_bank_accounts__bank_account__currency'
-    )
-    serializer_class = DonationCampaignSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'is_featured', 'target_currency', 'project']
-    search_fields = ['title', 'description']
-    ordering_fields = ['title', 'start_date', 'end_date', 'target_amount', 'created_at']
-    ordering = ['-created_at']
-    
-    def get_serializer_class(self):
-        if self.action == 'retrieve' or self.action == 'detail':
-            return DonationDetailCampaignSerializer
-        return DonationCampaignSerializer
-    
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-    
-    @action(detail=True, methods=['get'])
-    def detail(self, request, pk=None):
-        """Get comprehensive campaign details with all related data"""
-        campaign = self.get_object()
-        serializer = DonationDetailCampaignSerializer(campaign)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['get'])
-    def comprehensive_analytics(self, request, pk=None):
-        """Get comprehensive analytics including all donation types"""
-        campaign = self.get_object()
-        
-        # Regular donations
-        regular_donations = campaign.donations.filter(status='completed')
-        regular_stats = {
-            'count': regular_donations.count(),
-            'total': regular_donations.aggregate(total=Sum('amount'))['total'] or 0,
-            'average': regular_donations.aggregate(avg=Avg('amount'))['avg'] or 0,
-            'unique_donors': regular_donations.values('donor').distinct().count(),
-            'largest_donation': regular_donations.aggregate(max=Max('amount'))['max'] or 0,
-            'payment_methods': list(regular_donations.values('payment_method').annotate(
+        # Weekly aggregations
+        weekly_donations = []
+        current_week_start = start_date
+        while current_week_start <= end_date:
+            week_end = min(current_week_start + timedelta(days=6), end_date)
+            week_data = campaign.donations.filter(
+                status='completed',
+                donation_date__date__gte=current_week_start,
+                donation_date__date__lte=week_end
+            ).aggregate(
                 count=Count('id'),
-                total=Sum('amount')
-            ).order_by('-total'))
-        }
-        
-        # Recurring donations
-        recurring_donations = campaign.recurring_donations.filter(status__in=['active', 'completed'])
-        recurring_stats = {
-            'count': recurring_donations.count(),
-            'total_donated': recurring_donations.aggregate(total=Sum('total_donated'))['total'] or 0,
-            'monthly_value': recurring_donations.filter(frequency='monthly').aggregate(total=Sum('amount'))['total'] or 0,
-            'unique_donors': recurring_donations.values('donor').distinct().count(),
-            'frequency_breakdown': list(recurring_donations.values('frequency').annotate(
-                count=Count('id'),
-                total_amount=Sum('amount')
-            ).order_by('frequency'))
-        }
-        
-        # In-kind donations
-        in_kind_donations = campaign.in_kind_donations.filter(status='received')
-        in_kind_stats = {
-            'count': in_kind_donations.count(),
-            'total_value': in_kind_donations.aggregate(total=Sum('estimated_value'))['total'] or 0,
-            'unique_donors': in_kind_donations.values('donor').distinct().count(),
-            'categories': list(in_kind_donations.values('category').annotate(
-                count=Count('id'),
-                total_value=Sum('estimated_value')
-            ).order_by('-total_value'))
-        }
-        
-        # Combined analytics
-        all_donor_ids = set()
-        all_donor_ids.update(regular_donations.values_list('donor', flat=True))
-        all_donor_ids.update(recurring_donations.values_list('donor', flat=True))
-        all_donor_ids.update(in_kind_donations.values_list('donor', flat=True))
-        all_donor_ids.discard(None)
-        
-        # Financial breakdown
-        total_monetary = regular_stats['total'] + recurring_stats['total_donated']
-        total_with_in_kind = total_monetary + in_kind_stats['total_value']
-        
-        # Performance metrics
-        days_active = (timezone.now().date() - campaign.start_date).days + 1
-        days_remaining = max(0, (campaign.end_date - timezone.now().date()).days)
-        avg_daily_raised = total_monetary / days_active if days_active > 0 else 0
-        target_daily_needed = (campaign.target_amount - total_monetary) / max(days_remaining, 1) if days_remaining > 0 else 0
-        
-        analytics = {
-            'campaign_info': {
-                'id': campaign.id,
-                'title': campaign.title,
-                'target_amount': float(campaign.target_amount),
-                'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
-                'progress_percentage': float(campaign.progress_percentage),
-                'days_active': days_active,
-                'days_remaining': days_remaining,
-                'is_active': campaign.is_active
-            },
-            'donation_breakdown': {
-                'regular_donations': regular_stats,
-                'recurring_donations': recurring_stats,
-                'in_kind_donations': in_kind_stats
-            },
-            'summary': {
-                'total_monetary_raised': float(total_monetary),
-                'total_with_in_kind': float(total_with_in_kind),
-                'unique_donors_all_types': len(all_donor_ids),
-                'total_contributions': (
-                    regular_stats['count'] + 
-                    recurring_stats['count'] + 
-                    in_kind_stats['count']
-                )
-            },
-            'performance_indicators': {
-                'monetary_progress': (total_monetary / campaign.target_amount * 100) if campaign.target_amount > 0 else 0,
-                'total_progress_with_in_kind': (total_with_in_kind / campaign.target_amount * 100) if campaign.target_amount > 0 else 0,
-                'avg_daily_raised': float(avg_daily_raised),
-                'target_daily_needed': float(target_daily_needed),
-                'is_on_track': avg_daily_raised >= target_daily_needed if days_remaining > 0 else total_monetary >= campaign.target_amount,
-                'donor_retention': self._calculate_donor_retention(campaign),
-                'average_per_donor': float(total_monetary / len(all_donor_ids)) if all_donor_ids else 0
-            }
-        }
-        
-        return Response(analytics)
-    
-    def _calculate_donor_retention(self, campaign):
-        """Calculate donor retention across donation types"""
-        # Get donors who have made multiple contributions
-        all_contributions = []
-        
-        # Add regular donations
-        for donation in campaign.donations.filter(status='completed'):
-            all_contributions.append({
-                'donor': donation.donor,
-                'date': donation.donation_date,
-                'type': 'regular'
-            })
-        
-        # Add recurring donations (count as multiple contributions)
-        for recurring in campaign.recurring_donations.filter(status__in=['active', 'completed']):
-            all_contributions.append({
-                'donor': recurring.donor,
-                'date': recurring.start_date,
-                'type': 'recurring'
-            })
-        
-        # Add in-kind donations
-        for in_kind in campaign.in_kind_donations.filter(status='received'):
-            all_contributions.append({
-                'donor': in_kind.donor,
-                'date': in_kind.donation_date,
-                'type': 'in_kind'
-            })
-        
-        # Calculate retention
-        donor_contribution_counts = {}
-        for contrib in all_contributions:
-            if contrib['donor']:
-                donor_contribution_counts[contrib['donor']] = donor_contribution_counts.get(contrib['donor'], 0) + 1
-        
-        total_donors = len(donor_contribution_counts)
-        repeat_donors = len([count for count in donor_contribution_counts.values() if count > 1])
-        
-        return (repeat_donors / total_donors * 100) if total_donors > 0 else 0
-    
-    @action(detail=True, methods=['get'])
-    def bank_accounts(self, request, pk=None):
-        """Get bank accounts for a campaign"""
-        campaign = self.get_object()
-        campaign_accounts = campaign.campaign_bank_accounts.filter(
-            is_active=True
-        ).select_related(
-            'bank_account__financial_institution',
-            'bank_account__currency',
-            'added_by'
-        ).order_by('priority_order')
-        
-        serializer = CampaignBankAccountSerializer(campaign_accounts, many=True)
-        return Response({
-            'campaign_title': campaign.title,
-            'total_accounts': campaign_accounts.count(),
-            'accounts': serializer.data
-        })
-
-    @action(detail=True, methods=['post'])
-    def add_bank_account(self, request, pk=None):
-        """Add a bank account to a campaign"""
-        campaign = self.get_object()
-        bank_account_id = request.data.get('bank_account_id')
-        
-        if not bank_account_id:
-            return Response({
-                'error': 'bank_account_id is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            bank_account = BankAccount.objects.get(
-                id=bank_account_id,
-                is_active=True,
-                accepts_donations=True
+                total=Sum('amount'),
+                avg=Avg('amount')
             )
-        except BankAccount.DoesNotExist:
-            return Response({
-                'error': 'Invalid or unavailable bank account'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            week_data['week_start'] = current_week_start
+            week_data['week_end'] = week_end
+            weekly_donations.append(week_data)
+            current_week_start = week_end + timedelta(days=1)
         
-        # Check if already added
-        if CampaignBankAccount.objects.filter(
-            campaign=campaign,
-            bank_account=bank_account
-        ).exists():
-            return Response({
-                'error': 'Bank account already added to this campaign'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'daily_trends': list(daily_donations),
+            'weekly_trends': weekly_donations,
+            'period_summary': {
+                'start_date': start_date,
+                'end_date': end_date,
+                'total_days': days,
+            }
+        })
+
+    @action(detail=True, methods=['get'])
+    def donor_analysis(self, request, pk=None):
+        """Analyze donor patterns and segments"""
+        campaign = self.get_object()
         
-        # Create the relationship
-        campaign_account = CampaignBankAccount.objects.create(
-            campaign=campaign,
-            bank_account=bank_account,
-            is_primary=request.data.get('is_primary', False),
-            priority_order=request.data.get('priority_order', 1),
-            notes=request.data.get('notes'),
-            added_by=request.user
+        # Donor segments by amount
+        donations = campaign.donations.filter(status='completed')
+        
+        segments = {
+            'micro': donations.filter(amount__lt=50),
+            'small': donations.filter(amount__gte=50, amount__lt=250),
+            'medium': donations.filter(amount__gte=250, amount__lt=1000),
+            'large': donations.filter(amount__gte=1000, amount__lt=5000),
+            'major': donations.filter(amount__gte=5000),
+        }
+        
+        segment_analysis = {}
+        for segment_name, segment_qs in segments.items():
+            segment_analysis[segment_name] = {
+                'count': segment_qs.count(),
+                'total': segment_qs.aggregate(Sum('amount'))['amount__sum'] or 0,
+                'avg': segment_qs.aggregate(Avg('amount'))['amount__avg'] or 0,
+                'unique_donors': segment_qs.values('donor').distinct().count(),
+            }
+        
+        # Repeat donors
+        repeat_donors = donations.values('donor').annotate(
+            donation_count=Count('id'),
+            total_donated=Sum('amount')
+        ).filter(donation_count__gt=1).order_by('-total_donated')
+        
+        # New vs returning donors
+        first_time_donors = donations.filter(
+            donor__donations__campaign=campaign
+        ).values('donor').annotate(
+            first_donation=Min('donation_date')
+        ).filter(first_donation__gte=campaign.start_date)
+        
+        return Response({
+            'segments': segment_analysis,
+            'repeat_donors': list(repeat_donors[:20]),  # Top 20
+            'donor_retention': {
+                'total_donors': campaign.total_donors_count,
+                'repeat_donors_count': repeat_donors.count(),
+                'first_time_donors_count': first_time_donors.count(),
+                'retention_rate': (repeat_donors.count() / max(campaign.total_donors_count, 1)) * 100
+            }
+        })
+
+    @action(detail=True, methods=['get'])
+    def payment_analysis(self, request, pk=None):
+        """Analyze payment methods and processing"""
+        campaign = self.get_object()
+        
+        # Payment method breakdown
+        payment_methods = campaign.donations.filter(status='completed').values(
+            'payment_method'
+        ).annotate(
+            count=Count('id'),
+            total=Sum('amount'),
+            avg=Avg('amount'),
+            total_fees=Sum('processor_fee')
+        ).order_by('-total')
+        
+        # Processing efficiency
+        processing_stats = campaign.donations.aggregate(
+            total_gross=Sum('amount'),
+            total_fees=Sum('processor_fee'),
+            total_net=Sum('amount') - Sum('processor_fee'),
+            avg_fee_percentage=Avg('processor_fee') / Avg('amount') * 100
         )
         
-        # If this is set as primary, remove primary status from others
-        if campaign_account.is_primary:
-            CampaignBankAccount.objects.filter(
-                campaign=campaign
-            ).exclude(id=campaign_account.id).update(is_primary=False)
-        
-        serializer = CampaignBankAccountSerializer(campaign_account)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=['post'])
-    def set_primary_bank_account(self, request, pk=None):
-        """Set primary bank account for campaign"""
-        campaign = self.get_object()
-        bank_account_id = request.data.get('bank_account_id')
-        
-        if not bank_account_id:
-            return Response({
-                'error': 'bank_account_id is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            with transaction.atomic():
-                # Remove primary status from all accounts
-                campaign.campaign_bank_accounts.update(is_primary=False)
-                
-                # Set new primary
-                campaign_account = campaign.campaign_bank_accounts.get(
-                    bank_account_id=bank_account_id,
-                    is_active=True
-                )
-                campaign_account.is_primary = True
-                campaign_account.save()
-                
-        except CampaignBankAccount.DoesNotExist:
-            return Response({
-                'error': 'Bank account not found in campaign'
-            }, status=status.HTTP_404_NOT_FOUND)
+        # Status breakdown
+        status_breakdown = campaign.donations.values('status').annotate(
+            count=Count('id'),
+            total=Sum('amount')
+        ).order_by('-count')
         
         return Response({
-            'message': 'Primary bank account updated successfully',
-            'primary_account': campaign_account.bank_account.name
+            'payment_methods': list(payment_methods),
+            'processing_efficiency': processing_stats,
+            'status_breakdown': list(status_breakdown),
+            'fee_analysis': {
+                'total_fees': processing_stats['total_fees'] or 0,
+                'fee_percentage': processing_stats['avg_fee_percentage'] or 0,
+                'net_efficiency': ((processing_stats['total_net'] or 0) / max(processing_stats['total_gross'] or 1, 1)) * 100
+            }
         })
+
+    @action(detail=False, methods=['get'])
+    def dashboard_stats(self, request):
+        """Get dashboard statistics for all campaigns"""
+        # Active campaigns
+        active_campaigns = self.get_queryset().filter(
+            status='active',
+            start_date__lte=timezone.now().date(),
+            end_date__gte=timezone.now().date()
+        )
+        
+        # Campaign health distribution
+        health_distribution = {}
+        for campaign in active_campaigns:
+            health = campaign.fundraising_health
+            health_distribution[health] = health_distribution.get(health, 0) + 1
+        
+        # Top performing campaigns
+        top_campaigns = active_campaigns.order_by('-progress_percentage')[:5]
+        
+        # Recent campaigns
+        recent_campaigns = self.get_queryset().order_by('-created_at')[:5]
+        
+        return Response({
+            'summary': {
+                'total_campaigns': self.get_queryset().count(),
+                'active_campaigns': active_campaigns.count(),
+                'completed_campaigns': self.get_queryset().filter(status='completed').count(),
+            },
+            'health_distribution': health_distribution,
+            'top_performing': DonationCampaignListSerializer(top_campaigns, many=True).data,
+            'recent_campaigns': DonationCampaignListSerializer(recent_campaigns, many=True).data,
+        })
+
+    @action(detail=True, methods=['post'])
+    def update_monetary_fields(self, request, pk=None):
+        """Trigger recalculation of monetary fields"""
+        campaign = self.get_object()
+        campaign.update_monetary_fields()
+        
+        # Clear related caches
+        cache_pattern = f"campaign_analytics_{pk}_*"
+        # Implementation would depend on your cache backend
+        
+        return Response({'message': 'Monetary fields updated successfully'})
 
     @action(detail=True, methods=['get'])
-    def donation_options(self, request, pk=None):
-        """Get formatted donation options for public display"""
+    def export_data(self, request, pk=None):
+        """Export campaign data to CSV"""
         campaign = self.get_object()
+        format_type = request.query_params.get('format', 'csv')
         
-        # Get active bank accounts
-        active_accounts = campaign.campaign_bank_accounts.filter(
-            is_active=True,
-            bank_account__is_active=True,
-            bank_account__accepts_donations=True
-        ).select_related(
-            'bank_account__financial_institution',
-            'bank_account__currency'
-        ).order_by('priority_order')
+        if format_type == 'csv':
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="campaign_{pk}_data.csv"'
+            
+            writer = csv.writer(response)
+            
+            # Campaign summary
+            writer.writerow(['Campaign Summary'])
+            writer.writerow(['Title', campaign.title])
+            writer.writerow(['Target Amount', campaign.formatted_target_amount])
+            writer.writerow(['Current Amount', campaign.formatted_current_amount])
+            writer.writerow(['Progress', f"{campaign.progress_percentage:.2f}%"])
+            writer.writerow(['Status', campaign.campaign_status])
+            writer.writerow([])
+            
+            # Donations
+            writer.writerow(['Donations'])
+            writer.writerow([
+                'Date', 'Donor', 'Amount', 'Currency', 'Payment Method', 'Status'
+            ])
+            
+            for donation in campaign.donations.all():
+                writer.writerow([
+                    donation.donation_date,
+                    donation.donor_name_display,
+                    donation.amount,
+                    donation.currency.code,
+                    donation.payment_method,
+                    donation.status
+                ])
+            
+            return response
         
-        # Group by currency
-        accounts_by_currency = {}
-        primary_account = None
-        
-        for campaign_account in active_accounts:
-            account = campaign_account.bank_account
-            currency_code = account.currency.code
-            
-            if currency_code not in accounts_by_currency:
-                accounts_by_currency[currency_code] = []
-            
-            account_data = {
-                'id': account.id,
-                'name': account.name,
-                'account_number': account.account_number,
-                'account_type': account.get_account_type_display(),
-                'financial_institution': {
-                    'name': account.financial_institution.name,
-                    'code': account.financial_institution.code,
-                    'branch_name': account.financial_institution.branch_name
-                },
-                'currency': {
-                    'code': account.currency.code,
-                },
-                'is_primary': campaign_account.is_primary,
-                'priority_order': campaign_account.priority_order,
-                'notes': campaign_account.notes
-            }
-            
-            accounts_by_currency[currency_code].append(account_data)
-            
-            if campaign_account.is_primary:
-                primary_account = account_data
-        
-        return Response({
-            'campaign_title': campaign.title,
-            'campaign_description': campaign.description,
-            'target_amount': float(campaign.target_amount),
-            'current_amount': float(campaign.current_amount_in_target_currency),
-            'progress_percentage': float(campaign.progress_percentage),
-            'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
-            'primary_account': primary_account,
-            'accounts_by_currency': accounts_by_currency,
-            'total_accounts': active_accounts.count(),
-            'campaign_status': {
-                'is_active': campaign.is_active,
-                'days_remaining': max(0, (campaign.end_date - timezone.now().date()).days),
-                'end_date': campaign.end_date
-            }
-        })
+        return Response({'error': 'Unsupported format'}, status=400)
 
-    @action(detail=True, methods=['post'])
-    def check_milestones(self, request, pk=None):
-        """Check and send milestone notifications"""
-        campaign = self.get_object()
-        progress = campaign.progress_percentage
-        
-        milestones_reached = []
-        
-        # Check each milestone
-        for milestone in [25, 50, 75, 100]:
-            if progress >= milestone:
-                milestones_reached.append(milestone)
-                send_campaign_milestone_notification(campaign, milestone)
-        
-        return Response({
-            'progress_percentage': float(progress),
-            'milestones_reached': milestones_reached,
-            'notifications_sent': len(milestones_reached),
-            'next_milestone': next((m for m in [25, 50, 75, 100] if m > progress), None)
-        })
-    
-    @action(detail=True, methods=['post'])
-    def extend_deadline(self, request, pk=None):
-        """Extend campaign deadline"""
-        campaign = self.get_object()
-        new_end_date = request.data.get('new_end_date')
-        reason = request.data.get('reason', '')
-        
-        if not new_end_date:
-            return Response({
-                'error': 'new_end_date is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            new_date = datetime.strptime(new_end_date, '%Y-%m-%d').date()
-            if new_date <= campaign.end_date:
-                return Response({
-                    'error': 'New end date must be after current end date'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            old_date = campaign.end_date
-            campaign.end_date = new_date
-            campaign.notes = f"Deadline extended: {reason}\n{campaign.notes or ''}"
-            campaign.save()
-            
-            return Response({
-                'message': f'Campaign deadline extended from {old_date} to {new_date}',
-                'old_end_date': old_date,
-                'new_end_date': new_date,
-                'reason': reason,
-                'new_days_remaining': (new_date - timezone.now().date()).days
-            })
-            
-        except ValueError:
-            return Response({
-                'error': 'Invalid date format. Use YYYY-MM-DD'
-            }, status=status.HTTP_400_BAD_REQUEST)
+# ============================================================================
+# DONATION VIEWSET
+# ============================================================================
 
-class DonationViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
+class DonationViewSet(viewsets.ModelViewSet):
+    """
+    Comprehensive ViewSet for Donations with enhanced features
+    """
     queryset = Donation.objects.select_related(
         'donor', 'campaign', 'project', 'currency', 'converted_currency',
-        'processor_fee_currency', 'deposited_to_account', 'processed_by'
+        'processor_fee_currency', 'processed_by'
     )
-    serializer_class = DonationSerializer
-    permission_classes = [IsAuthenticated]
+    
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = DonationFilter
-    search_fields = ['donor_name', 'donor_email', 'reference_number', 'transaction_id']
-    ordering_fields = ['donation_date', 'amount', 'status', 'created_at']
+    search_fields = ['donor_name', 'donor_email', 'transaction_id', 'reference_number']
+    ordering_fields = [
+        'donation_date', 'amount', 'status', 'created_at', 'net_amount'
+    ]
     ordering = ['-donation_date']
-    
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return DonationListSerializer
+        return DonationDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by amount range
+        min_amount = self.request.query_params.get('min_amount')
+        max_amount = self.request.query_params.get('max_amount')
+        if min_amount:
+            queryset = queryset.filter(amount__gte=min_amount)
+        if max_amount:
+            queryset = queryset.filter(amount__lte=max_amount)
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(donation_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(donation_date__lte=end_date)
+        
+        # Filter by donor type
+        donor_type = self.request.query_params.get('donor_type')
+        if donor_type == 'anonymous':
+            queryset = queryset.filter(is_anonymous=True)
+        elif donor_type == 'registered':
+            queryset = queryset.filter(donor__isnull=False, is_anonymous=False)
+        elif donor_type == 'guest':
+            queryset = queryset.filter(donor__isnull=True, is_anonymous=False)
+        
+        return queryset
+
     def perform_create(self, serializer):
-        donation = serializer.save(processed_by=self.request.user)
-        
-        # Auto-send notification if completed
-        if donation.status == 'completed':
-            send_donation_received_notification(donation)
-            
-            # Check campaign milestones
-            if donation.campaign:
-                self._check_campaign_milestones(donation.campaign)
-    
-    def _check_campaign_milestones(self, campaign):
-        """Check and send campaign milestone notifications"""
-        progress = campaign.progress_percentage
-        
-        # Send milestone notifications
-        milestones = [25, 50, 75, 100]
-        for milestone in milestones:
-            if progress >= milestone:
-                send_campaign_milestone_notification(campaign, milestone)
-    
+        donation = serializer.save()
+        # Trigger any post-creation processing
+        donation.update_monetary_calculations()
+
     @action(detail=True, methods=['post'])
-    def process_payment(self, request, pk=None):
-        """Process donation payment (change status from pending to processing)"""
+    def mark_receipt_sent(self, request, pk=None):
+        """Mark receipt as sent"""
         donation = self.get_object()
+        donation.mark_receipt_sent()
+        return Response({'message': 'Receipt marked as sent'})
+
+    @action(detail=True, methods=['post'])
+    def convert_currency(self, request, pk=None):
+        """Convert donation amount to different currency"""
+        donation = self.get_object()
+        serializer = CurrencyConversionSerializer(data=request.data)
         
-        if donation.status != 'pending':
-            return Response({
-                'error': f'Cannot process donation with status: {donation.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if serializer.is_valid():
+            target_currency_id = serializer.validated_data['to_currency_id']
+            from mainapps.common.models import Currency
+            
+            try:
+                target_currency = Currency.objects.get(id=target_currency_id)
+                converted_amount = donation.get_amount_in_currency(target_currency)
+                
+                return Response({
+                    'original_amount': donation.amount,
+                    'original_currency': donation.currency.code,
+                    'converted_amount': converted_amount,
+                    'target_currency': target_currency.code,
+                    'conversion_date': timezone.now().date()
+                })
+            except Currency.DoesNotExist:
+                return Response({'error': 'Invalid currency'}, status=400)
         
-        donation.status = 'processing'
-        donation.save()
+        return Response(serializer.errors, status=400)
+
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """Get donation statistics"""
+        queryset = self.filter_queryset(self.get_queryset())
+        completed_donations = queryset.filter(status='completed')
+        
+        stats = completed_donations.aggregate(
+            total_amount=Sum('amount'),
+            total_count=Count('id'),
+            average_amount=Avg('amount'),
+            max_amount=Max('amount'),
+            min_amount=Min('amount'),
+            total_net=Sum('amount') - Sum('processor_fee'),
+            total_fees=Sum('processor_fee')
+        )
+        
+        # Additional calculations
+        stats['fee_percentage'] = (
+            (stats['total_fees'] or 0) / max(stats['total_amount'] or 1, 1)
+        ) * 100
+        
+        # Recent trends
+        last_30_days = timezone.now().date() - timedelta(days=30)
+        recent_stats = completed_donations.filter(
+            donation_date__gte=last_30_days
+        ).aggregate(
+            recent_total=Sum('amount'),
+            recent_count=Count('id'),
+            recent_avg=Avg('amount')
+        )
+        
+        stats.update(recent_stats)
+        
+        return Response(stats)
+
+    @action(detail=False, methods=['get'])
+    def payment_method_stats(self, request):
+        """Get statistics by payment method"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        payment_stats = queryset.filter(status='completed').values(
+            'payment_method'
+        ).annotate(
+            count=Count('id'),
+            total=Sum('amount'),
+            avg=Avg('amount'),
+            total_fees=Sum('processor_fee'),
+            success_rate=Count('id', filter=Q(status='completed')) * 100.0 / Count('id')
+        ).order_by('-total')
+        
+        return Response(list(payment_stats))
+
+    @action(detail=False, methods=['post'])
+    def bulk_update_status(self, request):
+        """Bulk update donation status"""
+        donation_ids = request.data.get('donation_ids', [])
+        new_status = request.data.get('status')
+        
+        if not donation_ids or not new_status:
+            return Response({'error': 'donation_ids and status are required'}, status=400)
+        
+        updated_count = self.get_queryset().filter(
+            id__in=donation_ids
+        ).update(status=new_status)
         
         return Response({
-            'message': 'Donation payment is being processed',
-            'status': donation.status
-        })
-    
-    @action(detail=True, methods=['post'])
-    def complete_donation(self, request, pk=None):
-        """Complete donation (change status to completed)"""
-        donation = self.get_object()
-        
-        if donation.status not in ['pending', 'processing']:
-            return Response({
-                'error': f'Cannot complete donation with status: {donation.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        with transaction.atomic():
-            # Update donation status
-            donation.status = 'completed'
-            donation.donation_date = timezone.now()
-            
-            # Set deposit information if provided
-            account_id = request.data.get('deposited_to_account_id')
-            if account_id:
-                try:
-                    account = BankAccount.objects.get(id=account_id)
-                    donation.deposited_to_account = account
-                    donation.deposit_date = timezone.now()
-                    donation.bank_reference = request.data.get('bank_reference', '')
-                except BankAccount.DoesNotExist:
-                    return Response({
-                        'error': 'Invalid bank account ID'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            donation.save()
-            
-            # Create account transaction if deposited
-            if donation.deposited_to_account:
-                AccountTransaction.objects.create(
-                    account=donation.deposited_to_account,
-                    transaction_type='credit',
-                    amount=donation.net_amount or donation.amount,
-                    original_amount=donation.amount,
-                    original_currency=donation.currency,
-                    donation=donation,
-                    reference_number=f"DON-{donation.id}-{timezone.now().strftime('%Y%m%d')}",
-                    transaction_date=timezone.now(),
-                    description=f"Donation from {donation.donor_name_display}",
-                    status='completed',
-                    authorized_by=request.user
-                )
-            
-            # Send notifications
-            send_donation_received_notification(donation)
-            
-            # Check campaign milestones
-            if donation.campaign:
-                self._check_campaign_milestones(donation.campaign)
-        
-        serializer = self.get_serializer(donation)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['post'])
-    def refund_donation(self, request, pk=None):
-        """Refund a donation"""
-        donation = self.get_object()
-        
-        if donation.status != 'completed':
-            return Response({
-                'error': 'Can only refund completed donations'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        refund_reason = request.data.get('reason', '')
-        
-        with transaction.atomic():
-            # Update donation status
-            donation.status = 'refunded'
-            donation.notes = f"Refunded: {refund_reason}\n{donation.notes or ''}"
-            donation.save()
-            
-            # Create reverse transaction if it was deposited
-            if donation.deposited_to_account:
-                AccountTransaction.objects.create(
-                    account=donation.deposited_to_account,
-                    transaction_type='debit',
-                    amount=donation.net_amount or donation.amount,
-                    donation=donation,
-                    reference_number=f"REF-{donation.id}-{timezone.now().strftime('%Y%m%d')}",
-                    transaction_date=timezone.now(),
-                    description=f"Refund for donation from {donation.donor_name_display}",
-                    status='completed',
-                    authorized_by=request.user
-                )
-        
-        return Response({
-            'message': 'Donation has been refunded',
-            'status': donation.status,
-            'refund_reason': refund_reason
-        })
-    
-    @action(detail=True, methods=['post'])
-    def send_receipt(self, request, pk=None):
-        """Send receipt to donor"""
-        donation = self.get_object()
-        
-        if donation.status != 'completed':
-            return Response({
-                'error': 'Can only send receipts for completed donations'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Generate receipt number if not exists
-        if not donation.receipt_number:
-            donation.receipt_number = f"RCP-{donation.id}-{timezone.now().strftime('%Y%m%d')}"
-        
-        donation.receipt_sent = True
-        donation.save()
-        
-        # Here you would integrate with your email service
-        # send_donation_receipt_email(donation)
-        
-        return Response({
-            'message': 'Receipt sent successfully',
-            'receipt_number': donation.receipt_number
+            'message': f'Updated {updated_count} donations',
+            'updated_count': updated_count
         })
 
-class RecurringDonationViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
-    queryset = RecurringDonation.objects.select_related(
-        'donor', 'campaign', 'project', 'currency', 'created_by'
-    )
-    serializer_class = RecurringDonationSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'frequency', 'currency', 'campaign', 'project']
-    search_fields = ['donor_name', 'donor_email', 'reference_number']
-    ordering_fields = ['start_date', 'next_payment_date', 'amount', 'created_at']
-    ordering = ['-created_at']
-    
-    def perform_create(self, serializer):
-        recurring_donation = serializer.save(created_by=self.request.user)
-        
-        # Send notification for new recurring donation setup
-        send_recurring_donation_notification(recurring_donation, 'created')
-    
     @action(detail=False, methods=['get'])
-    def due_payments(self, request):
-        """Get recurring donations due for payment"""
-        days_ahead = int(request.query_params.get('days', 7))
-        end_date = timezone.now().date() + timedelta(days=days_ahead)
+    def export(self, request):
+        """Export donations to CSV"""
+        queryset = self.filter_queryset(self.get_queryset())
         
-        due_donations = self.get_queryset().filter(
-            status='active',
-            next_payment_date__lte=end_date,
-            next_payment_date__gte=timezone.now().date()
-        ).order_by('next_payment_date')
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="donations.csv"'
         
-        # Group by due date
-        due_by_date = {}
-        for donation in due_donations:
-            date_str = donation.next_payment_date.isoformat()
-            if date_str not in due_by_date:
-                due_by_date[date_str] = []
-            
-            due_by_date[date_str].append({
-                'id': donation.id,
-                'donor_name': donation.donor_name_display,
-                'amount': float(donation.amount),
-                'currency': donation.currency.code,
-                'campaign': donation.campaign.title if donation.campaign else None,
-                'frequency': donation.frequency,
-                'reference_number': donation.reference_number
-            })
+        writer = csv.writer(response)
+        writer.writerow([
+            'ID', 'Date', 'Donor', 'Campaign', 'Amount', 'Currency',
+            'Net Amount', 'Payment Method', 'Status', 'Receipt Sent'
+        ])
         
-        # Calculate totals
-        total_due = due_donations.aggregate(total=Sum('amount'))['total'] or 0
-        count_due = due_donations.count()
+        for donation in queryset:
+            writer.writerow([
+                donation.id,
+                donation.donation_date,
+                donation.donor_name_display,
+                donation.campaign.title if donation.campaign else '',
+                donation.amount,
+                donation.currency.code,
+                donation.net_amount,
+                donation.payment_method,
+                donation.status,
+                donation.receipt_sent
+            ])
         
-        return Response({
-            'period_days': days_ahead,
-            'summary': {
-                'total_due': float(total_due),
-                'count_due': count_due,
-                'end_date': end_date.isoformat()
-            },
-            'due_by_date': due_by_date,
-            'due_donations': self.get_serializer(due_donations, many=True).data
-        })
+        return response
+
+# ============================================================================
+# RECURRING DONATION VIEWSET
+# ============================================================================
+
+class RecurringDonationViewSet(viewsets.ModelViewSet):
+    """
+    Comprehensive ViewSet for Recurring Donations
+    """
+    queryset = RecurringDonation.objects.select_related(
+        'donor', 'campaign', 'project', 'currency'
+    )
     
-    @action(detail=True, methods=['post'])
-    def process_payment(self, request, pk=None):
-        """Process a recurring donation payment"""
-        recurring_donation = self.get_object()
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    # filterset_class = RecurringDonationFilter
+    search_fields = ['donor__username', 'donor__email', 'subscription_id']
+    ordering_fields = [
+        'created_at', 'start_date', 'next_payment_date', 'amount',
+        'total_donated', 'payment_count'
+    ]
+    ordering = ['-created_at']
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return RecurringDonationListSerializer
+        return RecurringDonationDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
         
-        if recurring_donation.status != 'active':
-            return Response({
-                'error': f'Cannot process payment for {recurring_donation.status} recurring donation'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # Filter by health status
+        health_filter = self.request.query_params.get('health')
+        if health_filter == 'healthy':
+            # This would require custom filtering based on calculated properties
+            pass
+        elif health_filter == 'at_risk':
+            # Custom filtering for at-risk subscriptions
+            pass
         
-        # Check if payment is due
-        if recurring_donation.next_payment_date > timezone.now().date():
-            return Response({
-                'error': f'Payment not due until {recurring_donation.next_payment_date}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        with transaction.atomic():
-            # Create a regular donation record
-            donation = Donation.objects.create(
-                donor=recurring_donation.donor,
-                donor_name=recurring_donation.donor_name,
-                donor_email=recurring_donation.donor_email,
-                amount=recurring_donation.amount,
-                currency=recurring_donation.currency,
-                campaign=recurring_donation.campaign,
-                project=recurring_donation.project,
-                payment_method=recurring_donation.payment_method,
-                is_anonymous=recurring_donation.is_anonymous,
-                donation_date=timezone.now(),
-                status='completed',  # Assuming automatic processing
-                recurring_donation=recurring_donation,
-                reference_number=f"REC-{recurring_donation.id}-{timezone.now().strftime('%Y%m%d')}",
-                processed_by=request.user
+        # Filter by payment due
+        payment_due = self.request.query_params.get('payment_due')
+        if payment_due == 'true':
+            queryset = queryset.filter(
+                next_payment_date__lte=timezone.now().date(),
+                status='active'
             )
-            
-            # Update recurring donation
-            recurring_donation.last_payment_date = timezone.now().date()
-            recurring_donation.total_amount_donated += recurring_donation.amount
-            recurring_donation.payments_made += 1
-            
-            # Calculate next payment date
-            if recurring_donation.frequency == 'weekly':
-                recurring_donation.next_payment_date += timedelta(weeks=1)
-            elif recurring_donation.frequency == 'monthly':
-                # Add one month
-                next_month = recurring_donation.next_payment_date.replace(day=28) + timedelta(days=4)
-                recurring_donation.next_payment_date = next_month.replace(day=recurring_donation.next_payment_date.day)
-            elif recurring_donation.frequency == 'quarterly':
-                # Add 3 months
-                for _ in range(3):
-                    next_month = recurring_donation.next_payment_date.replace(day=28) + timedelta(days=4)
-                    recurring_donation.next_payment_date = next_month.replace(day=recurring_donation.next_payment_date.day)
-            elif recurring_donation.frequency == 'annually':
-                recurring_donation.next_payment_date = recurring_donation.next_payment_date.replace(
-                    year=recurring_donation.next_payment_date.year + 1
-                )
-            
-            # Check if we've reached the end date
-            if recurring_donation.end_date and recurring_donation.next_payment_date > recurring_donation.end_date:
-                recurring_donation.status = 'completed'
-                recurring_donation.next_payment_date = None
-            
-            recurring_donation.save()
-            
-            # Send notifications
-            send_recurring_donation_notification(recurring_donation, 'payment_processed')
-            send_donation_received_notification(donation)
         
-        return Response({
-            'message': 'Recurring donation payment processed successfully',
-            'donation_id': donation.id,
-            'next_payment_date': recurring_donation.next_payment_date,
-            'status': recurring_donation.status
-        })
-    
+        return queryset
+
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
         """Pause a recurring donation"""
         recurring_donation = self.get_object()
+        reason = request.data.get('reason', 'Paused by user')
         
-        if recurring_donation.status != 'active':
-            return Response({
-                'error': f'Cannot pause {recurring_donation.status} recurring donation'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        recurring_donation.status = 'paused'
-        recurring_donation.save()
-        
-        send_recurring_donation_notification(recurring_donation, 'paused')
+        recurring_donation.pause_subscription(reason)
         
         return Response({
-            'message': 'Recurring donation paused successfully',
+            'message': 'Recurring donation paused',
             'status': recurring_donation.status
         })
-    
+
     @action(detail=True, methods=['post'])
     def resume(self, request, pk=None):
         """Resume a paused recurring donation"""
         recurring_donation = self.get_object()
         
         if recurring_donation.status != 'paused':
-            return Response({
-                'error': f'Cannot resume {recurring_donation.status} recurring donation'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Can only resume paused subscriptions'}, 
+                status=400
+            )
         
-        # Update next payment date if needed
-        if recurring_donation.next_payment_date < timezone.now().date():
-            recurring_donation.next_payment_date = timezone.now().date() + timedelta(days=1)
-        
-        recurring_donation.status = 'active'
-        recurring_donation.save()
-        
-        send_recurring_donation_notification(recurring_donation, 'resumed')
+        recurring_donation.resume_subscription()
         
         return Response({
-            'message': 'Recurring donation resumed successfully',
+            'message': 'Recurring donation resumed',
             'status': recurring_donation.status,
             'next_payment_date': recurring_donation.next_payment_date
         })
-    
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """Cancel a recurring donation"""
         recurring_donation = self.get_object()
+        reason = request.data.get('reason', 'Cancelled by user')
         
-        if recurring_donation.status in ['cancelled', 'completed']:
-            return Response({
-                'error': f'Recurring donation is already {recurring_donation.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        cancellation_reason = request.data.get('reason', '')
-        
-        recurring_donation.status = 'cancelled'
-        recurring_donation.next_payment_date = None
-        recurring_donation.notes = f"Cancelled: {cancellation_reason}\n{recurring_donation.notes or ''}"
-        recurring_donation.save()
-        
-        send_recurring_donation_notification(recurring_donation, 'cancelled')
+        recurring_donation.cancel_subscription(reason)
         
         return Response({
-            'message': 'Recurring donation cancelled successfully',
-            'status': recurring_donation.status,
-            'reason': cancellation_reason
-        })
-    
-    @action(detail=True, methods=['post'])
-    def update_amount(self, request, pk=None):
-        """Update recurring donation amount"""
-        recurring_donation = self.get_object()
-        
-        if recurring_donation.status != 'active':
-            return Response({
-                'error': f'Cannot update amount for {recurring_donation.status} recurring donation'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        new_amount = request.data.get('amount')
-        if not new_amount:
-            return Response({
-                'error': 'Amount is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            new_amount = Decimal(new_amount)
-            if new_amount <= 0:
-                raise ValueError("Amount must be positive")
-        except (ValueError, TypeError):
-            return Response({
-                'error': 'Invalid amount format'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        old_amount = recurring_donation.amount
-        recurring_donation.amount = new_amount
-        recurring_donation.save()
-        
-        send_recurring_donation_notification(recurring_donation, 'amount_updated', {
-            'old_amount': old_amount,
-            'new_amount': new_amount
-        })
-        
-        return Response({
-            'message': f'Amount updated from {old_amount} to {new_amount}',
-            'old_amount': float(old_amount),
-            'new_amount': float(new_amount)
-        })
-    
-    @action(detail=False, methods=['get'])
-    def statistics(self, request):
-        """Get recurring donation statistics"""
-        queryset = self.get_queryset()
-        
-        # Basic stats
-        total_recurring = queryset.count()
-        active_recurring = queryset.filter(status='active').count()
-        paused_recurring = queryset.filter(status='paused').count()
-        cancelled_recurring = queryset.filter(status='cancelled').count()
-        
-        # Financial stats
-        total_monthly_value = queryset.filter(
-            status='active',
-            frequency='monthly'
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        total_annual_value = queryset.filter(status='active').aggregate(
-            total=Sum(
-                Case(
-                    When(frequency='weekly', then=F('amount') * 52),
-                    When(frequency='monthly', then=F('amount') * 12),
-                    When(frequency='quarterly', then=F('amount') * 4),
-                    When(frequency='annually', then=F('amount')),
-                    default=Value(0),
-                    output_field=DecimalField()
-                )
-            )
-        )['total'] or 0
-        
-        # Frequency breakdown
-        frequency_stats = queryset.filter(status='active').values('frequency').annotate(
-            count=Count('id'),
-            total_amount=Sum('amount')
-        ).order_by('frequency')
-        
-        # Payment method breakdown
-        payment_method_stats = queryset.filter(status='active').values('payment_method').annotate(
-            count=Count('id'),
-            total_amount=Sum('amount')
-        ).order_by('-total_amount')
-        
-        return Response({
-            'summary': {
-                'total_recurring_donations': total_recurring,
-                'active_recurring_donations': active_recurring,
-                'paused_recurring_donations': paused_recurring,
-                'cancelled_recurring_donations': cancelled_recurring,
-                'total_monthly_value': float(total_monthly_value),
-                'projected_annual_value': float(total_annual_value)
-            },
-            'frequency_breakdown': list(frequency_stats),
-            'payment_method_breakdown': list(payment_method_stats)
+            'message': 'Recurring donation cancelled',
+            'status': recurring_donation.status
         })
 
-class GrantViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
-    queryset = Grant.objects.select_related(
-        'currency', 'project', 'designated_account', 'created_by', 'managed_by'
-    ).prefetch_related('reports')
-    serializer_class = GrantSerializer
+    @action(detail=True, methods=['post'])
+    def record_payment(self, request, pk=None):
+        """Record a successful payment"""
+        recurring_donation = self.get_object()
+        
+        # This would typically be called by payment processor webhooks
+        donation_data = request.data
+        
+        # Create the donation record
+        donation = Donation.objects.create(
+            donor=recurring_donation.donor,
+            campaign=recurring_donation.campaign,
+            project=recurring_donation.project,
+            amount=recurring_donation.amount,
+            currency=recurring_donation.currency,
+            payment_method=recurring_donation.payment_method,
+            status='completed',
+            donation_date=timezone.now(),
+            # Add other relevant fields
+        )
+        
+        # Update recurring donation
+        recurring_donation.record_successful_payment(donation)
+        
+        return Response({
+            'message': 'Payment recorded successfully',
+            'donation_id': donation.id,
+            'next_payment_date': recurring_donation.next_payment_date
+        })
+
+    @action(detail=True, methods=['post'])
+    def record_failed_payment(self, request, pk=None):
+        """Record a failed payment"""
+        recurring_donation = self.get_object()
+        
+        recurring_donation.record_failed_payment()
+        
+        return Response({
+            'message': 'Failed payment recorded',
+            'failed_count': recurring_donation.failed_payment_count,
+            'status': recurring_donation.status,
+            'next_retry_date': recurring_donation.next_payment_date
+        })
+
+    @action(detail=False, methods=['get'])
+    def health_report(self, request):
+        """Get health report for all recurring donations"""
+        queryset = self.get_queryset()
+        
+        health_stats = {
+            'total': queryset.count(),
+            'active': queryset.filter(status='active').count(),
+            'paused': queryset.filter(status='paused').count(),
+            'cancelled': queryset.filter(status='cancelled').count(),
+            'failed': queryset.filter(status='failed').count(),
+        }
+        
+        # Calculate health metrics for active subscriptions
+        active_subscriptions = queryset.filter(status='active')
+        healthy_count = 0
+        at_risk_count = 0
+        
+        for subscription in active_subscriptions:
+            if subscription.is_healthy:
+                healthy_count += 1
+            elif subscription.is_at_risk:
+                at_risk_count += 1
+        
+        health_stats.update({
+            'healthy': healthy_count,
+            'at_risk': at_risk_count,
+            'health_percentage': (healthy_count / max(active_subscriptions.count(), 1)) * 100
+        })
+        
+        # Payment due analysis
+        payment_due = active_subscriptions.filter(
+            next_payment_date__lte=timezone.now().date()
+        ).count()
+        
+        overdue = active_subscriptions.filter(
+            next_payment_date__lt=timezone.now().date()
+        ).count()
+        
+        health_stats.update({
+            'payment_due': payment_due,
+            'overdue': overdue
+        })
+        
+        return Response(health_stats)
+
+    @action(detail=False, methods=['get'])
+    def performance_summary(self, request):
+        """Get performance summary for recurring donations"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Aggregate performance metrics
+        performance = queryset.aggregate(
+            total_subscriptions=Count('id'),
+            total_donated=Sum('total_donated'),
+            avg_monthly_value=Avg('amount'),
+            total_payments=Sum('payment_count'),
+            total_failed_payments=Sum('failed_payment_count')
+        )
+        
+        # Calculate success rate
+        total_attempts = (performance['total_payments'] or 0) + (performance['total_failed_payments'] or 0)
+        performance['overall_success_rate'] = (
+            (performance['total_payments'] or 0) / max(total_attempts, 1)
+        ) * 100
+        
+        # Frequency breakdown
+        frequency_breakdown = queryset.values('frequency').annotate(
+            count=Count('id'),
+            total_value=Sum('total_donated'),
+            avg_value=Avg('amount')
+        ).order_by('-count')
+        
+        performance['frequency_breakdown'] = list(frequency_breakdown)
+        
+        return Response(performance)
+
+# ============================================================================
+# IN-KIND DONATION VIEWSET
+# ============================================================================
+
+class InKindDonationViewSet(viewsets.ModelViewSet):
+    """
+    Comprehensive ViewSet for In-Kind Donations
+    """
+    queryset = InKindDonation.objects.select_related(
+        'donor', 'campaign', 'project', 'valuation_currency', 'received_by'
+    )
+    
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    # filterset_class = InKindDonationFilter
+    search_fields = ['item_description', 'donor_name', 'donor_email', 'brand_model']
+    ordering_fields = [
+        'donation_date', 'estimated_value', 'status', 'created_at',
+        'received_date', 'effective_value'
+    ]
+    ordering = ['-donation_date']
     permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InKindDonationListSerializer
+        return InKindDonationDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by value range
+        min_value = self.request.query_params.get('min_value')
+        max_value = self.request.query_params.get('max_value')
+        if min_value:
+            queryset = queryset.filter(estimated_value__gte=min_value)
+        if max_value:
+            queryset = queryset.filter(estimated_value__lte=max_value)
+        
+        # Filter by receipt status
+        receipt_status = self.request.query_params.get('receipt_status')
+        if receipt_status == 'pending':
+            queryset = queryset.filter(status='received', receipt_sent=False)
+        elif receipt_status == 'sent':
+            queryset = queryset.filter(receipt_sent=True)
+        
+        # Filter by logistics
+        pickup_required = self.request.query_params.get('pickup_required')
+        if pickup_required == 'true':
+            queryset = queryset.filter(pickup_required=True)
+        
+        return queryset
+
+    @action(detail=True, methods=['post'])
+    def mark_received(self, request, pk=None):
+        """Mark in-kind donation as received"""
+        in_kind_donation = self.get_object()
+        
+        condition_notes = request.data.get('condition_notes')
+        actual_value = request.data.get('actual_value')
+        
+        if actual_value:
+            try:
+                actual_value = Decimal(str(actual_value))
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid actual_value'}, status=400)
+        
+        in_kind_donation.mark_as_received(
+            received_by_user=request.user,
+            condition_notes=condition_notes,
+            actual_value=actual_value
+        )
+        
+        return Response({
+            'message': 'In-kind donation marked as received',
+            'status': in_kind_donation.status,
+            'received_date': in_kind_donation.received_date,
+            'effective_value': in_kind_donation.effective_value
+        })
+
+    @action(detail=True, methods=['post'])
+    def mark_receipt_sent(self, request, pk=None):
+        """Mark receipt as sent"""
+        in_kind_donation = self.get_object()
+        in_kind_donation.mark_receipt_sent()
+        
+        return Response({'message': 'Receipt marked as sent'})
+
+    @action(detail=True, methods=['get'])
+    def valuation_history(self, request, pk=None):
+        """Get valuation history and variance analysis"""
+        in_kind_donation = self.get_object()
+        
+        valuation_data = {
+            'estimated_value': in_kind_donation.total_estimated_value,
+            'market_value': in_kind_donation.total_market_value,
+            'actual_value': in_kind_donation.total_actual_value,
+            'effective_value': in_kind_donation.effective_value,
+            'value_variance': in_kind_donation.value_variance,
+            'value_variance_percentage': in_kind_donation.value_variance_percentage,
+            'valuation_method': in_kind_donation.valuation_method,
+            'currency': in_kind_donation.valuation_currency.code,
+            'quantity': in_kind_donation.quantity,
+        }
+        
+        return Response(valuation_data)
+
+    @action(detail=False, methods=['get'])
+    def category_analysis(self, request):
+        """Analyze in-kind donations by category"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        category_stats = queryset.filter(status='received').values(
+            'category'
+        ).annotate(
+            count=Count('id'),
+            total_estimated=Sum('estimated_value'),
+            total_actual=Sum('actual_value'),
+            avg_estimated=Avg('estimated_value'),
+            avg_actual=Avg('actual_value')
+        ).order_by('-total_estimated')
+        
+        return Response(list(category_stats))
+
+    @action(detail=False, methods=['get'])
+    def logistics_report(self, request):
+        """Get logistics and handling report"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        logistics_stats = {
+            'total_items': queryset.count(),
+            'pickup_required': queryset.filter(pickup_required=True).count(),
+            'special_handling': queryset.exclude(special_handling_requirements='').count(),
+            'storage_requirements': queryset.exclude(storage_requirements='').count(),
+        }
+        
+        # Status breakdown
+        status_breakdown = queryset.values('status').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # Overdue items
+        overdue_items = queryset.filter(
+            status__in=['pledged', 'confirmed'],
+            expected_delivery_date__lt=timezone.now().date()
+        ).count()
+        
+        logistics_stats.update({
+            'status_breakdown': list(status_breakdown),
+            'overdue_items': overdue_items
+        })
+        
+        return Response(logistics_stats)
+
+    @action(detail=False, methods=['get'])
+    def valuation_summary(self, request):
+        """Get comprehensive valuation summary"""
+        queryset = self.filter_queryset(self.get_queryset())
+        received_items = queryset.filter(status='received')
+        
+        valuation_stats = received_items.aggregate(
+            total_estimated=Sum('estimated_value'),
+            total_actual=Sum('actual_value'),
+            avg_estimated=Avg('estimated_value'),
+            avg_actual=Avg('actual_value'),
+            count=Count('id')
+        )
+        
+        # Calculate variance statistics
+        items_with_actual = received_items.exclude(actual_value__isnull=True)
+        variance_stats = {
+            'items_revalued': items_with_actual.count(),
+            'revaluation_rate': (items_with_actual.count() / max(received_items.count(), 1)) * 100
+        }
+        
+        # Value variance analysis
+        positive_variance = items_with_actual.filter(
+            actual_value__gt=models.F('estimated_value')
+        ).count()
+        
+        negative_variance = items_with_actual.filter(
+            actual_value__lt=models.F('estimated_value')
+        ).count()
+        
+        variance_stats.update({
+            'positive_variance_count': positive_variance,
+            'negative_variance_count': negative_variance,
+            'accurate_valuations': items_with_actual.count() - positive_variance - negative_variance
+        })
+        
+        valuation_stats.update(variance_stats)
+        
+        return Response(valuation_stats)
+
+# ============================================================================
+# GRANT VIEWSET
+# ============================================================================
+
+class GrantViewSet(viewsets.ModelViewSet):
+    """
+    Comprehensive ViewSet for Grants
+    """
+    queryset = Grant.objects.select_related(
+        'currency', 'project', 'created_by', 'managed_by'
+    )
+    
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = GrantFilter
     search_fields = ['title', 'grantor', 'description']
-    ordering_fields = ['title', 'amount', 'start_date', 'end_date', 'created_at']
+    ordering_fields = [
+        'created_at', 'start_date', 'end_date', 'amount', 'submission_date'
+    ]
     ordering = ['-created_at']
-    
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return GrantListSerializer
+        return GrantDetailSerializer
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-    
+
+    @action(detail=True, methods=['get'])
+    def reports(self, request, pk=None):
+        """Get all reports for a grant"""
+        grant = self.get_object()
+        reports = grant.reports.order_by('-created_at')
+        
+        serializer = GrantReportListSerializer(reports, many=True)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['post'])
-    def submit_application(self, request, pk=None):
-        """Submit grant application"""
+    def create_report(self, request, pk=None):
+        """Create a new report for the grant"""
         grant = self.get_object()
         
-        if grant.status != 'draft':
-            return Response({
-                'error': f'Cannot submit grant with status: {grant.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        data = request.data.copy()
+        data['grant_id'] = grant.id
         
-        grant.status = 'submitted'
-        grant.submission_date = timezone.now().date()
-        grant.save()
+        serializer = GrantReportDetailSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save(submitted_by=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         
-        send_grant_status_notification(grant, 'draft', 'submitted')
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def dashboard(self, request):
+        """Get grant dashboard statistics"""
+        queryset = self.get_queryset()
+        
+        # Status breakdown
+        status_breakdown = queryset.values('status').annotate(
+            count=Count('id'),
+            total_amount=Sum('amount')
+        ).order_by('-count')
+        
+        # Upcoming deadlines
+        upcoming_deadlines = queryset.filter(
+            application_deadline__gte=timezone.now().date(),
+            application_deadline__lte=timezone.now().date() + timedelta(days=30)
+        ).order_by('application_deadline')
+        
+        # Recent grants
+        recent_grants = queryset.order_by('-created_at')[:5]
         
         return Response({
-            'message': 'Grant application submitted successfully',
-            'status': grant.status,
-            'submission_date': grant.submission_date
+            'summary': {
+                'total_grants': queryset.count(),
+                'total_amount': queryset.aggregate(Sum('amount'))['amount__sum'] or 0,
+                'active_grants': queryset.filter(status='active').count(),
+            },
+            'status_breakdown': list(status_breakdown),
+            'upcoming_deadlines': GrantListSerializer(upcoming_deadlines, many=True).data,
+            'recent_grants': GrantListSerializer(recent_grants, many=True).data,
         })
+
+# ============================================================================
+# GRANT REPORT VIEWSET
+# ============================================================================
+
+class GrantReportViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Grant Reports
+    """
+    queryset = GrantReport.objects.select_related('grant', 'submitted_by')
     
-    @action(detail=True, methods=['post'])
-    def mark_under_review(self, request, pk=None):
-        """Mark grant as under review"""
-        grant = self.get_object()
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'grant__title']
+    ordering_fields = ['created_at', 'due_date', 'submission_date']
+    ordering = ['-created_at']
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return GrantReportListSerializer
+        return GrantReportDetailSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(submitted_by=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def overdue(self, request):
+        """Get overdue reports"""
+        overdue_reports = self.get_queryset().filter(
+            due_date__lt=timezone.now().date(),
+            status__in=['draft', 'in_progress']
+        )
         
-        if grant.status != 'submitted':
-            return Response({
-                'error': f'Cannot review grant with status: {grant.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(overdue_reports, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def upcoming(self, request):
+        """Get upcoming report deadlines"""
+        days = int(request.query_params.get('days', 30))
         
-        old_status = grant.status
-        grant.status = 'under_review'
-        grant.save()
+        upcoming_reports = self.get_queryset().filter(
+            due_date__gte=timezone.now().date(),
+            due_date__lte=timezone.now().date() + timedelta(days=days),
+            status__in=['draft', 'in_progress']
+        ).order_by('due_date')
         
-        send_grant_status_notification(grant, old_status, 'under_review')
+        serializer = self.get_serializer(upcoming_reports, many=True)
+        return Response(serializer.data)
+
+# ============================================================================
+# UTILITY VIEWSETS
+# ============================================================================
+
+class DonationAnalyticsViewSet(viewsets.ViewSet):
+    """
+    ViewSet for comprehensive donation analytics
+    """
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def overview(self, request):
+        """Get overall donation analytics"""
+        # Date range
+        days = int(request.query_params.get('days', 30))
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=days)
         
-        return Response({
-            'message': 'Grant marked as under review',
-            'status': grant.status
-        })
-    
-    @action(detail=True, methods=['post'])
-    def approve_grant(self, request, pk=None):
-        """Approve grant"""
-        grant = self.get_object()
+        # All donations in period
+        donations = Donation.objects.filter(
+            status='completed',
+            donation_date__gte=start_date,
+            donation_date__lte=end_date
+        )
         
-        if grant.status not in ['submitted', 'under_review']:
-            return Response({
-                'error': f'Cannot approve grant with status: {grant.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # Basic statistics
+        stats = donations.aggregate(
+            total_amount=Sum('amount'),
+            total_count=Count('id'),
+            avg_amount=Avg('amount'),
+            max_amount=Max('amount'),
+            min_amount=Min('amount')
+        )
         
-        old_status = grant.status
-        grant.status = 'approved'
-        grant.approval_date = timezone.now().date()
-        grant.save()
-        
-        send_grant_status_notification(grant, old_status, 'approved')
-        
-        return Response({
-            'message': 'Grant approved successfully',
-            'status': grant.status,
-            'approval_date': grant.approval_date
-        })
-    
-    @action(detail=True, methods=['post'])
-    def reject_grant(self, request, pk=None):
-        """Reject grant"""
-        grant = self.get_object()
-        
-        if grant.status not in ['submitted', 'under_review']:
-            return Response({
-                'error': f'Cannot reject grant with status: {grant.status}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        rejection_reason = request.data.get('reason', '')
-        
-        old_status = grant.status
-        grant.status = 'rejected'
-        grant.notes = f"Rejected: {rejection_reason}\n{grant.notes or ''}"
-        grant.save()
-        
-        send_grant_status_notification(grant, old_status, 'rejected')
-        
-        return Response({
-            'message': 'Grant rejected',
-            'status': grant.status,
-            'reason': rejection_reason
-        })
-    
-    @action(detail=True, methods=['post'])
-    def activate_grant(self, request, pk=None):
-        """Activate approved grant"""
-        grant = self.get_object()
-        
-        if grant.status != 'approved':
-            return Response({
-                'error': 'Can only activate approved grants'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        old_status = grant.status
-        grant.status = 'active'
-        grant.start_date = timezone.now().date()
-        grant.save()
-        
-        send_grant_status_notification(grant, old_status, 'active')
+        # Trends
+        daily_trends = donations.extra(
+            select={'day': 'DATE(donation_date)'}
+        ).values('day').annotate(
+            count=Count('id'),
+            total=Sum('amount')
+        ).order_by('day')
         
         return Response({
-            'message': 'Grant activated successfully',
-            'status': grant.status,
-            'start_date': grant.start_date
+            'period': {
+                'start_date': start_date,
+                'end_date': end_date,
+                'days': days
+            },
+            'statistics': stats,
+            'daily_trends': list(daily_trends)
         })
-    
-    @action(detail=True, methods=['post'])
-    def record_disbursement(self, request, pk=None):
-        """Record grant disbursement"""
-        grant = self.get_object()
+
+    @action(detail=False, methods=['post'])
+    def convert_currency(self, request):
+        """Convert amounts between currencies"""
+        serializer = CurrencyConversionSerializer(data=request.data)
         
-        if grant.status != 'active':
+        if serializer.is_valid():
+            # Implementation would use ExchangeRate model
+            # This is a simplified version
             return Response({
-                'error': 'Can only record disbursements for active grants'
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'converted_amount': serializer.validated_data['amount'],
+                'message': 'Currency conversion completed'
+            })
         
-        amount = Decimal(request.data.get('amount', '0'))
-        account_id = request.data.get('account_id')
-        reference = request.data.get('reference', '')
-        
-        if amount <= 0:
-            return Response({
-                'error': 'Amount must be greater than 0'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        if grant.amount_received + amount > grant.amount:
-            return Response({
-                'error': 'Disbursement amount exceeds remaining grant amount'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        with transaction.atomic():
-            # Update grant
-            grant.amount_received += amount
-            grant.save()
-            
-            # Create transaction if account specified
-            if account_id:
-                try:
-                    account = BankAccount.objects.get(id=account_id)
-                    AccountTransaction.objects.create(
-                        account=account,
-                        transaction_type='credit',
-                        amount=amount,
-                        grant=grant,
-                        reference_number=reference or f"GRT-{grant.id}-{timezone.now().strftime('%Y%m%d')}",
-                        transaction_date=timezone.now(),
-                        description=f"Grant disbursement from {grant.grantor}",
-                        status='completed',
-                        authorized_by=request.user
-                    )
-                except BankAccount.DoesNotExist:
-                    return Response({
-                        'error': 'Invalid account ID'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Send notification
-            send_grant_disbursement_notification(grant, amount)
-            
-            # Check if grant is fully disbursed
-            if grant.amount_received >= grant.amount:
-                grant.status = 'completed'
-                grant.save()
-                send_grant_status_notification(grant, 'active', 'completed')
-        
-        return Response({
-            'message': f'Disbursement of {grant.currency.code} {amount:,.2f} recorded',
-            'amount_received': grant.amount_received,
-            'remaining_amount': grant.remaining_amount,
-            'status': grant.status
-        })
+        return Response(serializer.errors, status=400)
+
 
 def formatCurrency(currency_code, amount):
     """Format currency amount for display in alerts"""
