@@ -2077,7 +2077,7 @@ class RecurringDonation(models.Model):
         self.save()
     
     def __str__(self):
-        donor_name = self.donor.get_full_name() or self.donor.username
+        donor_name = self.donor.get_full_name or self.donor.username
         return f"{donor_name} - {self.formatted_amount} {self.frequency} ({self.get_status_display()})"
 
 
