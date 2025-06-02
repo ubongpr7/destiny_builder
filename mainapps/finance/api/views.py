@@ -1119,10 +1119,10 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                         'status': donation.status,
                         'donation_date': donation.created_at.isoformat() if donation.created_at else None,
                         'payment_method': getattr(donation, 'payment_method', None),
-                        'is_anonymous': getattr(donation, 'is_anonymous', False),
-                        'message': getattr(donation, 'message', ''),
-                        'frequency': getattr(donation, 'frequency', 'monthly'),
-                        'next_payment_date': donation.next_payment_date.isoformat() if hasattr(donation, 'next_payment_date') and donation.next_payment_date else None,
+                        'is_anonymous': getattr(recurring_donation, 'is_anonymous', False),
+                        'message': getattr(recurring_donation, 'message', ''),
+                        'frequency': getattr(recurring_donation, 'frequency', 'monthly'),
+                        'next_payment_date': recurring_donation.next_payment_date.isoformat() if hasattr(donation, 'next_payment_date') and donation.next_payment_date else None,
                         'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
                     })
             
@@ -1164,17 +1164,20 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
             count=Count('id'),
             total=Sum('amount')
         )
-        
-        total_recurring = recurring_donations.aggregate(
+        total_recurring = recurring_donations.annotate(
+            total_amount=Sum('payment_instances__amount')
+        ).aggregate(
             count=Count('id'),
-            total=Sum('amount')
+            total=Sum('total_amount')
         )
-        
         total_in_kind = in_kind_donations.aggregate(
             count=Count('id'),
             total=Sum('estimated_value')
         )
-        
+        total_payment_instances = recurring_donations.aggregate(
+            total=Count('payment_instances')
+        )['total']
+                
         return Response({
             'results': list(page_obj),
             'count': paginator.count,
@@ -1191,7 +1194,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 },
                 'recurring_donations': {
                     'count': total_recurring['count'] or 0,
-                    'total': float(total_recurring['total'] or 0),
+                    'total': total_payment_instances or 0,
                 },
                 'in_kind_donations': {
                     'count': total_in_kind['count'] or 0,
