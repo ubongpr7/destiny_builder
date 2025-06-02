@@ -84,3 +84,4 @@ django-sync-model
 django-synchro
 qrcode
 forex-python
+freecurrencyapi
