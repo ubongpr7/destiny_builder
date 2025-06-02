@@ -1067,17 +1067,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         # Apply status filter
         if status_filter:
             regular_donations = regular_donations.filter(status=status_filter)
-            if status_filter == 'completed' or status_filter == 'active':
-                recurring_donations = recurring_donations.filter(status__in=['active', 'completed'])
-            elif status_filter == 'cancelled':
-                recurring_donations = recurring_donations.filter(status='cancelled')
-            elif status_filter == 'failed':
-                recurring_donations = recurring_donations.filter(status='failed')
-            elif status_filter == 'pending':
-                recurring_donations = recurring_donations.filter(status='inactive')
-            else:
-                recurring_donations = recurring_donations.filter(status__in=['cancelled', 'failed'])
-
+           
             in_kind_donations = in_kind_donations.filter(status=status_filter)
         
         # Prepare unified donation data
@@ -1108,29 +1098,33 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         
         # Add recurring donations
         if donation_type in ['all', 'recurring']:
-            for donation in recurring_donations.select_related('donor', 'currency'):
-                donations_data.append({
-                    'id': donation.id,
-                    'type': 'recurring',
-                    'donor': {
-                        'id': donation.donor.id if donation.donor else None,
-                        'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
-                        'email': donation.donor.email if donation.donor else None,
-                    },
-                    'amount': float(donation.amount),
-                    'currency': {
-                        'code': donation.currency.code if donation.currency else 'USD',
-                    },
-                    'status': donation.status,
-                    'donation_date': donation.created_at.isoformat() if donation.created_at else None,
-                    'payment_method': getattr(donation, 'payment_method', None),
-                    'is_anonymous': getattr(donation, 'is_anonymous', False),
-                    'message': getattr(donation, 'message', ''),
-                    'frequency': getattr(donation, 'frequency', 'monthly'),
-                    'next_payment_date': donation.next_payment_date.isoformat() if hasattr(donation, 'next_payment_date') and donation.next_payment_date else None,
-                    'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
-                })
-        
+            for recurring_donation in recurring_donations.select_related('donor', 'currency'):
+                donations=recurring_donation.donations.all().select_related('donor', 'currency')
+                if status_filter:
+                    donations = donations.filter(status=status_filter)
+                for donation in donations:
+                    donations_data.append({
+                        'id': donation.id,
+                        'type': 'recurring',
+                        'donor': {
+                            'id': donation.donor.id if donation.donor else None,
+                            'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
+                            'email': donation.donor.email if donation.donor else None,
+                        },
+                        'amount': float(donation.amount),
+                        'currency': {
+                            'code': donation.currency.code if donation.currency else 'USD',
+                        },
+                        'status': donation.status,
+                        'donation_date': donation.created_at.isoformat() if donation.created_at else None,
+                        'payment_method': getattr(donation, 'payment_method', None),
+                        'is_anonymous': getattr(donation, 'is_anonymous', False),
+                        'message': getattr(donation, 'message', ''),
+                        'frequency': getattr(donation, 'frequency', 'monthly'),
+                        'next_payment_date': donation.next_payment_date.isoformat() if hasattr(donation, 'next_payment_date') and donation.next_payment_date else None,
+                        'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
+                    })
+            
         # Add in-kind donations
         if donation_type in ['all', 'in_kind']:
             for donation in in_kind_donations.select_related('donor'):
