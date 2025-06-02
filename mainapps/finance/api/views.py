@@ -713,66 +713,151 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
             'donor_retention': donor_retention,
         })
     
+    # @action(detail=True, methods=['get'])
+    # def payment_analysis(self, request, pk=None):
+    #     """Get payment method analysis for a specific campaign"""
+    #     campaign = self.get_object()
+        
+    #     from django.db.models import Sum, Count, Avg
+        
+    #     # Payment methods breakdown
+    #     payment_methods = campaign.donations.filter(status='completed').values(
+    #         'payment_method'
+    #     ).annotate(
+    #         count=Count('id'),
+    #         total=Sum('amount'),
+    #         avg=Avg('amount'),
+    #         total_fees=Sum('processor_fee')
+    #     ).order_by('-total')
+        
+    #     payment_methods_data = []
+    #     for method in payment_methods:
+    #         payment_methods_data.append({
+    #             'payment_method': method['payment_method'],
+    #             'count': method['count'],
+    #             'total': float(method['total']),
+    #             'avg': float(method['avg']),
+    #             'total_fees': float(method['total_fees'] or 0),
+    #         })
+        
+
+    #     # Processing efficiency
+    #     completed_donations = campaign.donations.filter(status='completed')
+    #     total_gross = completed_donations.aggregate(Sum('amount'))['amount__sum'] or 0
+    #     total_fees = completed_donations.aggregate(Sum('processor_fee'))['processor_fee__sum'] or 0
+    #     total_net = total_gross - total_fees
+        
+    #     processing_efficiency = {
+    #         'total_gross': float(total_gross),
+    #         'total_fees': float(total_fees),
+    #         'total_net': float(total_net),
+    #         'avg_fee_percentage': (float(total_fees) / float(total_gross) * 100) if total_gross > 0 else 0,
+    #     }
+        
+    #     # Status breakdown
+    #     status_breakdown = campaign.donations.values('status').annotate(
+    #         count=Count('id'),
+    #         total=Sum('amount')
+    #     ).order_by('-count')
+        
+    #     status_data = []
+    #     for status in status_breakdown:
+    #         status_data.append({
+    #             'status': status['status'],
+    #             'count': status['count'],
+    #             'total': float(status['total'] or 0),
+    #         })
+        
+    #     # Fee analysis
+    #     fee_analysis = {
+    #         'total_fees': float(total_fees),
+    #         'fee_percentage': (float(total_fees) / float(total_gross) * 100) if total_gross > 0 else 0,
+    #         'net_efficiency': (float(total_net) / float(total_gross) * 100) if total_gross > 0 else 0,
+    #     }
+        
+    #     return Response({
+    #         'payment_methods': payment_methods_data,
+    #         'processing_efficiency': processing_efficiency,
+    #         'status_breakdown': status_data,
+    #         'fee_analysis': fee_analysis,
+    #     })
     @action(detail=True, methods=['get'])
     def payment_analysis(self, request, pk=None):
-        """Get payment method analysis for a specific campaign"""
         campaign = self.get_object()
+        target_currency = campaign.target_currency  # Campaign's currency
         
-        from django.db.models import Sum, Count, Avg
+        # Fetch all completed donations (prefetch to reduce queries)
+        completed_donations = campaign.donations.filter(status='completed').select_related('campaign')
         
-        # Payment methods breakdown
-        payment_methods = campaign.donations.filter(status='completed').values(
-            'payment_method'
-        ).annotate(
-            count=Count('id'),
-            total=Sum('amount'),
-            avg=Avg('amount'),
-            total_fees=Sum('processor_fee')
-        ).order_by('-total')
+        # 1. Payment Methods Breakdown
+        payment_methods_map = {}
+        for donation in completed_donations:
+            method = donation.payment_method
+            amount = donation.get_actual_amount_in_currency(target_currency)
+            fee = donation.get_processor_fee_in_currency(target_currency)
+            
+            if method not in payment_methods_map:
+                payment_methods_map[method] = {
+                    'count': 0,
+                    'total': Decimal('0.00'),
+                    'total_fees': Decimal('0.00'),
+                }
+            payment_methods_map[method]['count'] += 1
+            payment_methods_map[method]['total'] += amount
+            payment_methods_map[method]['total_fees'] += fee
+
+        # Convert map to sorted list
+        payment_methods_data = [
+            {
+                'payment_method': method,
+                'count': data['count'],
+                'total': float(data['total']),
+                'avg': float(data['total'] / data['count']) if data['count'] else 0,
+                'total_fees': float(data['total_fees']),
+            }
+            for method, data in payment_methods_map.items()
+        ]
+        payment_methods_data.sort(key=lambda x: x['total'], reverse=True)
         
-        payment_methods_data = []
-        for method in payment_methods:
-            payment_methods_data.append({
-                'payment_method': method['payment_method'],
-                'count': method['count'],
-                'total': float(method['total']),
-                'avg': float(method['avg']),
-                'total_fees': float(method['total_fees'] or 0),
-            })
-        
-        
-        # Processing efficiency
-        completed_donations = campaign.donations.filter(status='completed')
-        total_gross = completed_donations.aggregate(Sum('amount'))['amount__sum'] or 0
-        total_fees = completed_donations.aggregate(Sum('processor_fee'))['processor_fee__sum'] or 0
+        # 2. Processing Efficiency
+        total_gross = sum(data['total'] for data in payment_methods_map.values())
+        total_fees = sum(data['total_fees'] for data in payment_methods_map.values())
         total_net = total_gross - total_fees
+        avg_fee_percentage = (total_fees / total_gross * 100) if total_gross > 0 else 0
         
         processing_efficiency = {
             'total_gross': float(total_gross),
             'total_fees': float(total_fees),
             'total_net': float(total_net),
-            'avg_fee_percentage': (float(total_fees) / float(total_gross) * 100) if total_gross > 0 else 0,
+            'avg_fee_percentage': float(avg_fee_percentage),
         }
         
-        # Status breakdown
-        status_breakdown = campaign.donations.values('status').annotate(
-            count=Count('id'),
-            total=Sum('amount')
-        ).order_by('-count')
+        # 3. Status Breakdown (all donations)
+        all_donations = campaign.donations.all().select_related('campaign')
+        status_map = {}
+        for donation in all_donations:
+            status = donation.status
+            amount = donation.get_actual_amount_in_currency(target_currency) if status == 'completed' else Decimal('0.00')
+            
+            if status not in status_map:
+                status_map[status] = {'count': 0, 'total': Decimal('0.00')}
+            status_map[status]['count'] += 1
+            status_map[status]['total'] += amount
+
+        status_data = [
+            {'status': status, 'count': data['count'], 'total': float(data['total'])}
+            for status, data in status_map.items()
+        ]
+        status_data.sort(key=lambda x: x['count'], reverse=True)
         
-        status_data = []
-        for status in status_breakdown:
-            status_data.append({
-                'status': status['status'],
-                'count': status['count'],
-                'total': float(status['total'] or 0),
-            })
+        # 4. Fee Analysis (uses completed donations data)
+        fee_percentage = (total_fees / total_gross * 100) if total_gross > 0 else 0
+        net_efficiency = (total_net / total_gross * 100) if total_gross > 0 else 0
         
-        # Fee analysis
         fee_analysis = {
             'total_fees': float(total_fees),
-            'fee_percentage': (float(total_fees) / float(total_gross) * 100) if total_gross > 0 else 0,
-            'net_efficiency': (float(total_net) / float(total_gross) * 100) if total_gross > 0 else 0,
+            'fee_percentage': float(fee_percentage),
+            'net_efficiency': float(net_efficiency),
         }
         
         return Response({
@@ -781,7 +866,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
             'status_breakdown': status_data,
             'fee_analysis': fee_analysis,
         })
-    
+
     @action(detail=True, methods=['get'])
     def bank_accounts(self, request, pk=None):
         """Get bank accounts associated with a campaign"""

@@ -1377,6 +1377,64 @@ class Donation(models.Model):
             target_currency,
             self.donation_date
         )
+    def get_converted_in_currency(self, target_currency):
+        """Get converted amount in specified currency"""
+        if not target_currency or not self.converted_currency:
+            return self.converted_amount
+            
+        if self.converted_currency == target_currency:
+            return self.converted_amount
+        
+        return self._convert_currency(
+            self.converted_amount,
+            self.converted_currency,
+            target_currency,
+            self.donation_date
+        )
+    def get_processor_fee_in_currency(self, target_currency):
+        """Get processor fee in specified currency"""
+        if not target_currency or not self.processor_fee_currency:
+            return self.processor_fee
+            
+        if self.processor_fee_currency == target_currency:
+            return self.processor_fee
+        
+        return self._convert_currency(
+            self.processor_fee,
+            self.processor_fee_currency,
+            target_currency,
+            self.donation_date
+        )
+    
+    def get_actual_amount_in_currency(self, target_currency):
+        """Get actual amount in specified currency"""
+        if not target_currency or not self.currency:
+            return self.effective_amount
+            
+        if self.currency == target_currency:
+            return self.effective_amount
+        
+        return self._convert_currency(
+            self.effective_amount,
+            self.currency,
+            target_currency,
+            self.donation_date
+        )
+    
+    def get_effective_amount_in_currency(self, target_currency):
+        """Get effective amount in specified currency"""
+        if not target_currency or not self.currency:
+            return self.effective_amount
+            
+        if self.currency == target_currency:
+            return self.effective_amount
+        
+        return self._convert_currency(
+            self.effective_amount,
+            self.currency,
+            target_currency,
+            self.donation_date
+        )
     
     def _convert_currency(self, amount, from_currency, to_currency, conversion_date):
         """Helper method for currency conversion"""
