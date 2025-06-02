@@ -1098,8 +1098,9 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         
         # Add recurring donations
         if donation_type in ['all', 'recurring']:
+
             for recurring_donation in recurring_donations.select_related('donor', 'currency'):
-                donations=recurring_donation.donations.all().select_related('donor', 'currency')
+                donations=recurring_donation.payment_instances.all().select_related('donor', 'currency')
                 if status_filter:
                     donations = donations.filter(status=status_filter)
                 for donation in donations:
