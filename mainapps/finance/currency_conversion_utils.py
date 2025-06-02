@@ -1,5 +1,5 @@
 # import requests
-# from django.conf import settings
+from django.conf import settings
 # def get_exchange_rate(from_currency: str, to_currency: str, ) -> float:
 #     """
 #     Fetches the exchange rate from 'from_currency' to 'to_currency' using ExchangeRate-API.
@@ -33,7 +33,7 @@
 #         raise Exception(f"Request error: {e}")
 from freecurrencyapi import Client
 
-def get_exchange_rate(from_currency: str, to_currency: str, api_key: str) -> float:
+def get_exchange_rate(from_currency: str, to_currency: str, ) -> float:
     """
     Get the exchange rate from 'from_currency' to 'to_currency' using freecurrencyapi.
 
@@ -48,6 +48,8 @@ def get_exchange_rate(from_currency: str, to_currency: str, api_key: str) -> flo
     Raises:
     - Exception: If an error occurs while fetching the rate
     """
+    api_key = settings.EXCHANGERATE_API_KEY
+
     try:
         client = Client(api_key)
         response = client.latest(
