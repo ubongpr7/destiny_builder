@@ -1,148 +1,62 @@
-from decimal import Decimal
-from django.utils import timezone
-from .models import Currency, ExchangeRate
-from django.contrib.auth import get_user_model
-from django.db import models
+# import requests
+# from django.conf import settings
+# def get_exchange_rate(from_currency: str, to_currency: str, ) -> float:
+#     """
+#     Fetches the exchange rate from 'from_currency' to 'to_currency' using ExchangeRate-API.
 
+#     Parameters:
+#     - from_currency (str): The base currency code (e.g., 'USD').
+#     - to_currency (str): The target currency code (e.g., 'EUR').
+#     - api_key (str): Your ExchangeRate-API key.
 
-try:
-    from forex_python.converter import CurrencyRates, CurrencyConverter
-    FOREX_AVAILABLE = True
-except ImportError:
-    FOREX_AVAILABLE = False
+#     Returns:
+#     - float: The exchange rate.
 
-User = get_user_model()
+#     Raises:
+#     - Exception: If the API request fails or returns an error.
 
-
-def get_live_exchange_rate(from_currency_code, to_currency_code):
-    """
-    Get live exchange rate using forex-python
-    """
-    if not FOREX_AVAILABLE:
-        raise Exception("forex-python library not available")
+#     """
+#     api_key = settings.EXCHANGERATE_API_KEY
+#     url = f"https://v6.exchangerate-api.com/v6/{api_key}/pair/{from_currency}/{to_currency}"
     
+#     try:
+#         response = requests.get(url)
+#         response.raise_for_status()  # Raise an exception for HTTP errors
+#         data = response.json()
+        
+#         if data['result'] == 'success':
+#             return data['conversion_rate']
+#         else:
+#             raise Exception(f"API error: {data.get('error-type', 'Unknown error')}")
+    
+#     except requests.exceptions.RequestException as e:
+#         raise Exception(f"Request error: {e}")
+from freecurrencyapi import Client
+
+def get_exchange_rate(from_currency: str, to_currency: str, api_key: str) -> float:
+    """
+    Get the exchange rate from 'from_currency' to 'to_currency' using freecurrencyapi.
+
+    Parameters:
+    - from_currency (str): Currency code to convert from (e.g., "USD")
+    - to_currency (str): Currency code to convert to (e.g., "NGN")
+    - api_key (str): Your freecurrencyapi API key
+
+    Returns:
+    - float: The current exchange rate
+
+    Raises:
+    - Exception: If an error occurs while fetching the rate
+    """
     try:
-        c = CurrencyRates()
-        rate = c.get_rate(from_currency_code, to_currency_code)
-        return Decimal(str(rate))
-    except Exception as e:
-        raise Exception(f"Failed to get live exchange rate: {str(e)}")
-
-
-def convert_amount(amount, from_currency, to_currency, conversion_date=None):
-    """
-    Convert amount from one currency to another
-    """
-    if from_currency == to_currency:
-        return amount, Decimal('1.00000000')
-    
-    if not conversion_date:
-        conversion_date = timezone.now()
-    
-    # Try to get existing exchange rate
-    exchange_rate_record = ExchangeRate.objects.filter(
-        from_currency=from_currency,
-        to_currency=to_currency,
-        effective_date__lte=conversion_date
-    ).order_by('-effective_date').first()
-    
-    if exchange_rate_record:
-        rate = exchange_rate_record.rate
-        converted_amount = amount * rate
-        return converted_amount, rate
-    
-    # Try to get live rate
-    if FOREX_AVAILABLE:
-        try:
-            live_rate = get_live_exchange_rate(from_currency.code, to_currency.code)
-            
-            # Create exchange rate record
-            system_user = get_system_user()
-            ExchangeRate.objects.create(
-                from_currency=from_currency,
-                to_currency=to_currency,
-                rate=live_rate,
-                effective_date=conversion_date,
-                source="forex-python API (auto-created)",
-                created_by=system_user
-            )
-            
-            converted_amount = amount * live_rate
-            return converted_amount, live_rate
-            
-        except Exception as e:
-            print(f"Failed to get live rate: {e}")
-    
-    # Fallback to 1:1 rate
-    print(f"WARNING: Using 1:1 fallback rate for {from_currency.code} → {to_currency.code}")
-    return amount, Decimal('1.00000000')
-
-
-def get_system_user():
-    """Get or create system user for automated operations"""
-    try:
-        system_user = User.objects.filter(username='system_webhook').first()
-        if not system_user:
-            system_user = User.objects.create_user(
-                username='system_webhook',
-                email='system@webhook.local',
-                first_name='System',
-                last_name='Webhook',
-                is_active=True
-            )
-        return system_user
-    except Exception:
-        return User.objects.filter(is_superuser=True).first()
-
-
-def update_donation_currency_conversion(donation):
-    """
-    Update currency conversion fields for a donation if needed
-    """
-    if not donation.campaign or not donation.currency or not donation.campaign.target_currency:
-        return False
-    
-    if donation.currency == donation.campaign.target_currency:
-        return False
-    
-    try:
-        converted_amount, exchange_rate = convert_amount(
-            donation.amount,
-            donation.currency,
-            donation.campaign.target_currency,
-            donation.donation_date
+        client = Client(api_key)
+        response = client.latest(
+            base_currency=from_currency,
+            currencies=[to_currency]
         )
-        
-        donation.exchange_rate = exchange_rate
-        donation.converted_amount = converted_amount
-        donation.converted_currency = donation.campaign.target_currency
-        
-        return True
-        
+        rate = response["data"].get(to_currency)
+        if rate is None:
+            raise Exception(f"Rate not found for {to_currency}")
+        return rate
     except Exception as e:
-        print(f"Error updating currency conversion for donation {donation.id}: {e}")
-        return False
-
-
-def bulk_update_currency_conversions():
-    """
-    Utility function to bulk update currency conversions for existing donations
-    """
-    from .models import Donation
-    
-    donations_needing_conversion = Donation.objects.filter(
-        campaign__isnull=False,
-        currency__isnull=False,
-        campaign__target_currency__isnull=False,
-        exchange_rate__isnull=True
-    ).exclude(
-        currency=models.F('campaign__target_currency')
-    )
-    
-    updated_count = 0
-    for donation in donations_needing_conversion:
-        if update_donation_currency_conversion(donation):
-            donation.save()
-            updated_count += 1
-    
-    return updated_count
+        raise Exception(f"Error getting exchange rate: {e}")

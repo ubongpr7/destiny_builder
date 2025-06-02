@@ -10,17 +10,17 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
+
+from mainapps.finance.currency_conversion_utils import get_exchange_rate
 from .models import Donation, RecurringDonation, InKindDonation, Currency, ExchangeRate
 from django.contrib.auth import get_user_model
 
-try:
-    from forex_python.converter import CurrencyRates, CurrencyConverter
-    FOREX_AVAILABLE = True
-except ImportError:
-    FOREX_AVAILABLE = False
-    print("WARNING: forex-python not installed. Currency conversion will be limited.")
+
 
 User = get_user_model()
+
+def get_currency_rate():
+    pass
 
 @csrf_exempt
 def flutterwave_webhook(request):
@@ -329,39 +329,33 @@ def get_or_create_exchange_rate(from_currency, to_currency, effective_date=None)
         print(f"        Found existing rate: 1 {from_currency.code} = {existing_rate.rate} {to_currency.code}")
         return existing_rate
     
-    # Try to get rate from forex-python
-    if FOREX_AVAILABLE:
-        try:
-            print(f"        Fetching live rate from forex-python...")
-            c = CurrencyRates()
-            
-            # Get the exchange rate
-            rate = c.get_rate(from_currency.code, to_currency.code)
-            rate_decimal = Decimal(str(rate))
-            
-            print(f"        Live rate fetched: 1 {from_currency.code} = {rate_decimal} {to_currency.code}")
-            
-            # Create system user for exchange rate creation if needed
-            system_user = get_system_user()
-            
-            # Create new exchange rate record
-            exchange_rate = ExchangeRate.objects.create(
-                from_currency=from_currency,
-                to_currency=to_currency,
-                rate=rate_decimal,
-                effective_date=effective_date,
-                source="forex-python API",
-                created_by=system_user
-            )
-            
-            print(f"        Created new exchange rate record: ID {exchange_rate.id}")
-            return exchange_rate
-            
-        except Exception as e:
-            print(f"        ERROR fetching live rate: {e}")
-            # Fall back to manual rate or default
+    try:
+        print(f"        Fetching live rate from forex-python...")
+        
+        rate =get_exchange_rate(from_currency.code, to_currency.code)
+        rate_decimal = Decimal(str(rate))
+        
+        print(f"        Live rate fetched: 1 {from_currency.code} = {rate_decimal} {to_currency.code}")
+        
+        # Create system user for exchange rate creation if needed
+        system_user = get_system_user()
+        
+        # Create new exchange rate record
+        exchange_rate = ExchangeRate.objects.create(
+            from_currency=from_currency,
+            to_currency=to_currency,
+            rate=rate_decimal,
+            effective_date=effective_date,
+            source="forex-python API",
+            created_by=system_user
+        )
+        
+        print(f"        Created new exchange rate record: ID {exchange_rate.id}")
+        return exchange_rate
+        
+    except Exception as e:
+        print(f"        ERROR fetching live rate: {e}")
     
-    # Fallback: Try to find the most recent rate for these currencies
     fallback_rate = ExchangeRate.objects.filter(
         from_currency=from_currency,
         to_currency=to_currency
