@@ -1192,7 +1192,6 @@ class Donation(models.Model):
 
     )
     
-    # Exchange Rate Information
     exchange_rate = models.DecimalField(
         max_digits=15,
         decimal_places=8,
