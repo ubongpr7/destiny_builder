@@ -603,52 +603,43 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def donation_trends(self, request, pk=None):
-        """Get donation trends for a specific campaign, with multi-currency handling"""
+        """Get donation trends for a specific campaign"""
         campaign = self.get_object()
-        target_currency = campaign.target_currency
         period = int(request.query_params.get('period', 30))
-
+        
+        from datetime import timedelta
+        from django.db.models import Sum, Count, Avg
+        from django.db.models.functions import TruncDate
+        
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=period)
-
-        # Fetch all completed donations in the period, prefetch campaign for currency
-        donations = campaign.donations.filter(
+        
+        # Daily trends
+        daily_donations = campaign.donations.filter(
             donation_date__date__gte=start_date,
             donation_date__date__lte=end_date,
             status='completed'
-        ).select_related('campaign')
-
-        # Daily trends aggregation (multi-currency aware)
-        from collections import defaultdict
-        daily_aggregates = defaultdict(lambda: {
-            'count': 0,
-            'total': Decimal('0.00'),
-            'amounts': []
-        })
-
-        for donation in donations:
-            day = donation.donation_date.date()
-            amount = donation.get_actual_amount_in_currency(target_currency)
-            daily_aggregates[day]['count'] += 1
-            daily_aggregates[day]['total'] += amount
-            daily_aggregates[day]['amounts'].append(amount)
-
+        ).annotate(
+            day=TruncDate('donation_date')
+        ).values('day').annotate(
+            count=Count('id'),
+            total=Sum('amount'),
+            avg=Avg('amount')
+        ).order_by('day')
+        
         daily_trends = []
-        for day in sorted(daily_aggregates.keys()):
-            data = daily_aggregates[day]
-            avg = (sum(data['amounts']) / len(data['amounts'])) if data['amounts'] else Decimal('0.00')
+        for item in daily_donations:
             daily_trends.append({
-                'day': day.strftime('%Y-%m-%d'),
-                'count': data['count'],
-                'total': round(float(data['total']), 2),
-                'avg': round(float(avg), 2),
+                'day': item['day'].strftime('%Y-%m-%d'),
+                'count': item['count'],
+                'total': float(item['total'] or 0),
+                'avg': float(item['avg'] or 0),
             })
-
-        # Weekly trends (optional stub, left blank)
-        weekly_trends = []
-
+        
+        # Weekly trends (simplified)
+        weekly_trends = []  # Implement if needed
+        
         return Response({
-            'currency': target_currency,
             'daily_trends': daily_trends,
             'weekly_trends': weekly_trends,
             'period_summary': {
@@ -657,54 +648,6 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 'total_days': period,
             }
         })
-
-    # @action(detail=True, methods=['get'])
-    # def donation_trends(self, request, pk=None):
-    #     """Get donation trends for a specific campaign"""
-    #     campaign = self.get_object()
-    #     period = int(request.query_params.get('period', 30))
-        
-    #     from datetime import timedelta
-    #     from django.db.models import Sum, Count, Avg
-    #     from django.db.models.functions import TruncDate
-        
-    #     end_date = timezone.now().date()
-    #     start_date = end_date - timedelta(days=period)
-        
-    #     # Daily trends
-    #     daily_donations = campaign.donations.filter(
-    #         donation_date__date__gte=start_date,
-    #         donation_date__date__lte=end_date,
-    #         status='completed'
-    #     ).annotate(
-    #         day=TruncDate('donation_date')
-    #     ).values('day').annotate(
-    #         count=Count('id'),
-    #         total=Sum('amount'),
-    #         avg=Avg('amount')
-    #     ).order_by('day')
-        
-    #     daily_trends = []
-    #     for item in daily_donations:
-    #         daily_trends.append({
-    #             'day': item['day'].strftime('%Y-%m-%d'),
-    #             'count': item['count'],
-    #             'total': float(item['total'] or 0),
-    #             'avg': float(item['avg'] or 0),
-    #         })
-        
-    #     # Weekly trends (simplified)
-    #     weekly_trends = []  # Implement if needed
-        
-    #     return Response({
-    #         'daily_trends': daily_trends,
-    #         'weekly_trends': weekly_trends,
-    #         'period_summary': {
-    #             'start_date': start_date.strftime('%Y-%m-%d'),
-    #             'end_date': end_date.strftime('%Y-%m-%d'),
-    #             'total_days': period,
-    #         }
-    #     })
     
     @action(detail=True, methods=['get'])
     def donor_analysis(self, request, pk=None):
