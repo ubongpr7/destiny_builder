@@ -525,7 +525,7 @@ class DonationCampaign(models.Model):
         """Total from one-time donations in target currency"""
         total = Decimal('0.00')
         try:
-            for donation in self.donations.filter(status='completed'):
+            for donation in self.donations.filter(status='completed', recurring_donation__isnull=True):
                 total += self._convert_to_target_currency(
                     donation.amount, 
                     donation.currency, 
@@ -541,11 +541,13 @@ class DonationCampaign(models.Model):
         total = Decimal('0.00')
         try:
             for recurring in self.recurring_donations.filter(status__in=['active', 'completed']):
-                total += self._convert_to_target_currency(
-                    recurring.total_donated,
-                    recurring.currency,
-                    timezone.now()
-                ) * recurring.payment_count
+                for donation in recurring.donations.filter(status='completed'):
+                    total += self._convert_to_target_currency(
+                        donation.amount,
+                        donation.currency,
+                        donation.donation_date
+                    )
+                
         except Exception:
             pass
         return total
@@ -569,7 +571,7 @@ class DonationCampaign(models.Model):
     def current_amount(self):
         """Total raised across all donation types in target currency"""
         return (self.total_donations_amount + 
-                # self.total_recurring_amount + 
+                self.total_recurring_amount + 
                 self.total_in_kind_amount)
     
     @property
