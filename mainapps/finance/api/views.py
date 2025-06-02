@@ -1081,7 +1081,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     'type': 'regular',
                     'donor': {
                         'id': donation.donor.id if donation.donor else None,
-                        'name': donation.donor.get_full_name() if donation.donor else 'Anonymous',
+                        'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
                         'email': donation.donor.email if donation.donor else None,
                     },
                     'amount': float(donation.amount),
@@ -1104,7 +1104,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     'type': 'recurring',
                     'donor': {
                         'id': donation.donor.id if donation.donor else None,
-                        'name': donation.donor.get_full_name() if donation.donor else 'Anonymous',
+                        'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
                         'email': donation.donor.email if donation.donor else None,
                     },
                     'amount': float(donation.amount),
@@ -1129,7 +1129,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     'type': 'in_kind',
                     'donor': {
                         'id': donation.donor.id if donation.donor else None,
-                        'name': donation.donor.get_full_name() if donation.donor else 'Anonymous',
+                        'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
                         'email': donation.donor.email if donation.donor else None,
                     },
                     'amount': float(getattr(donation, 'estimated_value', 0)),
