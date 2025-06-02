@@ -826,10 +826,10 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         avg_fee_percentage = (total_fees / total_gross * 100) if total_gross > 0 else 0
         
         processing_efficiency = {
-            'total_gross': float(total_gross),
-            'total_fees': float(total_fees),
-            'total_net': float(total_net),
-            'avg_fee_percentage': float(avg_fee_percentage),
+            'total_gross': round(float(total_gross), 2),
+            'total_fees': round(float(total_fees),2),
+            'total_net': float(float(total_net),2),
+            'avg_fee_percentage': round(float(avg_fee_percentage),2),
         }
         
         # 3. Status Breakdown (all donations)
@@ -855,9 +855,9 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         net_efficiency = (total_net / total_gross * 100) if total_gross > 0 else 0
         
         fee_analysis = {
-            'total_fees': float(total_fees),
-            'fee_percentage': float(fee_percentage),
-            'net_efficiency': float(net_efficiency),
+            'total_fees': round(float(total_fees),2),
+            'fee_percentage': round(float(fee_percentage),2),
+            'net_efficiency': round(float(net_efficiency),2),
         }
         
         return Response({
