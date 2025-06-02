@@ -38,8 +38,8 @@ def create_notification(notification_type_name, recipients, title, body, related
     try:
         notification_type = NotificationType.objects.get(name=notification_type_name)
         
-        if not isinstance(recipients, list):
-            recipients = [recipients]
+        # if not isinstance(recipients, list):
+        #     recipients = recipients
         
         notifications_created = []
         
