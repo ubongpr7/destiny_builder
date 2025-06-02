@@ -404,7 +404,6 @@ def get_system_user():
         return system_user
     except Exception as e:
         print(f"        ERROR creating system user: {e}")
-        # Return first superuser as fallback
         return User.objects.filter(is_superuser=True).first()
 
 
@@ -832,6 +831,7 @@ def handle_recurring_payment_completed(event_data, meta_data, full_webhook_data=
                 donor_name=event_data.get('customer', {}).get('name'),
                 donor_phone=event_data.get('customer', {}).get('phone_number'),
             )
+            recurring_donation.status='active'
             
             # Currency conversion logic
             if recurring_donation.campaign and recurring_donation.currency and recurring_donation.campaign.target_currency:
