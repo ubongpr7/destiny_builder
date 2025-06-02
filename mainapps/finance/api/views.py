@@ -603,43 +603,52 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def donation_trends(self, request, pk=None):
-        """Get donation trends for a specific campaign"""
+        """Get donation trends for a specific campaign, with multi-currency handling"""
         campaign = self.get_object()
+        target_currency = campaign.target_currency
         period = int(request.query_params.get('period', 30))
-        
-        from datetime import timedelta
-        from django.db.models import Sum, Count, Avg
-        from django.db.models.functions import TruncDate
-        
+
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=period)
-        
-        # Daily trends
-        daily_donations = campaign.donations.filter(
+
+        # Fetch all completed donations in the period, prefetch campaign for currency
+        donations = campaign.donations.filter(
             donation_date__date__gte=start_date,
             donation_date__date__lte=end_date,
             status='completed'
-        ).annotate(
-            day=TruncDate('donation_date')
-        ).values('day').annotate(
-            count=Count('id'),
-            total=Sum('amount'),
-            avg=Avg('amount')
-        ).order_by('day')
-        
+        ).select_related('campaign')
+
+        # Daily trends aggregation (multi-currency aware)
+        from collections import defaultdict
+        daily_aggregates = defaultdict(lambda: {
+            'count': 0,
+            'total': Decimal('0.00'),
+            'amounts': []
+        })
+
+        for donation in donations:
+            day = donation.donation_date.date()
+            amount = donation.get_actual_amount_in_currency(target_currency)
+            daily_aggregates[day]['count'] += 1
+            daily_aggregates[day]['total'] += amount
+            daily_aggregates[day]['amounts'].append(amount)
+
         daily_trends = []
-        for item in daily_donations:
+        for day in sorted(daily_aggregates.keys()):
+            data = daily_aggregates[day]
+            avg = (sum(data['amounts']) / len(data['amounts'])) if data['amounts'] else Decimal('0.00')
             daily_trends.append({
-                'day': item['day'].strftime('%Y-%m-%d'),
-                'count': item['count'],
-                'total': float(item['total'] or 0),
-                'avg': float(item['avg'] or 0),
+                'day': day.strftime('%Y-%m-%d'),
+                'count': data['count'],
+                'total': round(float(data['total']), 2),
+                'avg': round(float(avg), 2),
             })
-        
-        # Weekly trends (simplified)
-        weekly_trends = []  # Implement if needed
-        
+
+        # Weekly trends (optional stub, left blank)
+        weekly_trends = []
+
         return Response({
+            'currency': target_currency,
             'daily_trends': daily_trends,
             'weekly_trends': weekly_trends,
             'period_summary': {
@@ -648,6 +657,54 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 'total_days': period,
             }
         })
+
+    # @action(detail=True, methods=['get'])
+    # def donation_trends(self, request, pk=None):
+    #     """Get donation trends for a specific campaign"""
+    #     campaign = self.get_object()
+    #     period = int(request.query_params.get('period', 30))
+        
+    #     from datetime import timedelta
+    #     from django.db.models import Sum, Count, Avg
+    #     from django.db.models.functions import TruncDate
+        
+    #     end_date = timezone.now().date()
+    #     start_date = end_date - timedelta(days=period)
+        
+    #     # Daily trends
+    #     daily_donations = campaign.donations.filter(
+    #         donation_date__date__gte=start_date,
+    #         donation_date__date__lte=end_date,
+    #         status='completed'
+    #     ).annotate(
+    #         day=TruncDate('donation_date')
+    #     ).values('day').annotate(
+    #         count=Count('id'),
+    #         total=Sum('amount'),
+    #         avg=Avg('amount')
+    #     ).order_by('day')
+        
+    #     daily_trends = []
+    #     for item in daily_donations:
+    #         daily_trends.append({
+    #             'day': item['day'].strftime('%Y-%m-%d'),
+    #             'count': item['count'],
+    #             'total': float(item['total'] or 0),
+    #             'avg': float(item['avg'] or 0),
+    #         })
+        
+    #     # Weekly trends (simplified)
+    #     weekly_trends = []  # Implement if needed
+        
+    #     return Response({
+    #         'daily_trends': daily_trends,
+    #         'weekly_trends': weekly_trends,
+    #         'period_summary': {
+    #             'start_date': start_date.strftime('%Y-%m-%d'),
+    #             'end_date': end_date.strftime('%Y-%m-%d'),
+    #             'total_days': period,
+    #         }
+    #     })
     
     @action(detail=True, methods=['get'])
     def donor_analysis(self, request, pk=None):
@@ -713,74 +770,6 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
             'donor_retention': donor_retention,
         })
     
-    # @action(detail=True, methods=['get'])
-    # def payment_analysis(self, request, pk=None):
-    #     """Get payment method analysis for a specific campaign"""
-    #     campaign = self.get_object()
-        
-    #     from django.db.models import Sum, Count, Avg
-        
-    #     # Payment methods breakdown
-    #     payment_methods = campaign.donations.filter(status='completed').values(
-    #         'payment_method'
-    #     ).annotate(
-    #         count=Count('id'),
-    #         total=Sum('amount'),
-    #         avg=Avg('amount'),
-    #         total_fees=Sum('processor_fee')
-    #     ).order_by('-total')
-        
-    #     payment_methods_data = []
-    #     for method in payment_methods:
-    #         payment_methods_data.append({
-    #             'payment_method': method['payment_method'],
-    #             'count': method['count'],
-    #             'total': float(method['total']),
-    #             'avg': float(method['avg']),
-    #             'total_fees': float(method['total_fees'] or 0),
-    #         })
-        
-
-    #     # Processing efficiency
-    #     completed_donations = campaign.donations.filter(status='completed')
-    #     total_gross = completed_donations.aggregate(Sum('amount'))['amount__sum'] or 0
-    #     total_fees = completed_donations.aggregate(Sum('processor_fee'))['processor_fee__sum'] or 0
-    #     total_net = total_gross - total_fees
-        
-    #     processing_efficiency = {
-    #         'total_gross': float(total_gross),
-    #         'total_fees': float(total_fees),
-    #         'total_net': float(total_net),
-    #         'avg_fee_percentage': (float(total_fees) / float(total_gross) * 100) if total_gross > 0 else 0,
-    #     }
-        
-    #     # Status breakdown
-    #     status_breakdown = campaign.donations.values('status').annotate(
-    #         count=Count('id'),
-    #         total=Sum('amount')
-    #     ).order_by('-count')
-        
-    #     status_data = []
-    #     for status in status_breakdown:
-    #         status_data.append({
-    #             'status': status['status'],
-    #             'count': status['count'],
-    #             'total': float(status['total'] or 0),
-    #         })
-        
-    #     # Fee analysis
-    #     fee_analysis = {
-    #         'total_fees': float(total_fees),
-    #         'fee_percentage': (float(total_fees) / float(total_gross) * 100) if total_gross > 0 else 0,
-    #         'net_efficiency': (float(total_net) / float(total_gross) * 100) if total_gross > 0 else 0,
-    #     }
-        
-    #     return Response({
-    #         'payment_methods': payment_methods_data,
-    #         'processing_efficiency': processing_efficiency,
-    #         'status_breakdown': status_data,
-    #         'fee_analysis': fee_analysis,
-    #     })
     @action(detail=True, methods=['get'])
     def payment_analysis(self, request, pk=None):
         campaign = self.get_object()
