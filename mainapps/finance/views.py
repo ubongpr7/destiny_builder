@@ -798,7 +798,7 @@ def validate_webhook_donation_data(donation, webhook_data):
 
 
 
-def handle_recurring_payment_completed(event_data, meta_data, full_webhook_data):
+def handle_recurring_payment_completed(event_data, meta_data, full_webhook_data=None):
     print("Handling recurring payment completion")
     
     donation_id = meta_data.get('donation_id')
