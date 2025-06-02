@@ -1465,6 +1465,7 @@ class DonationViewSet(viewsets.ModelViewSet):
     ordering = ['-donation_date']
     permission_classes = [IsAuthenticated]
 
+    
    
     @action(detail=True, methods=['patch'], url_path='payment-status')
     def update_payment_status(self, request, pk=None):
@@ -1574,6 +1575,24 @@ class DonationViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'Invalid currency'}, status=400)
         
         return Response(serializer.errors, status=400)
+
+    @action(detail=False, methods=['get'])
+    def my_donations(self, request):
+        """Get donations made by the authenticated user"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        queryset = self.filter_queryset(self.get_queryset())
+        queryset = queryset.filter(donor=request.user)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
     @action(detail=False, methods=['get'])
     def statistics(self, request):
@@ -1724,6 +1743,24 @@ class RecurringDonationViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    
+    @action(detail=False, methods=['get'])
+    def my_donations(self, request):
+        """Get donations made by the authenticated user"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        queryset = self.filter_queryset(self.get_queryset())
+        queryset = queryset.filter(donor=request.user)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
@@ -2006,6 +2043,23 @@ class InKindDonationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(pickup_required=True)
         
         return queryset
+    
+    @action(detail=False, methods=['get'])
+    def my_donations(self, request):
+        """Get donations made by the authenticated user"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        queryset = self.filter_queryset(self.get_queryset())
+        queryset = queryset.filter(donor=request.user)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     
     @action(detail=True, methods=['patch'], url_path='payment-status')

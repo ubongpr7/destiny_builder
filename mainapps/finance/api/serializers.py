@@ -606,7 +606,7 @@ class RecurringDonationDetailSerializer(serializers.ModelSerializer):
     formatted_projected_annual = serializers.ReadOnlyField()
     formatted_lifetime_value = serializers.ReadOnlyField()
     d_type=serializers.SerializerMethodField()
-    
+    payment_instances= DonationListSerializer(many=True, read_only=True)
     # Comprehensive data
     performance_summary = serializers.ReadOnlyField()
     
@@ -620,6 +620,7 @@ class RecurringDonationDetailSerializer(serializers.ModelSerializer):
             'payment_processor', 'status', 'payment_count', 'failed_payment_count',
             'max_failed_payments', 'notes', 'receipt_image', 'created_at', 'updated_at',
             # Enhanced properties
+            'payment_instances',
             'total_donated', 'total_net_donated', 'average_donation_amount',
             'projected_annual_amount', 'lifetime_value', 'success_rate', 'is_healthy',
             'is_at_risk', 'days_until_next_payment', 'is_payment_due', 'is_overdue',
