@@ -346,7 +346,7 @@ def get_or_create_exchange_rate(from_currency, to_currency, effective_date=None)
             to_currency=to_currency,
             rate=rate_decimal,
             effective_date=effective_date,
-            source="forex-python API",
+            source="freecurrencyapi API",
             created_by=system_user
         )
         
