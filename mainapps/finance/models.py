@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.db import models
 from mainapps.accounts.models import Department
 from mainapps.project.models import Project
@@ -1860,7 +1860,6 @@ class RecurringDonation(models.Model):
             self.next_payment_date = None
         self.save()
         return donation
-    
     def calculate_next_payment_date(self):
         """Calculate next payment date based on frequency"""
         from dateutil.relativedelta import relativedelta
@@ -1877,12 +1876,17 @@ class RecurringDonation(models.Model):
         delta = frequency_deltas.get(self.frequency, relativedelta(months=1))
         next_date = self.last_payment_date + delta if self.last_payment_date else self.start_date + delta
         
-        # Don't schedule beyond end date
-        if self.end_date and next_date > self.end_date:
-            return None
-            
+        # Ensure we're comparing date objects to date objects
+        if self.end_date:
+            # Convert next_date to date if it's datetime
+            if isinstance(next_date, datetime):
+                next_date = next_date.date()
+                
+            # Don't schedule beyond end date
+            if next_date > self.end_date:
+                return None
+                
         return next_date
-    
     @property
     def average_donation_amount(self):
         """Average amount per successful donation"""
