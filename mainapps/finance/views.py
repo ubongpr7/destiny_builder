@@ -942,7 +942,7 @@ def handle_recurring_payment_completed(event_data, meta_data, full_webhook_data)
 #         return {'success': False, 'error': str(e)}
 
 
-def handle_recurring_payment_failed(event_data, meta_data, full_webhook_data):
+def handle_recurring_payment_failed(event_data, meta_data, ):
     """Handle failed payment for recurring donation and update recurring donation status"""
     print("Handling failed recurring payment")
     donation_id = meta_data.get('donation_id')
