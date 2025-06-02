@@ -1067,7 +1067,17 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         # Apply status filter
         if status_filter:
             regular_donations = regular_donations.filter(status=status_filter)
-            recurring_donations = recurring_donations.filter(status=status_filter)
+            if status_filter == 'completed' or status_filter == 'active':
+                recurring_donations = recurring_donations.filter(status__in=['active', 'completed'])
+            elif status_filter == 'cancelled':
+                recurring_donations = recurring_donations.filter(status='cancelled')
+            elif status_filter == 'failed':
+                recurring_donations = recurring_donations.filter(status='failed')
+            elif status_filter == 'pending':
+                recurring_donations = recurring_donations.filter(status='inactive')
+            else:
+                recurring_donations = recurring_donations.filter(status__in=['cancelled', 'failed'])
+
             in_kind_donations = in_kind_donations.filter(status=status_filter)
         
         # Prepare unified donation data
