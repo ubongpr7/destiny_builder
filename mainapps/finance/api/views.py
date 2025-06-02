@@ -828,7 +828,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
         processing_efficiency = {
             'total_gross': round(float(total_gross), 2),
             'total_fees': round(float(total_fees),2),
-            'total_net': float(float(total_net),2),
+            'total_net': round(float(total_net),2),
             'avg_fee_percentage': round(float(avg_fee_percentage),2),
         }
         
