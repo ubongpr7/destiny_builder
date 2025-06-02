@@ -885,63 +885,6 @@ def handle_recurring_payment_completed(event_data, meta_data, full_webhook_data=
         return {'success': False, 'error': str(e)}
 
 
-# def handle_recurring_payment_completed(event_data, meta_data,):
-#     """Handle successful recurring payment and create/update donation record"""
-#     print("Handling recurring payment completion")
-    
-#     donation_id = meta_data.get('donation_id')
-#     if not donation_id:
-#         return {'success': False, 'error': 'Missing donation ID in metadata'}
-    
-#     try:
-#         with transaction.atomic():
-#             recurring_donation = RecurringDonation.objects.select_for_update().get(id=donation_id)
-#             print(f"Found recurring donation: {recurring_donation}")
-            
-#             # Calculate next sequence number for this recurring donation
-#             sequence = recurring_donation.payment_instances.filter(status='completed').count() + 1
-            
-#             # Create new Donation record linked to RecurringDonation
-#             donation = Donation.objects.create(
-#                 donor=recurring_donation.donor,
-#                 campaign=recurring_donation.campaign,
-#                 project=recurring_donation.project,
-#                 amount=Decimal(str(event_data.get('amount', recurring_donation.amount))),
-#                 currency=Currency.objects.get(code=event_data.get('currency', recurring_donation.currency.code)),
-#                 payment_method=map_payment_method(event_data.get('payment_type', 'other'), event_data.get('card', {})),
-#                 donation_date=timezone.now(),
-#                 status='completed',
-#                 recurring_donation=recurring_donation,
-#                 recurring_sequence=sequence,
-#                 transaction_id=str(event_data.get('id')),
-#                 reference_number=event_data.get('flw_ref'),
-#                 bank_reference=event_data.get('tx_ref'),
-#                 donor_email=meta_data.get('donor_email') or event_data.get('customer', {}).get('email'),
-#                 donor_name=event_data.get('customer', {}).get('name'),
-#                 donor_phone=event_data.get('customer', {}).get('phone_number'),
-#             )
-            
-#             # Update recurring donation state
-#             recurring_donation.consecutive_failures = 0
-#             recurring_donation.next_payment_date = recurring_donation.calculate_next_payment_date()
-#             recurring_donation.save()
-            
-#             print(f"Successfully created donation: {donation.id}")
-#             return {
-#                 'success': True,
-#                 'message': f'Donation {donation.id} created successfully and linked to RecurringDonation {recurring_donation.id}',
-#                 'donation_id': donation.id
-#             }
-#     except RecurringDonation.DoesNotExist:
-#         error_msg = f"RecurringDonation with id {donation_id} not found"
-#         print(error_msg)
-#         return {'success': False, 'error': error_msg}
-#     except Exception as e:
-#         print(f"Error handling recurring payment: {str(e)}")
-#         print(traceback.format_exc())
-#         return {'success': False, 'error': str(e)}
-
-
 def handle_recurring_payment_failed(event_data, meta_data, ):
     """Handle failed payment for recurring donation and update recurring donation status"""
     print("Handling failed recurring payment")
