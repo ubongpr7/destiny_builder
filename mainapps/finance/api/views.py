@@ -1020,196 +1020,268 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
     #         }
     #     })
 
+    # @action(detail=True, methods=['get'])
+    # def donations(self, request, pk=None):
+    #     """Get all donations for a specific campaign (regular, recurring, in-kind)"""
+    #     campaign = self.get_object()
+        
+    #     # Get query parameters
+    #     donation_type = request.query_params.get('type', 'all')  # all, regular, recurring, in_kind
+    #     start_date = request.query_params.get('start_date')
+    #     end_date = request.query_params.get('end_date')
+    #     min_amount = request.query_params.get('min_amount')
+    #     max_amount = request.query_params.get('max_amount')
+    #     status_filter = request.query_params.get('status')
+    #     page = int(request.query_params.get('page', 1))
+    #     page_size = int(request.query_params.get('page_size', 20))
+        
+    #     # Base querysets for each donation type
+    #     regular_donations = campaign.donations.filter(recurring_donation__isnull=True)
+    #     recurring_donations = campaign.recurring_donations.all()  # Ensure this is correct
+    #     in_kind_donations = campaign.in_kind_donations.all()
+        
+    #     # Apply date filters
+    #     if start_date:
+    #         start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+    #         regular_donations = regular_donations.filter(donation_date__gte=start_date)
+    #         recurring_donations = recurring_donations.filter(created_at__gte=start_date)
+    #         in_kind_donations = in_kind_donations.filter(donation_date__gte=start_date)
+        
+    #     if end_date:
+    #         end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+    #         regular_donations = regular_donations.filter(donation_date__lte=end_date)
+    #         recurring_donations = recurring_donations.filter(created_at__lte=end_date)
+    #         in_kind_donations = in_kind_donations.filter(donation_date__lte=end_date)
+        
+    #     # Apply amount filters (only for regular and recurring)
+    #     if min_amount:
+    #         min_amount = float(min_amount)
+    #         regular_donations = regular_donations.filter(amount__gte=min_amount)
+    #         recurring_donations = recurring_donations.filter(amount__gte=min_amount)
+        
+    #     if max_amount:
+    #         max_amount = float(max_amount)
+    #         regular_donations = regular_donations.filter(amount__lte=max_amount)
+    #         recurring_donations = recurring_donations.filter(amount__lte=max_amount)
+        
+    #     # Apply status filter
+    #     if status_filter:
+    #         regular_donations = regular_donations.filter(status=status_filter)
+           
+    #         in_kind_donations = in_kind_donations.filter(status=status_filter)
+        
+    #     # Prepare unified donation data
+    #     donations_data = []
+        
+    #     # Add regular donations
+    #     if donation_type in ['all', 'regular']:
+    #         for donation in regular_donations.select_related('donor', 'currency'):
+    #             donations_data.append({
+    #                 'id': donation.id,
+    #                 'type': 'regular',
+    #                 'donor': {
+    #                     'id': donation.donor.id if donation.donor else None,
+    #                     'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
+    #                     'email': donation.donor.email if donation.donor else None,
+    #                 },
+    #                 'amount': float(donation.amount),
+    #                 'currency': {
+    #                     'code': donation.currency.code if donation.currency else 'USD',
+    #                 },
+    #                 'status': donation.status,
+    #                 'donation_date': donation.donation_date.isoformat() if donation.donation_date else None,
+    #                 'payment_method': getattr(donation, 'payment_method', None),
+    #                 'is_anonymous': getattr(donation, 'is_anonymous', False),
+    #                 'message': getattr(donation, 'message', ''),
+    #                 'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
+    #             })
+        
+    #     # Add recurring donations
+    #     if donation_type in ['all', 'recurring']:
+
+    #         for recurring_donation in recurring_donations.select_related('donor', 'currency'):
+    #             donations=recurring_donation.payment_instances.all().select_related('donor', 'currency')
+    #             if status_filter:
+    #                 donations = donations.filter(status=status_filter)
+    #             for donation in donations:
+    #                 donations_data.append({
+    #                     'id': donation.id,
+    #                     'type': 'recurring',
+    #                     'donor': {
+    #                         'id': donation.donor.id if donation.donor else None,
+    #                         'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
+    #                         'email': donation.donor.email if donation.donor else None,
+    #                     },
+    #                     'amount': float(donation.amount),
+    #                     'currency': {
+    #                         'code': donation.currency.code if donation.currency else 'USD',
+    #                     },
+    #                     'status': donation.status,
+    #                     'donation_date': donation.created_at.isoformat() if donation.created_at else None,
+    #                     'payment_method': getattr(donation, 'payment_method', None),
+    #                     'is_anonymous': getattr(recurring_donation, 'is_anonymous', False),
+    #                     'message': getattr(recurring_donation, 'message', ''),
+    #                     'frequency': getattr(recurring_donation, 'frequency', 'monthly'),
+    #                     'next_payment_date': recurring_donation.next_payment_date.isoformat() if hasattr(donation, 'next_payment_date') and donation.next_payment_date else None,
+    #                     'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
+    #                 })
+            
+    #     # Add in-kind donations
+    #     if donation_type in ['all', 'in_kind']:
+    #         for donation in in_kind_donations.select_related('donor'):
+    #             donations_data.append({
+    #                 'id': donation.id,
+    #                 'type': 'in_kind',
+    #                 'donor': {
+    #                     'id': donation.donor.id if donation.donor else None,
+    #                     'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
+    #                     'email': donation.donor.email if donation.donor else None,
+    #                 },
+    #                 'amount': float(getattr(donation, 'estimated_value', 0)),
+    #                 'currency': {
+    #                     'code': 'USD',  # Default for in-kind
+    #                 },
+    #                 'status': donation.status,
+    #                 'donation_date': donation.donation_date.isoformat() if donation.donation_date else None,
+    #                 'payment_method': 'in_kind',
+    #                 'is_anonymous': getattr(donation, 'is_anonymous', False),
+    #                 'message': getattr(donation, 'message', ''),
+    #                 'description': getattr(donation, 'description', ''),
+    #                 'item_type': getattr(donation, 'item_type', ''),
+    #                 'quantity': getattr(donation, 'quantity', 1),
+    #                 'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
+    #             })
+        
+    #     # Sort by donation_date (most recent first)
+    #     donations_data.sort(key=lambda x: x['donation_date'] or '', reverse=True)
+        
+    #     # Paginate results
+    #     paginator = Paginator(donations_data, page_size)
+    #     page_obj = paginator.get_page(page)
+        
+    #     # Calculate summary statistics
+    #     total_regular = regular_donations.aggregate(
+    #         count=Count('id'),
+    #         total=Sum('amount')
+    #     )
+    #     total_recurring = recurring_donations.annotate(
+    #         total_amount=Sum('payment_instances__amount')
+    #     ).aggregate(
+    #         count=Count('id'),
+    #         total=Sum('total_amount')
+    #     )
+    #     total_in_kind = in_kind_donations.aggregate(
+    #         count=Count('id'),
+    #         total=Sum('estimated_value')
+    #     )
+    #     total_payment_instances = recurring_donations.aggregate(
+    #         total=Count('payment_instances')
+    #     )['total']
+                
+    #     return Response({
+    #         'results': list(page_obj),
+    #         'count': paginator.count,
+    #         'next': page_obj.has_next(),
+    #         'previous': page_obj.has_previous(),
+    #         'page': page,
+    #         'page_size': page_size,
+    #         'total_pages': paginator.num_pages,
+    #         'summary': {
+    #             'total_donations': paginator.count,
+    #             'regular_donations': {
+    #                 'count': total_regular['count'] or 0,
+    #                 'total': float(total_regular['total'] or 0),
+    #             },
+    #             'recurring_donations': {
+    #                 'count': total_recurring['count'] or 0,
+    #                 'total': total_payment_instances or 0,
+    #             },
+    #             'in_kind_donations': {
+    #                 'count': total_in_kind['count'] or 0,
+    #                 'total': float(total_in_kind['total'] or 0),
+    #             },
+    #         },
+    #         'filters_applied': {
+    #             'type': donation_type,
+    #             'start_date': start_date.isoformat() if start_date else None,
+    #             'end_date': end_date.isoformat() if end_date else None,
+    #             'min_amount': min_amount,
+    #             'max_amount': max_amount,
+    #             'status': status_filter,
+    #         }
+    #     })
+
+
     @action(detail=True, methods=['get'])
     def donations(self, request, pk=None):
         """Get all donations for a specific campaign (regular, recurring, in-kind)"""
-        campaign = self.get_object()
-        
-        # Get query parameters
-        donation_type = request.query_params.get('type', 'all')  # all, regular, recurring, in_kind
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
-        min_amount = request.query_params.get('min_amount')
-        max_amount = request.query_params.get('max_amount')
-        status_filter = request.query_params.get('status')
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
-        
-        # Base querysets for each donation type
-        regular_donations = campaign.donations.filter(recurring_donation__isnull=True)
-        recurring_donations = campaign.recurring_donations.all()  # Ensure this is correct
-        in_kind_donations = campaign.in_kind_donations.all()
-        
-        # Apply date filters
-        if start_date:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-            regular_donations = regular_donations.filter(donation_date__gte=start_date)
-            recurring_donations = recurring_donations.filter(created_at__gte=start_date)
-            in_kind_donations = in_kind_donations.filter(donation_date__gte=start_date)
-        
-        if end_date:
-            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-            regular_donations = regular_donations.filter(donation_date__lte=end_date)
-            recurring_donations = recurring_donations.filter(created_at__lte=end_date)
-            in_kind_donations = in_kind_donations.filter(donation_date__lte=end_date)
-        
-        # Apply amount filters (only for regular and recurring)
-        if min_amount:
-            min_amount = float(min_amount)
-            regular_donations = regular_donations.filter(amount__gte=min_amount)
-            recurring_donations = recurring_donations.filter(amount__gte=min_amount)
-        
-        if max_amount:
-            max_amount = float(max_amount)
-            regular_donations = regular_donations.filter(amount__lte=max_amount)
-            recurring_donations = recurring_donations.filter(amount__lte=max_amount)
-        
-        # Apply status filter
-        if status_filter:
-            regular_donations = regular_donations.filter(status=status_filter)
-           
-            in_kind_donations = in_kind_donations.filter(status=status_filter)
-        
-        # Prepare unified donation data
-        donations_data = []
-        
-        # Add regular donations
-        if donation_type in ['all', 'regular']:
-            for donation in regular_donations.select_related('donor', 'currency'):
-                donations_data.append({
-                    'id': donation.id,
-                    'type': 'regular',
-                    'donor': {
-                        'id': donation.donor.id if donation.donor else None,
-                        'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
-                        'email': donation.donor.email if donation.donor else None,
-                    },
-                    'amount': float(donation.amount),
-                    'currency': {
-                        'code': donation.currency.code if donation.currency else 'USD',
-                    },
-                    'status': donation.status,
-                    'donation_date': donation.donation_date.isoformat() if donation.donation_date else None,
-                    'payment_method': getattr(donation, 'payment_method', None),
-                    'is_anonymous': getattr(donation, 'is_anonymous', False),
-                    'message': getattr(donation, 'message', ''),
-                    'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
-                })
-        
-        # Add recurring donations
-        if donation_type in ['all', 'recurring']:
-
-            for recurring_donation in recurring_donations.select_related('donor', 'currency'):
-                donations=recurring_donation.payment_instances.all().select_related('donor', 'currency')
-                if status_filter:
-                    donations = donations.filter(status=status_filter)
-                for donation in donations:
-                    donations_data.append({
-                        'id': donation.id,
-                        'type': 'recurring',
-                        'donor': {
-                            'id': donation.donor.id if donation.donor else None,
-                            'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
-                            'email': donation.donor.email if donation.donor else None,
-                        },
-                        'amount': float(donation.amount),
-                        'currency': {
-                            'code': donation.currency.code if donation.currency else 'USD',
-                        },
-                        'status': donation.status,
-                        'donation_date': donation.created_at.isoformat() if donation.created_at else None,
-                        'payment_method': getattr(donation, 'payment_method', None),
-                        'is_anonymous': getattr(recurring_donation, 'is_anonymous', False),
-                        'message': getattr(recurring_donation, 'message', ''),
-                        'frequency': getattr(recurring_donation, 'frequency', 'monthly'),
-                        'next_payment_date': recurring_donation.next_payment_date.isoformat() if hasattr(donation, 'next_payment_date') and donation.next_payment_date else None,
-                        'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
-                    })
+        try:
+            campaign = self.get_object()
             
-        # Add in-kind donations
-        if donation_type in ['all', 'in_kind']:
-            for donation in in_kind_donations.select_related('donor'):
-                donations_data.append({
-                    'id': donation.id,
-                    'type': 'in_kind',
-                    'donor': {
-                        'id': donation.donor.id if donation.donor else None,
-                        'name': donation.donor.get_full_name if donation.donor else 'Anonymous',
-                        'email': donation.donor.email if donation.donor else None,
-                    },
-                    'amount': float(getattr(donation, 'estimated_value', 0)),
-                    'currency': {
-                        'code': 'USD',  # Default for in-kind
-                    },
-                    'status': donation.status,
-                    'donation_date': donation.donation_date.isoformat() if donation.donation_date else None,
-                    'payment_method': 'in_kind',
-                    'is_anonymous': getattr(donation, 'is_anonymous', False),
-                    'message': getattr(donation, 'message', ''),
-                    'description': getattr(donation, 'description', ''),
-                    'item_type': getattr(donation, 'item_type', ''),
-                    'quantity': getattr(donation, 'quantity', 1),
-                    'created_at': donation.created_at.isoformat() if hasattr(donation, 'created_at') else None,
-                })
-        
-        # Sort by donation_date (most recent first)
-        donations_data.sort(key=lambda x: x['donation_date'] or '', reverse=True)
-        
-        # Paginate results
-        paginator = Paginator(donations_data, page_size)
-        page_obj = paginator.get_page(page)
-        
-        # Calculate summary statistics
-        total_regular = regular_donations.aggregate(
-            count=Count('id'),
-            total=Sum('amount')
-        )
-        total_recurring = recurring_donations.annotate(
-            total_amount=Sum('payment_instances__amount')
-        ).aggregate(
-            count=Count('id'),
-            total=Sum('total_amount')
-        )
-        total_in_kind = in_kind_donations.aggregate(
-            count=Count('id'),
-            total=Sum('estimated_value')
-        )
-        total_payment_instances = recurring_donations.aggregate(
-            total=Count('payment_instances')
-        )['total']
-                
-        return Response({
-            'results': list(page_obj),
-            'count': paginator.count,
-            'next': page_obj.has_next(),
-            'previous': page_obj.has_previous(),
-            'page': page,
-            'page_size': page_size,
-            'total_pages': paginator.num_pages,
-            'summary': {
-                'total_donations': paginator.count,
-                'regular_donations': {
-                    'count': total_regular['count'] or 0,
-                    'total': float(total_regular['total'] or 0),
-                },
-                'recurring_donations': {
-                    'count': total_recurring['count'] or 0,
-                    'total': total_payment_instances or 0,
-                },
-                'in_kind_donations': {
-                    'count': total_in_kind['count'] or 0,
-                    'total': float(total_in_kind['total'] or 0),
-                },
-            },
-            'filters_applied': {
-                'type': donation_type,
-                'start_date': start_date.isoformat() if start_date else None,
-                'end_date': end_date.isoformat() if end_date else None,
-                'min_amount': min_amount,
-                'max_amount': max_amount,
-                'status': status_filter,
-            }
-        })
+            # Get query parameters
+            donation_type = request.query_params.get('type', 'all')
+            start_date = request.query_params.get('start_date')
+            end_date = request.query_params.get('end_date')
+            min_amount = request.query_params.get('min_amount')
+            max_amount = request.query_params.get('max_amount')
+            status_filter = request.query_params.get('status')
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+            
+            # Base querysets for each donation type
+            regular_donations = campaign.donations.filter(recurring_donation__isnull=True)
+            recurring_donations = campaign.recurring_donations.all()
+            in_kind_donations = campaign.in_kind_donations.all()
+            
+            # Apply date filters with error handling
+            if start_date:
+                try:
+                    start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                    regular_donations = regular_donations.filter(donation_date__gte=start_date)
+                    recurring_donations = recurring_donations.filter(created_at__gte=start_date)
+                    in_kind_donations = in_kind_donations.filter(donation_date__gte=start_date)
+                except ValueError as e:
+                    return Response({'error': f'Invalid start_date format: {e}'}, status=400)
+            
+            if end_date:
+                try:
+                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    regular_donations = regular_donations.filter(donation_date__lte=end_date)
+                    recurring_donations = recurring_donations.filter(created_at__lte=end_date)
+                    in_kind_donations = in_kind_donations.filter(donation_date__lte=end_date)
+                except ValueError as e:
+                    return Response({'error': f'Invalid end_date format: {e}'}, status=400)
+            
+            # Apply amount filters with error handling
+            if min_amount:
+                try:
+                    min_amount = float(min_amount)
+                    regular_donations = regular_donations.filter(amount__gte=min_amount)
+                    recurring_donations = recurring_donations.filter(amount__gte=min_amount)
+                except ValueError:
+                    return Response({'error': 'Invalid min_amount format'}, status=400)
+            
+            if max_amount:
+                try:
+                    max_amount = float(max_amount)
+                    regular_donations = regular_donations.filter(amount__lte=max_amount)
+                    recurring_donations = recurring_donations.filter(amount__lte=max_amount)
+                except ValueError:
+                    return Response({'error': 'Invalid max_amount format'}, status=400)
+            
+            # Apply status filter
+            if status_filter:
+                regular_donations = regular_donations.filter(status=status_filter)
+                in_kind_donations = in_kind_donations.filter(status=status_filter)
+            
+            # Rest of your code...
+            
+        except Exception as e:
+            # Log the actual error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in donations endpoint: {str(e)}")
+            return Response({'error': str(e)}, status=500)
 
     @action(detail=True, methods=['post'])
     def add_bank_account(self, request, pk=None):
