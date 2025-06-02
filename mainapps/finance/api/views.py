@@ -740,6 +740,7 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                 'total_fees': float(method['total_fees'] or 0),
             })
         
+        
         # Processing efficiency
         completed_donations = campaign.donations.filter(status='completed')
         total_gross = completed_donations.aggregate(Sum('amount'))['amount__sum'] or 0

@@ -1397,6 +1397,14 @@ class Donation(models.Model):
             
             if exchange_rate:
                 return amount * exchange_rate.rate
+            else:
+                # Fallback to latest rate if no specific date match
+                latest_rate = ExchangeRate.objects.filter(
+                    from_currency=from_currency,
+                    to_currency=to_currency
+                ).order_by('-effective_date').first()
+                if latest_rate:
+                    return amount * latest_rate.rate
         except Exception:
             pass
         
