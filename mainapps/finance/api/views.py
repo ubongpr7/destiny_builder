@@ -1023,8 +1023,12 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def donations(self, request, pk=None):
         """Get all donations for a specific campaign (regular, recurring, in-kind)"""
-        campaign = self.get_object()
-        
+        # campaign = self.get_object()
+        try:
+            campaign = self.get_queryset().get(pk=pk)
+        except self.queryset.model.DoesNotExist:
+            return Response({'error': 'Campaign not found'}, status=404)
+            
         # Get query parameters
         donation_type = request.query_params.get('type', 'all')  # all, regular, recurring, in_kind
         start_date = request.query_params.get('start_date')
