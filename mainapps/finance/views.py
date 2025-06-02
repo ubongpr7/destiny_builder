@@ -4,7 +4,7 @@ import hmac
 import traceback
 import os
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
@@ -246,7 +246,8 @@ def handle_payment_completed(event_data, meta_data, full_webhook_data):
         with transaction.atomic():
             if donation_type == 'one-time':
                 result = update_donation_with_currency_conversion(donation_id, full_webhook_data)
-            else:
+            elif donation_type == 'recurring':
+                result = handle_recurring_payment_completed(event_data, meta_data, )
                 print(f"    ERROR: Unsupported donation type for currency conversion: {donation_type}")
                 return {
                     'success': False,
@@ -289,6 +290,8 @@ def handle_payment_failed(event_data, meta_data, full_webhook_data):
                 webhook_data_copy = full_webhook_data.copy()
                 webhook_data_copy['data']['status'] = 'failed'
                 result = update_donation_with_currency_conversion(donation_id, webhook_data_copy)
+            elif donation_type == 'recurring':
+                result = handle_recurring_payment_failed(event_data, meta_data, full_webhook_data)
             else:
                 return {
                     'success': False,
@@ -478,7 +481,6 @@ def update_donation_with_currency_conversion(donation_id, webhook_data):
                 print(f"      - Currency conversion needed: {donation_currency.code} → {campaign_currency.code}")
                 
                 try:
-                    # Get conversion date (use processed date or current time)
                     conversion_date = timezone.now()
                     if data.get('created_at'):
                         try:
@@ -796,6 +798,222 @@ def validate_webhook_donation_data(donation, webhook_data):
 
 
 
+def handle_recurring_payment_completed(event_data, meta_data, full_webhook_data):
+    print("Handling recurring payment completion")
+    
+    donation_id = meta_data.get('donation_id')
+    if not donation_id:
+        return {'success': False, 'error': 'Missing donation ID in metadata'}
+    
+    try:
+        with transaction.atomic():
+            recurring_donation = RecurringDonation.objects.select_for_update().get(id=donation_id)
+            print(f"Found recurring donation: {recurring_donation}")
+            
+            # Calculate next sequence number for this recurring donation
+            sequence = recurring_donation.payment_instances.filter(status='completed').count() + 1
+            
+            # Create new Donation record linked to RecurringDonation
+            donation = Donation.objects.create(
+                donor=recurring_donation.donor,
+                campaign=recurring_donation.campaign,
+                project=recurring_donation.project,
+                amount=Decimal(str(event_data.get('amount', recurring_donation.amount))),
+                currency=Currency.objects.get(code=event_data.get('currency', recurring_donation.currency.code)),
+                payment_method=map_payment_method(event_data.get('payment_type', 'other'), event_data.get('card', {})),
+                donation_date=timezone.now(),
+                status='completed',
+                recurring_donation=recurring_donation,
+                recurring_sequence=sequence,
+                transaction_id=str(event_data.get('id')),
+                reference_number=event_data.get('flw_ref'),
+                bank_reference=event_data.get('tx_ref'),
+                donor_email=meta_data.get('donor_email') or event_data.get('customer', {}).get('email'),
+                donor_name=event_data.get('customer', {}).get('name'),
+                donor_phone=event_data.get('customer', {}).get('phone_number'),
+            )
+            
+            # Currency conversion logic
+            if recurring_donation.campaign and recurring_donation.currency and recurring_donation.campaign.target_currency:
+                donation_currency = recurring_donation.currency
+                campaign_currency = recurring_donation.campaign.target_currency
+                
+                if donation_currency != campaign_currency:
+                    print(f"Currency conversion needed: {donation_currency.code} → {campaign_currency.code}")
+                    conversion_date = timezone.now()
+                    if event_data.get('created_at'):
+                        try:
+                            conversion_date = datetime.fromisoformat(event_data['created_at'].replace('Z', '+00:00'))
+                        except Exception as e:
+                            print(f"Error parsing created_at date: {e}")
+                    
+                    # Get or create exchange rate
+                    exchange_rate_record = get_or_create_exchange_rate(
+                        from_currency=donation_currency,
+                        to_currency=campaign_currency,
+                        effective_date=conversion_date
+                    )
+                    
+                    if exchange_rate_record:
+                        converted_amount = donation.amount * exchange_rate_record.rate
+                        donation.exchange_rate = exchange_rate_record.rate
+                        donation.converted_amount = converted_amount
+                        donation.converted_currency = campaign_currency
+                        print(f"Exchange rate applied: {exchange_rate_record.rate}")
+                        print(f"Converted amount: {campaign_currency.code} {converted_amount}")
+                    else:
+                        print("ERROR: Could not obtain exchange rate")
+            
+            # Update recurring donation state
+            recurring_donation.consecutive_failures = 0
+            recurring_donation.next_payment_date = recurring_donation.calculate_next_payment_date()
+            recurring_donation.save()
+            
+            print(f"Successfully created donation: {donation.id}")
+            return {
+                'success': True,
+                'message': f'Donation {donation.id} created successfully and linked to RecurringDonation {recurring_donation.id}',
+                'donation_id': donation.id
+            }
+    except RecurringDonation.DoesNotExist:
+        error_msg = f"RecurringDonation with id {donation_id} not found"
+        print(error_msg)
+        return {'success': False, 'error': error_msg}
+    except Exception as e:
+        print(f"Error handling recurring payment: {str(e)}")
+        print(traceback.format_exc())
+        return {'success': False, 'error': str(e)}
+
+
+# def handle_recurring_payment_completed(event_data, meta_data,):
+#     """Handle successful recurring payment and create/update donation record"""
+#     print("Handling recurring payment completion")
+    
+#     donation_id = meta_data.get('donation_id')
+#     if not donation_id:
+#         return {'success': False, 'error': 'Missing donation ID in metadata'}
+    
+#     try:
+#         with transaction.atomic():
+#             recurring_donation = RecurringDonation.objects.select_for_update().get(id=donation_id)
+#             print(f"Found recurring donation: {recurring_donation}")
+            
+#             # Calculate next sequence number for this recurring donation
+#             sequence = recurring_donation.payment_instances.filter(status='completed').count() + 1
+            
+#             # Create new Donation record linked to RecurringDonation
+#             donation = Donation.objects.create(
+#                 donor=recurring_donation.donor,
+#                 campaign=recurring_donation.campaign,
+#                 project=recurring_donation.project,
+#                 amount=Decimal(str(event_data.get('amount', recurring_donation.amount))),
+#                 currency=Currency.objects.get(code=event_data.get('currency', recurring_donation.currency.code)),
+#                 payment_method=map_payment_method(event_data.get('payment_type', 'other'), event_data.get('card', {})),
+#                 donation_date=timezone.now(),
+#                 status='completed',
+#                 recurring_donation=recurring_donation,
+#                 recurring_sequence=sequence,
+#                 transaction_id=str(event_data.get('id')),
+#                 reference_number=event_data.get('flw_ref'),
+#                 bank_reference=event_data.get('tx_ref'),
+#                 donor_email=meta_data.get('donor_email') or event_data.get('customer', {}).get('email'),
+#                 donor_name=event_data.get('customer', {}).get('name'),
+#                 donor_phone=event_data.get('customer', {}).get('phone_number'),
+#             )
+            
+#             # Update recurring donation state
+#             recurring_donation.consecutive_failures = 0
+#             recurring_donation.next_payment_date = recurring_donation.calculate_next_payment_date()
+#             recurring_donation.save()
+            
+#             print(f"Successfully created donation: {donation.id}")
+#             return {
+#                 'success': True,
+#                 'message': f'Donation {donation.id} created successfully and linked to RecurringDonation {recurring_donation.id}',
+#                 'donation_id': donation.id
+#             }
+#     except RecurringDonation.DoesNotExist:
+#         error_msg = f"RecurringDonation with id {donation_id} not found"
+#         print(error_msg)
+#         return {'success': False, 'error': error_msg}
+#     except Exception as e:
+#         print(f"Error handling recurring payment: {str(e)}")
+#         print(traceback.format_exc())
+#         return {'success': False, 'error': str(e)}
+
+
+def handle_recurring_payment_failed(event_data, meta_data, full_webhook_data):
+    """Handle failed payment for recurring donation and update recurring donation status"""
+    print("Handling failed recurring payment")
+    donation_id = meta_data.get('donation_id')
+    if not donation_id:
+        return {'success': False, 'error': 'Missing donation ID in metadata'}
+    
+    try:
+        with transaction.atomic():
+            recurring_donation = RecurringDonation.objects.select_for_update().get(id=donation_id)
+            
+            # Record failed payment donation record
+            sequence = recurring_donation.payment_instances.count() + 1
+            Donation.objects.create(
+                donor=recurring_donation.donor,
+                campaign=recurring_donation.campaign,
+                project=recurring_donation.project,
+                amount=Decimal(str(event_data.get('amount', recurring_donation.amount))),
+                currency=Currency.objects.get(code=event_data.get('currency', recurring_donation.currency.code)),
+                payment_method=map_payment_method(event_data.get('payment_type', 'other'), event_data.get('card', {})),
+                donation_date=timezone.now(),
+                status='failed',
+                recurring_donation=recurring_donation,
+                recurring_sequence=sequence,
+                transaction_id=str(event_data.get('id')),
+                notes=f"Payment failed on webhook: {event_data.get('processor_response', 'No details')}"
+            )
+            
+            # Update recurring donation failure counts and possibly status
+            recurring_donation.consecutive_failures += 1
+            if recurring_donation.consecutive_failures >= recurring_donation.max_failed_payments:
+                recurring_donation.status = 'failed'
+                recurring_donation.next_payment_date = None
+            else:
+                recurring_donation.next_payment_date = timezone.now().date() + timedelta(days=3)
+            recurring_donation.save()
+            
+            return {
+                'success': True,
+                'message': f'Recurring donation {recurring_donation.id} updated for failed payment.',
+                'recurring_donation_id': recurring_donation.id
+            }
+    except RecurringDonation.DoesNotExist:
+        error_msg = f"RecurringDonation with id {donation_id} not found"
+        print(error_msg)
+        return {'success': False, 'error': error_msg}
+    except Exception as e:
+        print(f"Error handling failed recurring payment: {str(e)}")
+        print(traceback.format_exc())
+        return {'success': False, 'error': str(e)}
+
+def map_payment_method(payment_type, card_info):
+    """Maps Flutterwave payment_type and card info to internal payment method"""
+    method = {
+        'card': 'credit_card',
+        'bank_transfer': 'bank_transfer',
+        'ussd': 'mobile_money',
+        'mobile_money': 'mobile_money',
+        'bank': 'bank_transfer',
+        'qr': 'other',
+        'mpesa': 'mobile_money',
+        'account': 'bank_transfer'
+    }.get(payment_type.lower() if payment_type else '', 'other')
+    
+    # Refine card type if it's a card payment
+    if payment_type == 'card' and card_info:
+        card_type = card_info.get('type', '').lower()
+        if 'debit' in card_type or 'maestro' in card_type:
+            method = 'debit_card'
+        elif 'credit' in card_type or 'mastercard' in card_type or 'visa' in card_type:
+            method = 'credit_card'
+    return method
 
 
 

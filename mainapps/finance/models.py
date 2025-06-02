@@ -1,3 +1,4 @@
+from datetime import timedelta
 from django.db import models
 from mainapps.accounts.models import Department
 from mainapps.project.models import Project
@@ -544,7 +545,7 @@ class DonationCampaign(models.Model):
                     recurring.total_donated,
                     recurring.currency,
                     timezone.now()
-                )
+                ) * recurring.payment_count
         except Exception:
             pass
         return total
@@ -568,7 +569,7 @@ class DonationCampaign(models.Model):
     def current_amount(self):
         """Total raised across all donation types in target currency"""
         return (self.total_donations_amount + 
-                self.total_recurring_amount + 
+                # self.total_recurring_amount + 
                 self.total_in_kind_amount)
     
     @property
@@ -659,7 +660,7 @@ class DonationCampaign(models.Model):
     def total_donations_count(self):
         """Total number of completed donations"""
         return (self.donations.filter(status='completed').count() +
-                self.recurring_donations.filter(status__in=['active', 'completed']).count() +
+                # self.recurring_donations.filter(status__in=['active', 'completed']).count() +
                 self.in_kind_donations.filter(status='received').count())
     
     @property
@@ -1127,6 +1128,8 @@ PAYMENT_METHOD_CHOICES = [
         ('wire_transfer', 'Wire Transfer'),
         ('other', 'Other'),
     ]
+
+
 class Donation(models.Model):
     """Enhanced one-time donations with comprehensive tracking"""
     
@@ -1154,7 +1157,20 @@ class Donation(models.Model):
         ('grant', 'Grant/Foundation'),
         ('other', 'Other'),
     ]
+
+    recurring_donation = models.ForeignKey(
+        'RecurringDonation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_instances',
+        help_text="Linked recurring donation if this is a recurring payment"
+    )
     
+    recurring_sequence = models.PositiveIntegerField(
+        default=0,
+        help_text="Sequence number for recurring payments (1st, 2nd, etc.)"
+    )
     # Donor Information
     donor = models.ForeignKey(
         User, 
@@ -1644,7 +1660,6 @@ class Donation(models.Model):
 
 
 class RecurringDonation(models.Model):
-    """Enhanced recurring donation subscriptions"""
     
     FREQUENCY_CHOICES = [
         ('weekly', 'Weekly'),
@@ -1657,6 +1672,7 @@ class RecurringDonation(models.Model):
     
     STATUS_CHOICES = [
         ('active', 'Active'),
+        ('inactive', 'Inactive'),
         ('paused', 'Paused'),
         ('cancelled', 'Cancelled'),
         ('expired', 'Expired'),
@@ -1707,17 +1723,14 @@ class RecurringDonation(models.Model):
     start_date = models.DateField()
     end_date = models.DateField(blank=True, null=True)
     next_payment_date = models.DateField(null=True, blank=True)
-    last_payment_date = models.DateField(blank=True, null=True)
     
     # Payment Information
-    payment_method = models.CharField(max_length=100,choices=PAYMENT_METHOD_CHOICES, blank=True, default='credit_card')
+    payment_method = models.CharField(max_length=100, choices=PAYMENT_METHOD_CHOICES, blank=True, default='credit_card')
     subscription_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     payment_processor = models.CharField(max_length=50, blank=True, null=True)
     
     # Status and Tracking
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
-    payment_count = models.PositiveIntegerField(default=0)
-    failed_payment_count = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='inactive')
     max_failed_payments = models.PositiveIntegerField(default=3)
     
     # Administrative
@@ -1728,7 +1741,10 @@ class RecurringDonation(models.Model):
         null=True,
         help_text="Upload receipt or proof of recurring donation setup"
     )
-    
+    consecutive_failures = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of consecutive failed payments"
+    )    
     # Tracking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1749,9 +1765,25 @@ class RecurringDonation(models.Model):
     # ============================================================================
     
     @property
+    def payment_count(self):
+        """Number of successful payments"""
+        return self.payment_instances.filter(status='completed').count()
+    
+    @property
+    def failed_payment_count(self):
+        """Number of failed payments"""
+        return self.payment_instances.filter(status='failed').count()
+    
+    @property
+    def last_payment_date(self):
+        """Date of last successful payment"""
+        last_payment = self.payment_instances.filter(status='completed').order_by('-donation_date').first()
+        return last_payment.donation_date if last_payment else None
+    
+    @property
     def total_donated(self):
-        """Total amount donated through this recurring subscription"""
-        return self.related_donations.filter(status='completed').aggregate(
+        """Total amount donated through this subscription"""
+        return self.payment_instances.filter(status='completed').aggregate(
             total=models.Sum('amount')
         )['total'] or Decimal('0.00')
     
@@ -1759,9 +1791,97 @@ class RecurringDonation(models.Model):
     def total_net_donated(self):
         """Total net amount (after fees) donated"""
         total = Decimal('0.00')
-        for donation in self.related_donations.filter(status='completed'):
-            total += donation.net_amount
+        for payment in self.payment_instances.filter(status='completed'):
+            total += payment.net_amount
         return total
+    
+    # ============================================================================
+    # PAYMENT PROCESSING METHODS
+    # ============================================================================
+    
+    def record_successful_payment(self, transaction_id=None):
+        """Record a successful payment instance"""
+        from datetime import date
+        
+        # Create donation record
+        sequence = self.payment_count + 1
+        donation = Donation.objects.create(
+            donor=self.donor,
+            campaign=self.campaign,
+            project=self.project,
+            amount=self.amount,
+            currency=self.currency,
+            payment_method=self.payment_method,
+            donation_date=date.today(),
+            status='completed',
+            recurring_donation=self,
+            recurring_sequence=sequence,
+            transaction_id=transaction_id,
+        )
+        
+        # Update recurring donation status
+        self.consecutive_failures = 0
+        self.last_payment_date = date.today()
+        self.next_payment_date = self.calculate_next_payment_date()
+        
+        # Check if subscription should complete
+        if self.end_date and self.next_payment_date > self.end_date:
+            self.status = 'completed'
+            self.next_payment_date = None
+            
+        self.save()
+        return donation
+    
+    def record_failed_payment(self, error_reason=None):
+        """Record a failed payment instance"""
+        from datetime import date
+        
+        # Create failed donation record
+        sequence = self.payment_count + self.failed_payment_count + 1
+        donation = Donation.objects.create(
+            donor=self.donor,
+            campaign=self.campaign,
+            project=self.project,
+            amount=self.amount,
+            currency=self.currency,
+            payment_method=self.payment_method,
+            donation_date=date.today(),
+            status='failed',
+            recurring_donation=self,
+            recurring_sequence=sequence,
+            notes=f"Payment failed: {error_reason}" if error_reason else None,
+        )
+        
+        self.consecutive_failures += 1
+        self.next_payment_date = date.today() + timedelta(days=3)
+        
+        if self.consecutive_failures >= self.max_failed_payments:
+            self.status = 'failed'
+            self.next_payment_date = None
+        self.save()
+        return donation
+    
+    def calculate_next_payment_date(self):
+        """Calculate next payment date based on frequency"""
+        from dateutil.relativedelta import relativedelta
+        
+        frequency_deltas = {
+            'weekly': relativedelta(weeks=1),
+            'biweekly': relativedelta(weeks=2),
+            'monthly': relativedelta(months=1),
+            'quarterly': relativedelta(months=3),
+            'biannually': relativedelta(months=6),
+            'annually': relativedelta(years=1),
+        }
+        
+        delta = frequency_deltas.get(self.frequency, relativedelta(months=1))
+        next_date = self.last_payment_date + delta if self.last_payment_date else self.start_date + delta
+        
+        # Don't schedule beyond end date
+        if self.end_date and next_date > self.end_date:
+            return None
+            
+        return next_date
     
     @property
     def average_donation_amount(self):
@@ -1822,7 +1942,7 @@ class RecurringDonation(models.Model):
         """Success rate of payments"""
         total_attempts = self.payment_count + self.failed_payment_count
         if total_attempts > 0:
-            return (self.payment_count / total_attempts) * 100
+            return round((self.payment_count / total_attempts) * 100,2)
         return 0
     
     @property
@@ -1885,7 +2005,6 @@ class RecurringDonation(models.Model):
             return self.amount
         
         try:
-            # Import here to avoid circular imports
             
             exchange_rate = ExchangeRate.objects.filter(
                 from_currency=self.currency,
@@ -1902,7 +2021,7 @@ class RecurringDonation(models.Model):
     def get_total_donated_in_currency(self, target_currency):
         """Get total donated amount in specified currency"""
         total = Decimal('0.00')
-        for donation in self.related_donations.filter(status='completed'):
+        for donation in self.payment_instances.filter(status='completed'):
             total += donation.get_amount_in_currency(target_currency)
         return total
     
@@ -1934,61 +2053,6 @@ class RecurringDonation(models.Model):
     # BUSINESS LOGIC METHODS
     # ============================================================================
     
-    def calculate_next_payment_date(self):
-        """Calculate next payment date based on frequency"""
-        from dateutil.relativedelta import relativedelta
-        
-        frequency_deltas = {
-            'weekly': relativedelta(weeks=1),
-            'biweekly': relativedelta(weeks=2),
-            'monthly': relativedelta(months=1),
-            'quarterly': relativedelta(months=3),
-            'biannually': relativedelta(months=6),
-            'annually': relativedelta(years=1),
-        }
-        
-        delta = frequency_deltas.get(self.frequency, relativedelta(months=1))
-        
-        if self.last_payment_date:
-            next_date = self.last_payment_date + delta
-        else:
-            next_date = self.start_date + delta
-        
-        # Don't schedule beyond end date
-        if self.end_date and next_date > self.end_date:
-            return None
-            
-        return next_date
-    
-    def record_successful_payment(self, donation):
-        """Record a successful payment"""
-        self.payment_count += 1
-        self.last_payment_date = donation.donation_date.date()
-        self.next_payment_date = self.calculate_next_payment_date()
-        self.failed_payment_count = 0  # Reset failed count on success
-        
-        # Check if subscription should be completed
-        if self.end_date and self.next_payment_date and self.next_payment_date > self.end_date:
-            self.status = 'completed'
-            self.next_payment_date = None
-        
-        self.save()
-    
-    def record_failed_payment(self):
-        """Record a failed payment"""
-        self.failed_payment_count += 1
-        
-        # Cancel if too many failures
-        if self.failed_payment_count >= self.max_failed_payments:
-            self.status = 'failed'
-            self.next_payment_date = None
-        else:
-            # Retry in a few days
-            from datetime import timedelta
-            self.next_payment_date = timezone.now().date() + timedelta(days=3)
-        
-        self.save()
-    
     def pause_subscription(self, reason=None):
         """Pause the subscription"""
         self.status = 'paused'
@@ -2012,31 +2076,11 @@ class RecurringDonation(models.Model):
             self.notes = f"{self.notes or ''}\nCancelled: {reason}".strip()
         self.save()
     
-    def update_monetary_calculations(self):
-        """Recalculate monetary fields - useful for data migrations"""
-        # This method can be called to refresh calculated values
-        pass
-    
-    def get_performance_summary(self):
-        """Get comprehensive performance summary"""
-        return {
-            'total_donated': float(self.total_donated),
-            'payment_count': self.payment_count,
-            'failed_payment_count': self.failed_payment_count,
-            'success_rate': round(self.success_rate, 2),
-            'average_donation': float(self.average_donation_amount),
-            'projected_annual': float(self.projected_annual_amount),
-            'lifetime_value': float(self.lifetime_value),
-            'subscription_age_months': round(self.subscription_age_months, 1),
-            'is_healthy': self.is_healthy,
-            'is_at_risk': self.is_at_risk,
-            'days_until_next_payment': self.days_until_next_payment,
-            'currency': self.currency.code
-        }
-    
     def __str__(self):
-        donor_name = self.donor.get_full_name or self.donor.username
+        donor_name = self.donor.get_full_name() or self.donor.username
         return f"{donor_name} - {self.formatted_amount} {self.frequency} ({self.get_status_display()})"
+
+
 
 
 class InKindDonation(models.Model):
