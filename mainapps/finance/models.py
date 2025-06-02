@@ -1471,8 +1471,10 @@ class Donation(models.Model):
     @property
     def formatted_amount(self):
         """Formatted amount with currency"""
-        return f"{self.currency.code} {self.amount:,.2f}"
-    
+        if self.currency:
+
+            return f"{self.currency.code} {self.amount:,.2f}"
+        return f"{self.amount:,.2f}"
     @property
     def formatted_net_amount(self):
         """Formatted net amount with currency"""
