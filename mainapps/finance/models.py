@@ -1106,7 +1106,19 @@ class FundingSource(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_funding_type_display()}) - {self.formatted_amount}"
 
-
+PAYMENT_METHOD_CHOICES = [
+        ('credit_card', 'Credit Card'),
+        ('debit_card', 'Debit Card'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('paypal', 'PayPal'),
+        ('stripe', 'Stripe'),
+        ('cash', 'Cash'),
+        ('check', 'Check'),
+        ('mobile_money', 'Mobile Money'),
+        ('cryptocurrency', 'Cryptocurrency'),
+        ('wire_transfer', 'Wire Transfer'),
+        ('other', 'Other'),
+    ]
 class Donation(models.Model):
     """Enhanced one-time donations with comprehensive tracking"""
     
@@ -1120,19 +1132,7 @@ class Donation(models.Model):
         ('disputed', 'Disputed'),
     ]
     
-    PAYMENT_METHOD_CHOICES = [
-        ('credit_card', 'Credit Card'),
-        ('debit_card', 'Debit Card'),
-        ('bank_transfer', 'Bank Transfer'),
-        ('paypal', 'PayPal'),
-        ('stripe', 'Stripe'),
-        ('cash', 'Cash'),
-        ('check', 'Check'),
-        ('mobile_money', 'Mobile Money'),
-        ('cryptocurrency', 'Cryptocurrency'),
-        ('wire_transfer', 'Wire Transfer'),
-        ('other', 'Other'),
-    ]
+    
     
     DONATION_SOURCE_CHOICES = [
         ('website', 'Website'),
@@ -1217,7 +1217,7 @@ class Donation(models.Model):
     )
     
     # Payment Processing
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES,blank=True, default='credit_card')
     processor_fee = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -1635,7 +1635,7 @@ class RecurringDonation(models.Model):
     last_payment_date = models.DateField(blank=True, null=True)
     
     # Payment Information
-    payment_method = models.CharField(max_length=100)
+    payment_method = models.CharField(max_length=100,choices=PAYMENT_METHOD_CHOICES, blank=True, default='credit_card')
     subscription_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     payment_processor = models.CharField(max_length=50, blank=True, null=True)
     
