@@ -1224,7 +1224,7 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
         notify_expense_created(expense)
         with transaction.atomic():
             if expense.budget_item:
-                expense.currency = expense.budget_item.currency
+                expense.currency = expense.budget_item.budget.currency
             organizational_expense=expense.organizational_expense
             if not organizational_expense:
                 organizational_expense=OrganizationalExpense.objects.create(
