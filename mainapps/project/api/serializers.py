@@ -42,7 +42,7 @@ class ProjectMinimalSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(serializers.ModelSerializer):
-    currency= CurrencySerializer(source='currency', read_only=True)
+    currency= CurrencySerializer( read_only=True)
     currency_id = serializers.IntegerField(write_only=True, required=False, default=Currency.objects.get(code='USD').id)
     manager_details = ProjectUserSerializer(source='manager', read_only=True)
     officials_details = ProjectUserSerializer(source='officials', many=True, read_only=True)
