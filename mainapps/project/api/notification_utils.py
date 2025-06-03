@@ -73,14 +73,15 @@ def notify_project_created(project):
     # Notify admins and executives
     admins_and_executives = User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True
+        is_verified=True
     ).filter(
         profile__is_DB_admin=True
     ) | User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True,
+        is_verified=True,
         profile__is_DB_executive=True
     )
+    
     
     for user in admins_and_executives:
         if should_notify_user(user, 'project_created', 'in_app'):
@@ -145,12 +146,12 @@ def notify_project_status_changed(project, old_status, new_status, changed_by):
     if (old_status, new_status) in important_transitions:
         admins_and_executives = User.objects.filter(
             profile__isnull=False,
-            profile__is_active=True
+            is_verified=True
         ).filter(
             profile__is_DB_admin=True
         ) | User.objects.filter(
             profile__isnull=False,
-            profile__is_active=True,
+            is_verified=True,
             profile__is_DB_executive=True
         )
         
@@ -551,12 +552,12 @@ def notify_expense_created(expense):
     # Notify admins and executives
     admins_and_executives = User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True
+        is_verified=True
     ).filter(
         profile__is_DB_admin=True
     ) | User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True,
+        is_verified=True,
         profile__is_DB_executive=True
     )
     
@@ -633,12 +634,12 @@ def notify_expense_status_changed(expense, old_status, new_status, changed_by):
     if new_status in ['approved', 'rejected', 'reimbursed']:
         admins_and_executives = User.objects.filter(
             profile__isnull=False,
-            profile__is_active=True
+            is_verified=True
         ).filter(
             profile__is_DB_admin=True
         ) | User.objects.filter(
             profile__isnull=False,
-            profile__is_active=True,
+            is_verified=True,
             profile__is_DB_executive=True
         )
         
@@ -785,12 +786,12 @@ def notify_project_overbudget(project, current_spent, budget):
     # Notify admins and executives
     admins_and_executives = User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True
+        is_verified=True
     ).filter(
         profile__is_DB_admin=True
     ) | User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True,
+        is_verified=True,
         profile__is_DB_executive=True
     )
     
@@ -842,12 +843,12 @@ def notify_project_budget_updated(project, old_budget, new_budget, updated_by):
     # Notify admins and executives
     admins_and_executives = User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True
+        is_verified=True
     ).filter(
         profile__is_DB_admin=True
     ) | User.objects.filter(
         profile__isnull=False,
-        profile__is_active=True,
+        is_verified=True,
         profile__is_DB_executive=True
     )
     
