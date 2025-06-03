@@ -5066,14 +5066,6 @@ class FundingSourceViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             'status': 'inactive'
         })
 
-class BudgetItemFilter(filters.FilterSet):
-    # Add custom filter for project through budget
-    project = filters.NumberFilter(field_name='budget__project')
-    
-    class Meta:
-        model = BudgetItem
-        fields = ['budget', 'category']
-
 class BudgetItemViewSet(ActivityTrackingMixin, viewsets.ModelViewSet):
     queryset = BudgetItem.objects.select_related('budget', 'created_by')
     serializer_class = BudgetItemSerializer
