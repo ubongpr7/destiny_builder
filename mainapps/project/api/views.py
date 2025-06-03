@@ -1234,7 +1234,7 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                     expense_date=expense.date_incurred,
                     project_instance=expense,
                     submitted_by=self.request.user,
-                    expense_type='operational',
+                    expense_type=expense.category,
                     description=expense.description,
                     budget_item=expense.budget_item,
                     currency=expense.currency,

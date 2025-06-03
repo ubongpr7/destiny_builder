@@ -4225,6 +4225,7 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 created_by=self.request.user,
                 title=expense.title,
                 description=expense.description,
+                category=expense.expense_type,
                 notes=f'Created from organizational expense\n {expense.notes or "" }',
             )
             expense.project_instance = project_expense
