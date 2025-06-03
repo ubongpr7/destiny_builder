@@ -1220,7 +1220,8 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             expense = serializer.save(incurred_by=self.request.user, created_by=self.request.user)
         else:
             expense = serializer.save()
-        
+        expense= serializer.instance
+
         notify_expense_created(expense)
         with transaction.atomic():
             if expense.budget_item:
@@ -1240,8 +1241,6 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                     notes=f'This was authomatically created against the project expense with ID {expense.id}'
 
                 )
-                organizational_expense.project_instance=expense
-                organizational_expense.save()
             expense.save()
             project = expense.project
             funds_spent = project.funds_spent
