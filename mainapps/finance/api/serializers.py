@@ -944,13 +944,19 @@ class BudgetItemSerializer(serializers.ModelSerializer):
     spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
     budget_id=serializers.IntegerField(write_only=True)
+    
+    remaining_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    available_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    encumbered_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    truly_available_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
     class Meta:
         model = BudgetItem
         fields = [
             'id', 'budget','title', 'category', 'subcategory', 'description', 'budgeted_amount',
             'spent_amount', 'is_locked', 'approval_required_threshold', 'responsible_person',
             'responsible_person_id', 'notes', 'created_at', 'updated_at',
-            'remaining_amount', 'spent_percentage', 'formatted_amount', 'budget_id'
+            'remaining_amount', 'spent_percentage', 'formatted_amount', 'budget_id','remaining_amount', 'available_amount', 'encumbered_amount', 'truly_available_amount'
         ]
         read_only_fields = ['id', 'budget', 'created_at', 'updated_at']
 
