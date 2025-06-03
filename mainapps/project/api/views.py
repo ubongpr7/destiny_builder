@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -1221,28 +1222,30 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             expense = serializer.save()
         
         notify_expense_created(expense)
-        
-        organizational_expense=expense.organizational_expense
-        if not organizational_expense:
-            organizational_expense=OrganizationalExpense.objects.create(
-                title=expense.title,
-                amount=expense.amount,
-                expense_date=expense.date_incurred,
-                project_instance=expense,
-                submitted_by=self.request.user,
-                expense_type='operational',
-                description=expense.description,
-                budget_item=expense.budget_item,
-                currency=expense.currency,
-                notes=f'This was authomatically created against the project expense with ID {expense.id}'
+        with transaction.atomic():
+            if expense.budget_item:
+                expense.currency = expense.budget_item.currency
+            organizational_expense=expense.organizational_expense
+            if not organizational_expense:
+                organizational_expense=OrganizationalExpense.objects.create(
+                    title=expense.title,
+                    amount=expense.amount,
+                    expense_date=expense.date_incurred,
+                    project_instance=expense,
+                    submitted_by=self.request.user,
+                    expense_type='operational',
+                    description=expense.description,
+                    budget_item=expense.budget_item,
+                    currency=expense.currency,
+                    notes=f'This was authomatically created against the project expense with ID {expense.id}'
 
-            )
-            expense.organizational_expense=organizational_expense
-            expense.save()
-        project = expense.project
-        funds_spent = project.funds_spent
-        if funds_spent > project.budget:
-            notify_project_overbudget(project, funds_spent, project.budget)
+                )
+                expense.organizational_expense=organizational_expense
+                expense.save()
+            project = expense.project
+            funds_spent = project.funds_spent
+            if funds_spent > project.budget:
+                notify_project_overbudget(project, funds_spent, project.budget)
     
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
