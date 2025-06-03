@@ -1613,7 +1613,7 @@ class OrganizationalExpenseSerializer(serializers.ModelSerializer):
             'expense_type', 'amount', 'currency', 'expense_date',
             'vendor', 'receipt', 'status', 'submitted_by', 'approved_by',
             'approved_by_id', 'approved_at', 'notes', 'created_at', 'updated_at',
-            'formatted_amount'
+            'formatted_amount','project_instance'
         ]
         read_only_fields = ['id', 'submitted_by', 'created_at', 'updated_at']
 
