@@ -1225,7 +1225,7 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
         with transaction.atomic():
             if expense.budget_item:
                 expense.currency = expense.budget_item.budget.currency
-            organizational_expense=expense.organizational_expense
+            organizational_expense = getattr(expense, 'organizational_expense', None)
             if not organizational_expense:
                 organizational_expense=OrganizationalExpense.objects.create(
                     title=expense.title,
@@ -1240,7 +1240,8 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                     notes=f'This was authomatically created against the project expense with ID {expense.id}'
 
                 )
-                expense.organizational_expense=organizational_expense
+                organizational_expense.project_instance=organizational_expense
+                organizational_expense.save()
             expense.save()
             project = expense.project
             funds_spent = project.funds_spent
