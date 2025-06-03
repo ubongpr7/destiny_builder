@@ -4212,6 +4212,7 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         expense = serializer.save(submitted_by=self.request.user)
+        expense=serializer.instance
         expense.currency=expense.budget_item.budget.currency
         
         if expense.budget_item.budget.project and not expense.project_instance:
