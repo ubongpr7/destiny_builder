@@ -403,7 +403,7 @@ class BudgetItemSerializer(serializers.ModelSerializer):
 
 class ProjectExpenseSerializer(serializers.ModelSerializer):
     """Serializer for ProjectExpense model with related data"""
-    budget_item= BudgetItemSerializer(source='budget_item', read_only=True)
+    budget_item= BudgetItemSerializer( read_only=True)
     incurred_by_details = ProjectUserSerializer(source='incurred_by', read_only=True)
     approved_by_details = ProjectUserSerializer(source='approved_by', read_only=True)
     project_details = ProjectMinimalSerializer(source='project', read_only=True)
