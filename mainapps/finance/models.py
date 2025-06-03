@@ -780,7 +780,7 @@ class DonationCampaign(models.Model):
         if self.time_progress_percentage == 0:
             return 'NOT_STARTED'
         
-        progress_ratio = self.progress_percentage / max(self.time_progress_percentage, 1)
+        progress_ratio = float(self.progress_percentage) / float(max(self.time_progress_percentage, 1))
         
         if progress_ratio >= 1.5:
             return 'EXCELLENT'
