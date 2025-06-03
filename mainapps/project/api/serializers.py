@@ -432,11 +432,11 @@ class ProjectExpenseCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectExpense
         fields = [
-            'project', 'update', 'title', 'description', 'amount',
+            'id','project', 'update', 'title', 'description', 'amount',
             'date_incurred', 'incurred_by', 'receipt', 'category',
             'status', 'notes','budget_item'
         ]
-        read_only_fields = ['approved_by', 'approval_date']
+        read_only_fields = ['approved_by', 'approval_date','id']
     
     def validate(self, data):
         """
