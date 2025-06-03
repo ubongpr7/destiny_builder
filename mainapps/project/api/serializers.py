@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
+from mainapps.common.models import Currency
 from mainapps.finance.models import BudgetItem
 from mainapps.inventory.models import Asset
 from ..models import DailyProjectUpdate, MilestoneMedia, Project, ProjectAsset, ProjectCategory, ProjectExpense, ProjectMedia, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
@@ -26,7 +27,12 @@ class ProjectCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectCategory
         fields = ['id', 'name', 'description']
-
+class CurrencySerializer(serializers.ModelSerializer):
+    """Serializer for Currency model"""
+    class Meta:
+        model = Currency
+        fields = ['id', 'name', 'code', ]
+        read_only_fields = ['id', 'name', 'code',]
 
 class ProjectMinimalSerializer(serializers.ModelSerializer):
     """Minimal serializer for Project references"""
@@ -36,6 +42,8 @@ class ProjectMinimalSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+    currency= CurrencySerializer(source='currency', read_only=True)
+    currency_id = serializers.IntegerField(write_only=True, required=False, default=Currency.objects.get(code='USD').id)
     manager_details = ProjectUserSerializer(source='manager', read_only=True)
     officials_details = ProjectUserSerializer(source='officials', many=True, read_only=True)
     category_details = ProjectCategorySerializer(source='category', read_only=True)
@@ -57,6 +65,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'project_type', 'category', 'category_details',
             'manager', 'manager_details', 'officials', 'officials_details',
+            'currency', 'currency_id',
             'start_date', 'target_end_date', 'actual_end_date',
             'budget', 'funds_allocated', 'funds_spent', 'budget_utilization', 'is_overbudget',
             'status', 'location', 'beneficiaries', 'success_criteria', 'risks', 'notes',
