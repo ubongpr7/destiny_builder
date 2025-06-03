@@ -1240,7 +1240,7 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                     notes=f'This was authomatically created against the project expense with ID {expense.id}'
 
                 )
-                organizational_expense.project_instance=organizational_expense
+                organizational_expense.project_instance=expense
                 organizational_expense.save()
             expense.save()
             project = expense.project
