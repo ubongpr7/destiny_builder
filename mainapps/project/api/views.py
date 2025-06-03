@@ -1241,7 +1241,7 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
 
                 )
                 expense.organizational_expense=organizational_expense
-                expense.save()
+            expense.save()
             project = expense.project
             funds_spent = project.funds_spent
             if funds_spent > project.budget:
