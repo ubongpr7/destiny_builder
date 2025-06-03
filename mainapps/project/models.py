@@ -363,16 +363,25 @@ class ProjectExpense(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='expenses')
     update = models.ForeignKey(DailyProjectUpdate, on_delete=models.SET_NULL, null=True, blank=True, related_name='expenses')
     title = models.CharField(max_length=200)
+    budget_item = models.ForeignKey(
+        'finance.BudgetItem', 
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL, 
+        related_name='project_expenses',
+        help_text="Budget item this expense is associated with (if any)"
+    )
     description = models.TextField()
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date_incurred = models.DateField()
-    incurred_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='project_expenses')
+    incurred_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='project_expenses', blank=True, null=True)
     receipt = models.FileField(upload_to='expense_receipts/', blank=True, null=True)
     category = models.CharField(max_length=100)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_expenses')
     approval_date = models.DateField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
+    currency = models.ForeignKey('common.Currency', on_delete=models.SET_NULL, null=True, related_name='project_expenses')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_expenses')

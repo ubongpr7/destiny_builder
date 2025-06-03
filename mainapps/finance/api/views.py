@@ -15,6 +15,7 @@ from django.db.models import Max
 from django.core.paginator import Paginator
 
 from mainapps.permit.mixins import ActivityTrackingMixin
+from mainapps.project.models import ProjectExpense
 
 from ..models import (
     FinancialInstitution, BankAccount, ExchangeRate, DonationCampaign,
@@ -4212,9 +4213,23 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     def perform_create(self, serializer):
         expense = serializer.save(submitted_by=self.request.user)
         expense.currency=expense.budget_item.budget.currency
+        
+        if expense.budget_item.budget.project and not expense.project_instance:
+            project_expense=ProjectExpense.objects.create(
+                project=expense.budget_item.budget.project,
+                amount=expense.amount,
+                budget_item=expense.budget_item,
+                currency=expense.currency,
+                date_incurred=expense.expense_date,
+                created_by=self.request.user,
+                title=expense.title,
+                description=expense.description,
+                notes=f'Created from organizational expense\n {expense.notes or "" }',
+            )
+            expense.project_instance = project_expense
+        
         expense.save()
         
-        # Auto-send notification for submission
         if expense.status == 'pending':
             send_expense_notification(expense, 'submitted')
     
@@ -4240,8 +4255,14 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             expense.approved_by = request.user
             expense.approved_at = timezone.now()
             expense.save()
-            
-            # Update budget item if linked
+            project_expense = expense.project_instance
+            if project_expense:
+                project_expense.status = 'approved'
+                project_expense.approved_by = request.user
+                project_expense.approval_date = timezone.now().today()
+                project_expense.notes = f"{project_expense.notes}\n \n Approved by {request.user.username} on {timezone.now().isoformat()}\n{project_expense.notes or ''}"
+                project_expense.save()
+
             if expense.budget_item:
                 budget = expense.budget_item.budget
                 spent_percentage = budget.spent_percentage

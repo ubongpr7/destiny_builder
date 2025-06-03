@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from django.db import models
 from mainapps.accounts.models import Department
-from mainapps.project.models import Project
+from mainapps.project.models import Project, ProjectExpense
 from mainapps.common.models import Currency
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import get_user_model
@@ -4050,6 +4050,7 @@ class BudgetFunding(models.Model):
 
 class BudgetItem(models.Model):
     """Line items within a budget"""
+    title= models.CharField(max_length=255,null=True,blank=False, help_text="Title of the budget item")
     budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='items')
     category = models.CharField(max_length=100)
     subcategory = models.CharField(max_length=100, blank=True, null=True)
@@ -4087,12 +4088,7 @@ class BudgetItem(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_budget_items')
     
     # Relationships
-    project_expenses = models.ManyToManyField(
-        'project.ProjectExpense', 
-        blank=True, 
-        related_name='budget_items',
-        help_text="Project expenses allocated to this budget item"
-    )
+    
     
     class Meta:
         ordering = ['category', 'subcategory']
@@ -4416,7 +4412,14 @@ class OrganizationalExpense(models.Model):
         null=True,
         blank=True,
     )
-    
+    project_instance = models.OneToOneField(
+        ProjectExpense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='organizational_expense',
+        help_text="Link to a project expense if applicable"
+    )
     expense_date = models.DateField()
     vendor = models.CharField(max_length=200, blank=True, null=True)
     receipt = models.FileField(upload_to='org_expense_receipts/', blank=True, null=True)

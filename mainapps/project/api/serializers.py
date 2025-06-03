@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
+from mainapps.finance.models import BudgetItem
 from mainapps.inventory.models import Asset
 from ..models import DailyProjectUpdate, MilestoneMedia, Project, ProjectAsset, ProjectCategory, ProjectExpense, ProjectMedia, ProjectMilestone, ProjectTeamMember, ProjectUpdateMedia
 from django.utils import timezone
@@ -384,9 +385,16 @@ class ProjectUpdateMinimalSerializer(serializers.ModelSerializer):
         model = DailyProjectUpdate
         fields = ['id', 'date', 'summary']
 
+class BudgetItemSerializer(serializers.ModelSerializer):
+    """Serializer for BudgetItem model"""
+    class Meta:
+        model = BudgetItem
+        fields = ['id', 'title', 'description']
+
 
 class ProjectExpenseSerializer(serializers.ModelSerializer):
     """Serializer for ProjectExpense model with related data"""
+    budget_item= BudgetItemSerializer(source='budget_item', read_only=True)
     incurred_by_details = ProjectUserSerializer(source='incurred_by', read_only=True)
     approved_by_details = ProjectUserSerializer(source='approved_by', read_only=True)
     project_details = ProjectMinimalSerializer(source='project', read_only=True)
@@ -400,7 +408,7 @@ class ProjectExpenseSerializer(serializers.ModelSerializer):
             'title', 'description', 'amount', 'date_incurred',
             'incurred_by', 'incurred_by_details', 'receipt', 'receipt_url',
             'category', 'status', 'approved_by', 'approved_by_details',
-            'approval_date', 'notes', 'created_at', 'updated_at'
+            'approval_date', 'notes', 'created_at', 'updated_at', 'budget_item'
         ]
         read_only_fields = ['created_at', 'updated_at', 'approved_by', 'approval_date']
     
@@ -417,7 +425,7 @@ class ProjectExpenseCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'project', 'update', 'title', 'description', 'amount',
             'date_incurred', 'incurred_by', 'receipt', 'category',
-            'status', 'notes'
+            'status', 'notes','budget_item'
         ]
         read_only_fields = ['approved_by', 'approval_date']
     

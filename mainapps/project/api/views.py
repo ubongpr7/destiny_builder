@@ -11,6 +11,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import api_view, permission_classes, action
 from django.db.models.functions import TruncDate
 from rest_framework.viewsets import ReadOnlyModelViewSet
+from mainapps.finance.models import OrganizationalExpense
 from mainapps.permit.mixins import ActivityTrackingMixin
 from mainapps.user_profile.api.views import BaseReferenceViewSet
 from .notification_utils import (
@@ -1219,10 +1220,25 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
         else:
             expense = serializer.save()
         
-        # Send notification for expense created
         notify_expense_created(expense)
         
-        # Check if project is over budget
+        organizational_expense=expense.organizational_expense
+        if not organizational_expense:
+            organizational_expense=OrganizationalExpense.objects.create(
+                title=expense.title,
+                amount=expense.amount,
+                expense_date=expense.date_incurred,
+                project_instance=expense,
+                submitted_by=self.request.user,
+                expense_type='operational',
+                description=expense.description,
+                budget_item=expense.budget_item,
+                currency=expense.currency,
+                notes=f'This was authomatically created against the project expense with ID {expense.id}'
+
+            )
+            expense.organizational_expense=organizational_expense
+            expense.save()
         project = expense.project
         funds_spent = project.funds_spent
         if funds_spent > project.budget:
@@ -1347,16 +1363,18 @@ class ProjectExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
         # Add notes if provided
         if 'notes' in serializer.validated_data and serializer.validated_data['notes']:
             if expense.notes:
-                expense.notes += f"\n\nReimbursement notes: {serializer.validated_data['notes']}"
+                expense.notes += f"\n\n \nReimbursement notes: {serializer.validated_data['notes']}"
             else:
                 expense.notes = f"Reimbursement notes: {serializer.validated_data['notes']}"
                 
         expense.save()
-        
-        # Send notification for expense status change
+        organizational_expense = expense.organizational_expense
+        if organizational_expense:
+            organizational_expense.status = 'paid'
+            organizational_expense.notes+= f"\n\nThe project expense with id {expense.id} has been confirmed reimbursed on {timezone.now().date()} by {request.user.get_full_name},{request.user.email}."
+            organizational_expense.save() 
         notify_expense_status_changed(expense, old_status, 'reimbursed', request.user)
         
-        # Return updated expense
         response_serializer = ProjectExpenseSerializer(expense, context={'request': request})
         return Response(response_serializer.data)
     

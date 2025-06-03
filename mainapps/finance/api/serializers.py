@@ -10,7 +10,7 @@ from ..models import (
 )
 from mainapps.common.models import Currency
 from mainapps.accounts.models import Department
-from mainapps.project.models import Project
+from mainapps.project.models import Project, ProjectExpense
 from mainapps.project.api.serializers import ProjectMinimalSerializer
 
 User = get_user_model()
@@ -944,11 +944,10 @@ class BudgetItemSerializer(serializers.ModelSerializer):
     spent_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
     budget_id=serializers.IntegerField(write_only=True)
-    
     class Meta:
         model = BudgetItem
         fields = [
-            'id', 'budget', 'category', 'subcategory', 'description', 'budgeted_amount',
+            'id', 'budget','title', 'category', 'subcategory', 'description', 'budgeted_amount',
             'spent_amount', 'is_locked', 'approval_required_threshold', 'responsible_person',
             'responsible_person_id', 'notes', 'created_at', 'updated_at',
             'remaining_amount', 'spent_percentage', 'formatted_amount', 'budget_id'
@@ -962,11 +961,12 @@ class OrganizationalExpenseMinimalSerializer(serializers.ModelSerializer):
     formatted_amount = serializers.CharField(read_only=True)
     submitted_by = UserBasicSerializer(read_only=True)
     approved_by = UserBasicSerializer(read_only=True)
+    project_instance = serializers.StringRelatedField(read_only=True)
     
     class Meta:
         model = OrganizationalExpense
         fields = [
-            'id', 'title', 'description', 'expense_type', 'amount', 
+            'id', 'title','project_instance', 'description', 'expense_type', 'amount', 
             'currency', 'expense_date', 'vendor', 'status', 
             'formatted_amount', 'submitted_by', 'approved_by', 'approved_at'
         ]
@@ -1031,7 +1031,7 @@ class BudgetItemDetailSerializer(serializers.ModelSerializer):
         model = BudgetItem
         fields = [
             # Basic fields
-            'id', 'category', 'subcategory', 'description', 'budgeted_amount',
+            'id', 'category','title', 'subcategory', 'description', 'budgeted_amount',
             'is_locked', 'approval_required_threshold', 'responsible_person',
             'notes', 'created_at', 'updated_at', 'budget',
             
@@ -1590,7 +1590,12 @@ class BudgetDetailSerializer(serializers.ModelSerializer):
     def get_active_allocations_count(self, obj):
         return obj.fund_allocations.filter(is_active=True).count()
 
-
+class ProjectExpenseMinimalSerializer(serializers.ModelSerializer):
+    incurred_by= UserBasicSerializer(read_only=True)
+    class Meta:
+        model = ProjectExpense
+        fields = ['id', 'project', 'title','incurred_by', 'amount', 'currency', 'date_incurred', 'status']
+        read_only_fields = ['id', 'project']
 
 class OrganizationalExpenseSerializer(serializers.ModelSerializer):
     budget_item = BudgetItemSerializer
@@ -1600,7 +1605,7 @@ class OrganizationalExpenseSerializer(serializers.ModelSerializer):
     approved_by = UserBasicSerializer(read_only=True)
     approved_by_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     formatted_amount = serializers.CharField(read_only=True)
-    
+    project_instance = ProjectExpenseMinimalSerializer(read_only=True)
     class Meta:
         model = OrganizationalExpense
         fields = [
