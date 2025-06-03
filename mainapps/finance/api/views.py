@@ -5066,16 +5066,30 @@ class FundingSourceViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             'status': 'inactive'
         })
 
-class BudgetItemViewSet(ActivityTrackingMixin,viewsets.ModelViewSet,):
+class BudgetItemFilter(filters.FilterSet):
+    # Add custom filter for project through budget
+    project = filters.NumberFilter(field_name='budget__project')
+    
+    class Meta:
+        model = BudgetItem
+        fields = ['budget', 'category']
 
+class BudgetItemViewSet(ActivityTrackingMixin, viewsets.ModelViewSet):
     queryset = BudgetItem.objects.select_related('budget', 'created_by')
     serializer_class = BudgetItemSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['budget', 'category']
-    search_fields = [ 'description']
-    ordering_fields = [ 'allocated_amount', 'spent_amount', 'created_at']
-    # ordering = ['title']
+    
+    # Updated filterset configuration
+    filterset_fields = {
+        'budget': ['exact'],
+        'category': ['exact'],
+        'budget__project': ['exact']  # Enable project filtering
+    }
+    
+    search_fields = ['description']
+    ordering_fields = ['allocated_amount', 'spent_amount', 'created_at']
+
 
     def get_serializer(self, *args, **kwargs):
         if self.action == 'retrieve' :
