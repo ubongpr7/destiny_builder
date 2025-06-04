@@ -6,7 +6,7 @@ from mptt.models import MPTTModel, TreeForeignKey
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
-from django.db.models import Sum
+from django.db.models import Sum,Count
 from decimal import Decimal
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -101,6 +101,45 @@ class Project(models.Model):
         )['total'] or Decimal('0.00')
         
         return reimbursed_sum
+    
+    @property
+    def progress(self):
+        """Overall project progress based on milestones"""
+        milestones = self.milestones.all()
+        if not milestones:
+            return 0
+        total_percentage = sum(m.completion_percentage for m in milestones)
+        return total_percentage / len(milestones)
+    
+    @property
+    def is_active(self):
+        """Check if project is currently active"""
+        return self.status == 'active'
+    
+    @property
+    def is_completed(self):
+        """Check if project is completed"""
+        return self.status == 'completed'
+    
+    @property
+    def duration(self):
+        """Project duration in days"""
+        return (self.target_end_date - self.start_date).days
+    
+    @property
+    def remaining_days(self):
+        """Days remaining until project deadline"""
+        if self.is_completed:
+            return 0
+        return max(0, (self.target_end_date - timezone.now().date()).days)
+    
+    @property
+    def expense_summary(self):
+        """Summary of expenses by status"""
+        return self.expenses.values('status').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        )
 
 class ProjectTeamMember(models.Model):
     """Team members assigned to projects"""
@@ -127,7 +166,19 @@ class ProjectTeamMember(models.Model):
     
     def __str__(self):
         return f"{self.project.title} - {self.user.username} ({self.role})"
-
+    @property
+    def is_active(self):
+        """Check if team member is currently active on project"""
+        if self.end_date:
+            return self.end_date >= timezone.now().date()
+        return True
+    
+    @property
+    def duration(self):
+        """Duration of team member's involvement"""
+        if self.end_date:
+            return (self.end_date - self.join_date).days
+        return (timezone.now().date() - self.join_date).days
 class ProjectAsset(models.Model):
     """Assets assigned to projects"""
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='assigned_assets')
@@ -144,7 +195,17 @@ class ProjectAsset(models.Model):
     
     def __str__(self):
         return f"{self.project.title} - {self.asset.name}"
-
+    @property
+    def is_returned(self):
+        """Check if asset has been returned"""
+        return self.return_date is not None
+    
+    @property
+    def usage_duration(self):
+        """Duration of asset usage on project"""
+        if self.return_date:
+            return (self.return_date - self.assigned_date).days
+        return (timezone.now().date() - self.assigned_date).days
 class ProjectMilestone(models.Model):
     """Milestones for projects with enhanced tracking capabilities"""
     STATUS_CHOICES = [
@@ -183,6 +244,33 @@ class ProjectMilestone(models.Model):
        
     class Meta:
         ordering = ['due_date', 'priority']
+    property
+    def is_on_track(self):
+        """Check if milestone is on track based on progress"""
+        if self.status == 'completed':
+            return True
+        return self.completion_percentage >= (self.days_elapsed / self.total_days * 100)
+    
+    @property
+    def days_elapsed(self):
+        """Days since milestone was created"""
+        return (timezone.now().date() - self.created_at.date()).days
+    
+    @property
+    def total_days(self):
+        """Total days allocated for milestone"""
+        return (self.due_date - self.created_at.date()).days
+    
+    @property
+    def progress_status(self):
+        """Textual progress status"""
+        if self.status == 'completed':
+            return "Completed"
+        if self.is_overdue():
+            return "Delayed"
+        if self.completion_percentage > 0:
+            return "In Progress"
+        return "Not Started"
     
     def __str__(self):
         return f"{self.project.title} - {self.title}"
@@ -385,7 +473,32 @@ class ProjectExpense(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_expenses')
+    @property
+    def is_approved(self):
+        """Check if expense is approved"""
+        return self.status == 'approved'
     
+    @property
+    def is_pending(self):
+        """Check if expense is pending approval"""
+        return self.status == 'pending'
+    
+    @property
+    def is_reimbursed(self):
+        """Check if expense has been reimbursed"""
+        return self.status == 'reimbursed'
+    
+    @property
+    def days_since_incurred(self):
+        """Days since expense was incurred"""
+        return (timezone.now().date() - self.date_incurred).days
+    
+    @property
+    def approval_time(self):
+        """Time taken for approval if approved"""
+        if self.approval_date:
+            return (self.approval_date - self.date_incurred).days
+        return None
     def __str__(self):
         return f"{self.project.title} - {self.title} (${self.amount})"
 
@@ -403,3 +516,12 @@ class ProjectComment(MPTTModel):
         order_insertion_by = ['created_at']
     def __str__(self):
         return f"Comment by {self.user.username} on {self.project.title}"
+    @property
+    def reply_count(self):
+        """Number of replies to this comment"""
+        return self.replies.count()
+    
+    @property
+    def is_recent(self):
+        """Check if comment was made recently"""
+        return (timezone.now() - self.created_at).days < 1

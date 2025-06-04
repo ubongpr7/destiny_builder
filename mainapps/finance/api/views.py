@@ -4550,7 +4550,7 @@ class DashboardViewSet(ActivityTrackingMixin,viewsets.ViewSet):
             )
             
             # Calculate metrics
-            total_raised = campaign.current_amount_in_target_currency
+            total_raised = campaign.current_amount
             period_raised = campaign_donations.aggregate(total=Sum('amount'))['total'] or 0
             donation_count = campaign_donations.count()
             unique_donors = campaign_donations.values('donor').distinct().count()
