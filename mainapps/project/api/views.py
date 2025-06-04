@@ -607,7 +607,7 @@ class ProjectViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 # Manager performance (using filtered projects)
                 manager_performance = {}
                 for project in [p for p in filtered_projects if p.manager]:
-                    manager_name = project.manager.get_full_name() or project.manager.username
+                    manager_name = project.manager.get_full_name or project.manager.username
                     manager_id = project.manager.id
                     if manager_id not in manager_performance:
                         manager_performance[manager_id] = {
