@@ -5588,7 +5588,7 @@ class DashboardViewSet(ActivityTrackingMixin, viewsets.ViewSet):
 
         # Prefetch related data if needed for spent_amount property
         budgets_qs = budgets_qs.prefetch_related('items')  
-        budgets = list(budgets_qs)
+        budgets = budgets_qs
 
         # Group budgets by currency
         currency_groups = self._group_by_currency(budgets, 'currency')
