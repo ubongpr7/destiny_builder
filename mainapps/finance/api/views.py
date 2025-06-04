@@ -4741,7 +4741,8 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
 #         }
         
 #         return Response(performance)
-#     @action(detail=False, methods=['get'])
+#   
+#   @action(detail=False, methods=['get'])
 #     def grant_pipeline(self, request):
 #         """Get grant pipeline analytics"""
 #         grants = Grant.objects.all()
@@ -5573,6 +5574,180 @@ class DashboardViewSet(ActivityTrackingMixin, viewsets.ViewSet):
             }
         })
     
+      
+    @action(detail=False, methods=['get'])
+    def budget_performance(self, request):
+        """Get budget performance analytics grouped by currency"""
+        fiscal_year = request.query_params.get('fiscal_year')
+        currency_id = request.query_params.get('currency')
+
+        # Fetch budgets and convert to list to reuse evaluated objects
+        budgets_qs = Budget.objects.filter(status__in=['active', 'completed'])
+        if fiscal_year:
+            budgets_qs = budgets_qs.filter(fiscal_year=fiscal_year)
+
+        # Prefetch related data if needed for spent_amount property
+        budgets_qs = budgets_qs.prefetch_related('items')  
+        budgets = list(budgets_qs)
+
+        # Group budgets by currency
+        currency_groups = self._group_by_currency(budgets, 'currency')
+
+        currency_performance = {}
+
+        for currency_id_key, currency_data in currency_groups.items():
+            budgets_list = currency_data['items']
+
+            # Helper function for budget group calculations
+            def calculate_group_stats(group):
+                total_allocated = sum(b.total_amount for b in group)
+                total_spent = sum(b.spent_amount for b in group)
+                utilizations = [
+                    (b.spent_amount / b.total_amount) * 100 
+                    for b in group 
+                    if b.total_amount > 0
+                ]
+                avg_utilization = sum(utilizations) / len(utilizations) if utilizations else 0
+                return total_allocated, total_spent, avg_utilization
+
+            # Calculate stats for this currency
+            total_allocated, total_spent, avg_utilization = calculate_group_stats(budgets_list)
+
+            currency_performance[currency_id_key] = {
+                'currency_id': currency_data['currency_id'],
+                'currency_code': currency_data['currency_code'],
+                'currency_name': currency_data['currency_name'],
+                'summary': {
+                    'total_budgets': len(budgets_list),
+                    'total_allocated': float(total_allocated),
+                    'total_spent': float(total_spent),
+                    'overall_utilization': float(avg_utilization)
+                }
+            }
+
+        # Return single currency data if filtered, otherwise return all
+        if currency_id and int(currency_id) in currency_performance:
+            return Response(currency_performance[int(currency_id)])
+
+        # If only one currency, return it directly for backward compatibility
+        if len(currency_performance) == 1:
+            return Response(list(currency_performance.values())[0])
+
+        # Multiple currencies
+        return Response({
+            'currencies': currency_performance,
+            'generated_at': timezone.now().isoformat(),
+            'filters_applied': {
+                'fiscal_year': fiscal_year,
+                'currency': currency_id
+            }
+        })
+
+    @action(detail=False, methods=['get'])
+    def cash_flow_forecast(self, request):
+        """Get cash flow forecast grouped by currency"""
+        from decimal import Decimal
+
+        days_ahead = int(request.query_params.get('days', 90))
+        currency_id = request.query_params.get('currency')
+
+        # Current balance - ensure Decimal
+        current_balance = sum(
+            account.current_balance 
+            for account in BankAccount.objects.filter(is_active=True)
+        )
+        if not isinstance(current_balance, Decimal):
+            current_balance = Decimal(str(current_balance))
+
+        # Projected income
+        recurring_income_raw = RecurringDonation.objects.filter(
+            status='active',
+            next_payment_date__lte=timezone.now().date() + timedelta(days=days_ahead)
+        ).aggregate(total=Sum('amount'))['total']
+        recurring_income = Decimal(str(recurring_income_raw)) if recurring_income_raw else Decimal('0')
+
+        # Expected grant disbursements
+        active_grants = Grant.objects.filter(status='active')
+        expected_grants = Decimal('0')
+        for grant in active_grants:
+            remaining = grant.amount - grant.amount_received
+            expected_grants += remaining
+
+        # Projected expenses
+        pending_expenses_raw = OrganizationalExpense.objects.filter(
+            status='approved'
+        ).aggregate(total=Sum('amount'))['total']
+        pending_expenses = Decimal(str(pending_expenses_raw)) if pending_expenses_raw else Decimal('0')
+
+        avg_monthly_expenses_raw = OrganizationalExpense.objects.filter(
+            status='paid',
+            expense_date__gte=timezone.now().date() - timedelta(days=90)
+        ).aggregate(avg=Avg('amount'))['avg']
+        avg_monthly_expenses = Decimal(str(avg_monthly_expenses_raw)) if avg_monthly_expenses_raw else Decimal('0')
+
+        projected_monthly_expenses = avg_monthly_expenses * Decimal(str(days_ahead / 30))
+
+        # Calculate forecast for each currency
+        currency_forecasts = {}
+        for account in BankAccount.objects.filter(is_active=True):
+            currency_id = account.currency_id
+            if currency_id not in currency_forecasts:
+                currency_forecasts[currency_id] = {
+                    'currency_id': currency_id,
+                    'current_balance': Decimal('0'),
+                    'projected_income': {
+                        'recurring_donations': Decimal('0'),
+                        'expected_grants': Decimal('0'),
+                        'total': Decimal('0')
+                    },
+                    'projected_expenses': {
+                        'pending_approved': Decimal('0'),
+                        'estimated_recurring': Decimal('0'),
+                        'total': Decimal('0')
+                    },
+                    'projected_balance': Decimal('0'),
+                    'cash_flow_health': 'healthy'
+                }
+
+            # Update the forecast for this currency
+            currency_forecasts[currency_id]['current_balance'] += account.current_balance
+            currency_forecasts[currency_id]['projected_income']['recurring_donations'] += recurring_income
+            currency_forecasts[currency_id]['projected_income']['expected_grants'] += expected_grants
+            currency_forecasts[currency_id]['projected_expenses']['pending_approved'] += pending_expenses
+            currency_forecasts[currency_id]['projected_expenses']['estimated_recurring'] += projected_monthly_expenses
+
+        # Calculate final projected balances and health
+        for currency_id, forecast in currency_forecasts.items():
+            forecast['projected_balance'] = (
+                forecast['current_balance'] + 
+                forecast['projected_income']['recurring_donations'] + 
+                forecast['projected_income']['expected_grants'] - 
+                forecast['projected_expenses']['pending_approved'] - 
+                forecast['projected_expenses']['estimated_recurring']
+            )
+            forecast['cash_flow_health'] = (
+                'healthy' if forecast['projected_balance'] > forecast['current_balance'] * Decimal('0.5')
+                else 'concerning' if forecast['projected_balance'] > Decimal('0')
+                else 'critical'
+            )
+
+        # Return single currency data if filtered, otherwise return all
+        if currency_id and int(currency_id) in currency_forecasts:
+            return Response(currency_forecasts[int(currency_id)])
+
+        # If only one currency, return it directly for backward compatibility
+        if len(currency_forecasts) == 1:
+            return Response(list(currency_forecasts.values())[0])
+
+        # Multiple currencies
+        return Response({
+            'currencies': currency_forecasts,
+            'generated_at': timezone.now().isoformat(),
+            'filters_applied': {
+                'days': days_ahead,
+                'currency': currency_id
+            }
+        })
 
 class GrantReportViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = GrantReport.objects.select_related('grant', 'submitted_by', 'reviewed_by')
