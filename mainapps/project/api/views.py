@@ -724,6 +724,7 @@ class ProjectViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             })
             
         except Exception as e:
+            print(f"Error calculating project statistics: {e}")
             # Return a safe fallback response
             return Response({
                 'summary': {
