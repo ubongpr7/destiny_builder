@@ -402,74 +402,376 @@ class ProjectViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
                 return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False)
-    def statistics(self, request):
-        """Get project statistics"""
-        base_queryset = self.get_queryset()
-        
-        # Get full status counts (including all statuses)
-        status_counts = dict(
-            base_queryset.values('status')
-            .annotate(count=Count('id'))
-            .values_list('status', 'count')
-        )
-        
-        # Create filtered queryset excluding submitted/cancelled projects
-        filtered_queryset = base_queryset.exclude(
-            status__in=['submitted', 'cancelled','rejected']
-        )
-        
-        # Financial calculations using filtered queryset
-        budget_stats = filtered_queryset.aggregate(
-            total_budget=Sum('budget'),
-            total_allocated=Sum('calculated_funds_allocated'),
-            total_spent=Sum('calculated_funds_spent'),
-            avg_budget=Avg('budget')
-        )
-        
-        # Timeline statistics using filtered queryset
-        today = timezone.now().date()
-        active_projects = filtered_queryset.filter(status='active').count()
-        delayed_projects = filtered_queryset.filter(
-            target_end_date__lt=today,
-            status__in=['planning', 'active', 'on_hold']
-        ).count()
-        completed_on_time = filtered_queryset.filter(
-            status='completed',
-            actual_end_date__lte=F('target_end_date')
-        ).count()
-        completed_late = filtered_queryset.filter(
-            status='completed',
-            actual_end_date__gt=F('target_end_date')
-        ).count()
-        
-        # Type and category counts using filtered queryset
-        type_counts = dict(
-            filtered_queryset.values('project_type')
-            .annotate(count=Count('id'))
-            .values_list('project_type', 'count')
-        )
-        
-        category_counts = dict(
-            filtered_queryset.values('category__name')
-            .annotate(count=Count('id'))
-            .values_list('category__name', 'count')
-        )
-        
-        return Response({
-            'status_counts': status_counts,
-            'type_counts': type_counts,
-            'budget_stats': budget_stats,
-            'timeline_stats': {
-                'active_projects': active_projects,
-                'delayed_projects': delayed_projects,
-                'completed_on_time': completed_on_time,
-                'completed_late': completed_late,
-            },
-            'category_counts': category_counts
-        })
+    # Add this import at the top of your views file
 
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """Get comprehensive project statistics for dashboard - grouped by currency"""
+        try:
+            # Get query parameters for filtering
+            project_type = request.query_params.get('project_type')
+            status_filter = request.query_params.get('status')
+            category_id = request.query_params.get('category')
+            currency_id = request.query_params.get('currency')
+            manager_id = request.query_params.get('manager')
+            year = request.query_params.get('year')
+            
+            # Base queryset
+            projects = self.get_queryset()
+            
+            # Apply filters
+            if project_type:
+                projects = projects.filter(project_type=project_type)
+            if status_filter:
+                projects = projects.filter(status=status_filter)
+            if category_id:
+                projects = projects.filter(category_id=category_id)
+            if currency_id:
+                projects = projects.filter(currency_id=currency_id)
+            if manager_id:
+                projects = projects.filter(manager_id=manager_id)
+            if year:
+                projects = projects.filter(start_date__year=year)
+            
+            # Group projects by currency
+            currency_groups = {}
+            for project in projects.select_related('currency'):
+                currency_code = project.currency.code if project.currency else 'Unknown'
+                currency_name = project.currency.name if project.currency else 'Unknown Currency'
+                currency_key = project.currency.id if project.currency else 0
+                
+                if currency_key not in currency_groups:
+                    currency_groups[currency_key] = {
+                        'currency_id': currency_key,
+                        'currency_code': currency_code,
+                        'currency_name': currency_name,
+                        'projects': []
+                    }
+                currency_groups[currency_key]['projects'].append(project)
+            
+            # If specific currency requested, only process that currency
+            if currency_id:
+                currency_groups = {int(currency_id): currency_groups.get(int(currency_id), {
+                    'currency_id': int(currency_id),
+                    'currency_code': 'Unknown',
+                    'currency_name': 'Unknown Currency',
+                    'projects': []
+                })}
+            
+            # Helper functions
+            def safe_divide(numerator, denominator, default=0.0):
+                try:
+                    if denominator is None or denominator == 0:
+                        return default
+                    if numerator is None:
+                        return default
+                    result = float(numerator) / float(denominator)
+                    if result != result:  # Check for NaN
+                        return default
+                    return result
+                except (TypeError, ValueError, ZeroDivisionError):
+                    return default
+            
+            def safe_percentage(numerator, denominator, default=0.0):
+                return safe_divide(numerator, denominator, default) * 100
+            
+            def calculate_currency_statistics(currency_projects, currency_info):
+                """Calculate statistics for a specific currency"""
+                
+                today = timezone.now().date()
+                
+                # Create filtered queryset excluding submitted/cancelled/rejected projects
+                filtered_projects = [p for p in currency_projects if p.status not in ['submitted', 'cancelled', 'rejected']]
+                all_projects = currency_projects
+                
+                # Overall Summary for this currency
+                total_projects = len(all_projects)
+                active_projects = len([p for p in filtered_projects if p.status == 'active'])
+                completed_projects = len([p for p in filtered_projects if p.status == 'completed'])
+                
+                # Financial calculations using filtered projects
+                total_budget = sum(float(p.budget) if p.budget else 0.0 for p in filtered_projects)
+                total_allocated = sum(float(p.funds_allocated) if p.funds_allocated else 0.0 for p in filtered_projects)
+                total_spent = sum(float(p.funds_spent) if p.funds_spent else 0.0 for p in filtered_projects)
+                total_remaining = total_allocated - total_spent
+                avg_budget = safe_divide(total_budget, len(filtered_projects), 0.0) if filtered_projects else 0.0
+                budget_utilization = safe_percentage(total_spent, total_allocated, 0.0)
+                
+                # Timeline statistics
+                delayed_projects = len([p for p in filtered_projects 
+                                    if p.target_end_date < today and p.status in ['planning', 'active', 'on_hold']])
+                
+                completed_on_time = len([p for p in filtered_projects 
+                                    if p.status == 'completed' and p.actual_end_date and p.actual_end_date <= p.target_end_date])
+                
+                completed_late = len([p for p in filtered_projects 
+                                    if p.status == 'completed' and p.actual_end_date and p.actual_end_date > p.target_end_date])
+                
+                # Calculate average project duration and success rate
+                completed_projects_list = [p for p in filtered_projects if p.status == 'completed' and p.actual_end_date]
+                avg_duration = 0
+                if completed_projects_list:
+                    total_duration = sum((p.actual_end_date - p.start_date).days for p in completed_projects_list)
+                    avg_duration = total_duration / len(completed_projects_list)
+                
+                success_rate = safe_percentage(completed_on_time, max(completed_on_time + completed_late, 1), 0.0)
+                
+                summary = {
+                    'currency_id': currency_info['currency_id'],
+                    'currency_code': currency_info['currency_code'],
+                    'currency_name': currency_info['currency_name'],
+                    'total_projects': total_projects,
+                    'active_projects': active_projects,
+                    'completed_projects': completed_projects,
+                    'total_budget': total_budget,
+                    'total_allocated': total_allocated,
+                    'total_spent': total_spent,
+                    'total_remaining': total_remaining,
+                    'avg_budget': round(avg_budget, 2),
+                    'budget_utilization': round(budget_utilization, 2),
+                    'delayed_projects': delayed_projects,
+                    'success_rate': round(success_rate, 2),
+                    'avg_duration_days': round(avg_duration, 0),
+                }
+                
+                # Status counts (including all projects, not just filtered)
+                status_counts = {}
+                for project in all_projects:
+                    status = project.status
+                    if status not in status_counts:
+                        status_counts[status] = {
+                            'status': status,
+                            'count': 0,
+                            'total_budget': 0.0,
+                            'total_spent': 0.0
+                        }
+                    status_counts[status]['count'] += 1
+                    status_counts[status]['total_budget'] += float(project.budget) if project.budget else 0.0
+                    status_counts[status]['total_spent'] += float(project.funds_spent) if project.funds_spent else 0.0
+                
+                status_counts = list(status_counts.values())
+                status_counts.sort(key=lambda x: x.get('count', 0), reverse=True)
+                
+                # Project type counts (using filtered projects)
+                type_counts = {}
+                for project in filtered_projects:
+                    project_type = project.project_type
+                    if project_type not in type_counts:
+                        type_counts[project_type] = {
+                            'project_type': project_type,
+                            'count': 0,
+                            'total_budget': 0.0,
+                            'total_spent': 0.0,
+                            'avg_utilization': 0.0
+                        }
+                    type_counts[project_type]['count'] += 1
+                    type_counts[project_type]['total_budget'] += float(project.budget) if project.budget else 0.0
+                    type_counts[project_type]['total_spent'] += float(project.funds_spent) if project.funds_spent else 0.0
+                
+                # Calculate utilization for each type
+                for type_data in type_counts.values():
+                    type_data['avg_utilization'] = round(
+                        safe_percentage(type_data['total_spent'], type_data['total_budget'], 0.0), 2
+                    )
+                
+                type_counts = list(type_counts.values())
+                type_counts.sort(key=lambda x: x.get('total_budget', 0), reverse=True)
+                
+                # Category counts (using filtered projects)
+                category_counts = {}
+                for project in [p for p in filtered_projects if p.category]:
+                    category_name = project.category.name
+                    category_id = project.category.id
+                    if category_id not in category_counts:
+                        category_counts[category_id] = {
+                            'category_id': category_id,
+                            'category_name': category_name,
+                            'count': 0,
+                            'total_budget': 0.0,
+                            'total_spent': 0.0,
+                            'avg_utilization': 0.0
+                        }
+                    category_counts[category_id]['count'] += 1
+                    category_counts[category_id]['total_budget'] += float(project.budget) if project.budget else 0.0
+                    category_counts[category_id]['total_spent'] += float(project.funds_spent) if project.funds_spent else 0.0
+                
+                # Calculate utilization for each category
+                for category_data in category_counts.values():
+                    category_data['avg_utilization'] = round(
+                        safe_percentage(category_data['total_spent'], category_data['total_budget'], 0.0), 2
+                    )
+                
+                category_counts = list(category_counts.values())
+                category_counts.sort(key=lambda x: x.get('total_budget', 0), reverse=True)
+                
+                # Manager performance (using filtered projects)
+                manager_performance = {}
+                for project in [p for p in filtered_projects if p.manager]:
+                    manager_name = project.manager.get_full_name() or project.manager.username
+                    manager_id = project.manager.id
+                    if manager_id not in manager_performance:
+                        manager_performance[manager_id] = {
+                            'manager_id': manager_id,
+                            'manager_name': manager_name,
+                            'total_projects': 0,
+                            'completed_projects': 0,
+                            'active_projects': 0,
+                            'total_budget': 0.0,
+                            'total_spent': 0.0,
+                            'success_rate': 0.0,
+                            'avg_utilization': 0.0
+                        }
+                    
+                    manager_data = manager_performance[manager_id]
+                    manager_data['total_projects'] += 1
+                    manager_data['total_budget'] += float(project.budget) if project.budget else 0.0
+                    manager_data['total_spent'] += float(project.funds_spent) if project.funds_spent else 0.0
+                    
+                    if project.status == 'completed':
+                        manager_data['completed_projects'] += 1
+                    elif project.status == 'active':
+                        manager_data['active_projects'] += 1
+                
+                # Calculate rates for each manager
+                for manager_data in manager_performance.values():
+                    manager_data['success_rate'] = round(
+                        safe_percentage(manager_data['completed_projects'], manager_data['total_projects'], 0.0), 2
+                    )
+                    manager_data['avg_utilization'] = round(
+                        safe_percentage(manager_data['total_spent'], manager_data['total_budget'], 0.0), 2
+                    )
+                
+                manager_performance = list(manager_performance.values())
+                manager_performance.sort(key=lambda x: x.get('total_budget', 0), reverse=True)
+                
+                # Timeline analysis
+                timeline_stats = {
+                    'active_projects': active_projects,
+                    'delayed_projects': delayed_projects,
+                    'completed_on_time': completed_on_time,
+                    'completed_late': completed_late,
+                    'on_time_rate': round(safe_percentage(completed_on_time, max(completed_on_time + completed_late, 1), 0.0), 2),
+                    'avg_project_duration': round(avg_duration, 0),
+                }
+                
+                # Performance metrics
+                performance_metrics = {
+                    'project_completion_rate': round(safe_percentage(completed_projects, max(total_projects, 1), 0.0), 2),
+                    'active_project_rate': round(safe_percentage(active_projects, max(total_projects, 1), 0.0), 2),
+                    'budget_efficiency': round(budget_utilization, 2),
+                    'timeline_adherence': round(safe_percentage(completed_on_time, max(completed_projects, 1), 0.0), 2),
+                    'resource_utilization': round(safe_percentage(total_spent, total_budget, 0.0), 2),
+                }
+                
+                # Risk analysis
+                high_risk_projects = len([p for p in filtered_projects 
+                                        if p.status == 'active' and p.target_end_date < today + timedelta(days=30)])
+                
+                over_budget_projects = len([p for p in filtered_projects 
+                                        if float(p.funds_spent or 0) > float(p.funds_allocated or 0)])
+                
+                risk_analysis = {
+                    'timeline_risk': round(safe_percentage(delayed_projects, max(active_projects, 1), 0.0), 2),
+                    'budget_risk': round(safe_percentage(over_budget_projects, max(len(filtered_projects), 1), 0.0), 2),
+                    'high_risk_projects': high_risk_projects,
+                    'resource_constraint_risk': round(safe_percentage(
+                        len([p for p in filtered_projects if safe_percentage(float(p.funds_spent or 0), float(p.budget or 1), 0.0) > 90]),
+                        max(len(filtered_projects), 1), 0.0
+                    ), 2),
+                }
+                
+                return {
+                    'summary': summary,
+                    'status_counts': status_counts,
+                    'type_counts': type_counts,
+                    'category_counts': category_counts,
+                    'manager_performance': manager_performance,
+                    'timeline_stats': timeline_stats,
+                    'performance_metrics': performance_metrics,
+                    'risk_analysis': risk_analysis,
+                }
+            
+            # Calculate statistics for each currency
+            currency_statistics = {}
+            for currency_key, currency_data in currency_groups.items():
+                if currency_data['projects']:  # Only process currencies that have projects
+                    currency_statistics[currency_key] = calculate_currency_statistics(
+                        currency_data['projects'], 
+                        currency_data
+                    )
+            
+            # If specific currency requested, return only that currency's data
+            if currency_id and int(currency_id) in currency_statistics:
+                return Response(currency_statistics[int(currency_id)])
+            
+            # If no specific currency requested, return all currencies
+            # For backward compatibility, if only one currency, return its data directly
+            if len(currency_statistics) == 1:
+                return Response(list(currency_statistics.values())[0])
+            
+            # Multiple currencies - return grouped data
+            return Response({
+                'currencies': currency_statistics,
+                'generated_at': timezone.now().isoformat(),
+                'filters_applied': {
+                    'project_type': project_type,
+                    'status': status_filter,
+                    'category': category_id,
+                    'currency': currency_id,
+                    'manager': manager_id,
+                    'year': year,
+                }
+            })
+            
+        except Exception as e:
+            # Return a safe fallback response
+            return Response({
+                'summary': {
+                    'currency_id': None,
+                    'currency_code': 'Unknown',
+                    'currency_name': 'Unknown Currency',
+                    'total_projects': 0,
+                    'active_projects': 0,
+                    'completed_projects': 0,
+                    'total_budget': 0.0,
+                    'total_allocated': 0.0,
+                    'total_spent': 0.0,
+                    'total_remaining': 0.0,
+                    'avg_budget': 0.0,
+                    'budget_utilization': 0.0,
+                    'delayed_projects': 0,
+                    'success_rate': 0.0,
+                    'avg_duration_days': 0,
+                },
+                'status_counts': [],
+                'type_counts': [],
+                'category_counts': [],
+                'manager_performance': [],
+                'timeline_stats': {
+                    'active_projects': 0,
+                    'delayed_projects': 0,
+                    'completed_on_time': 0,
+                    'completed_late': 0,
+                    'on_time_rate': 0.0,
+                    'avg_project_duration': 0,
+                },
+                'performance_metrics': {
+                    'project_completion_rate': 0.0,
+                    'active_project_rate': 0.0,
+                    'budget_efficiency': 0.0,
+                    'timeline_adherence': 0.0,
+                    'resource_utilization': 0.0,
+                },
+                'risk_analysis': {
+                    'timeline_risk': 0.0,
+                    'budget_risk': 0.0,
+                    'high_risk_projects': 0,
+                    'resource_constraint_risk': 0.0,
+                },
+                'generated_at': timezone.now().isoformat(),
+                'error': 'Statistics calculation failed',
+                'filters_applied': {}
+            })
 
 class ProjectTeamMemberViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
