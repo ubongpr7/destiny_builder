@@ -4354,15 +4354,587 @@ class OrganizationalExpenseViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
             'status': expense.status
         })
 
-# Enhanced Dashboard ViewSet with comprehensive analytics
-class DashboardViewSet(ActivityTrackingMixin,viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+# class DashboardViewSet(ActivityTrackingMixin,viewsets.ViewSet):
+#     permission_classes = [IsAuthenticatedOrReadOnly]
+    
+#     @action(detail=False, methods=['get'])
+#     def financial_overview(self, request):
+#         """Get comprehensive financial overview"""
+#         # Time period filter
+#         period = request.query_params.get('period', 'month')  # month, quarter, year, all
+        
+#         end_date = timezone.now()
+#         if period == 'month':
+#             start_date = end_date.replace(day=1)
+#         elif period == 'quarter':
+#             quarter_start = ((end_date.month - 1) // 3) * 3 + 1
+#             start_date = end_date.replace(month=quarter_start, day=1)
+#         elif period == 'year':
+#             start_date = end_date.replace(month=1, day=1)
+#         else:
+#             start_date = None
+        
+#         # Base querysets
+#         donations_qs = Donation.objects.filter(status='completed')
+#         grants_qs = Grant.objects.filter(status__in=['active', 'completed'])
+#         expenses_qs = OrganizationalExpense.objects.filter(status='paid')
+#         budgets_qs = Budget.objects.filter(status='active').prefetch_related('items')  # Prefetch items
+        
+#         # Apply date filters
+#         if start_date:
+#             donations_qs = donations_qs.filter(donation_date__gte=start_date)
+#             expenses_qs = expenses_qs.filter(expense_date__gte=start_date)
+        
+#         # Calculate totals
+#         total_donations = donations_qs.aggregate(total=Sum('amount'))['total'] or 0
+#         total_grants_received = grants_qs.aggregate(total=Sum('amount_received'))['total'] or 0
+#         total_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or 0
+        
+#         # Evaluate budgets and calculate spent amount in memory
+#         budgets = list(budgets_qs)
+#         total_budget_allocated = sum(b.total_amount for b in budgets)
+#         total_budget_spent = sum(b.spent_amount for b in budgets)
+        
+#         # Account balances
+#         active_accounts = BankAccount.objects.filter(is_active=True)
+#         total_account_balance = sum(account.current_balance for account in active_accounts)
+        
+#         # Counts
+#         active_campaigns = DonationCampaign.objects.filter(is_active=True).count()
+#         active_grants = Grant.objects.filter(status='active').count()
+#         pending_expenses = OrganizationalExpense.objects.filter(status='pending').count()
+#         overdue_reports = GrantReport.objects.filter(
+#             due_date__lt=timezone.now().date(),
+#             status__in=['draft', 'submitted']
+#         ).count()
+        
+#         # Financial health indicators
+#         net_income = total_donations + total_grants_received - total_expenses
+#         budget_utilization = (total_budget_spent / total_budget_allocated * 100) if total_budget_allocated > 0 else 0
+        
+#         # Liquidity ratio (current assets / current liabilities - simplified)
+#         liquidity_ratio = total_account_balance / max(pending_expenses * 1000, 1)  # Rough estimate
+        
+#         overview = {
+#             'period': period,
+#             'date_range': {
+#                 'start': start_date.isoformat() if start_date else None,
+#                 'end': end_date.isoformat()
+#             },
+#             'financial_summary': {
+#                 'total_donations': float(total_donations),
+#                 'total_grants_received': float(total_grants_received),
+#                 'total_expenses': float(total_expenses),
+#                 'net_income': float(net_income),
+#                 'total_account_balance': float(total_account_balance),
+#                 'total_budget_allocated': float(total_budget_allocated),
+#                 'total_budget_spent': float(total_budget_spent),
+#                 'budget_utilization_percentage': float(budget_utilization)
+#             },
+#             'activity_counts': {
+#                 'active_campaigns': active_campaigns,
+#                 'active_grants': active_grants,
+#                 'pending_expenses': pending_expenses,
+#                 'overdue_reports': overdue_reports,
+#                 'active_accounts': active_accounts.count()
+#             },
+#             'health_indicators': {
+#                 'financial_health': 'good' if net_income > 0 else 'concerning',
+#                 'budget_health': 'good' if budget_utilization < 90 else 'warning' if budget_utilization < 100 else 'critical',
+#                 'liquidity_health': 'good' if liquidity_ratio > 2 else 'warning' if liquidity_ratio > 1 else 'critical',
+#                 'liquidity_ratio': float(liquidity_ratio)
+#             }
+#         }
+        
+#         return Response(overview)
+    
+#     @action(detail=False, methods=['get'])
+#     def donation_analytics(self, request):
+#         """Get detailed donation analytics"""
+#         days = int(request.query_params.get('days', 30))
+#         end_date = timezone.now()
+#         start_date = end_date - timedelta(days=days)
+        
+#         donations = Donation.objects.filter(
+#             status='completed',
+#             donation_date__gte=start_date
+#         )
+        
+#         # Daily trends
+#         daily_donations = donations.extra(
+#             select={'day': 'date(donation_date)'}
+#         ).values('day').annotate(
+#             count=Count('id'),
+#             total=Sum('amount'),
+#             avg=Avg('amount')
+#         ).order_by('day')
+        
+#         # Payment method analysis
+#         total_donations_count = donations.count()
+#         payment_methods = donations.values('payment_method').annotate(
+#             count=Count('id'),
+#             total=Sum('amount'),
+#             percentage=Case(
+#                 When(count__gt=0, then=Value(100.0) * Count('id') / Value(total_donations_count)),
+#                 default=Value(0.0),
+#                 output_field=FloatField()
+#             )
+#         ).order_by('-total')
+        
+#         # Donor analysis
+#         donor_stats = {
+#             'total_donors': donations.values('donor').distinct().count(),
+#             'anonymous_donations': donations.filter(is_anonymous=True).count(),
+#             'repeat_donors': donations.values('donor').annotate(
+#                 donation_count=Count('id')
+#             ).filter(donation_count__gt=1).count()
+#         }
+        
+#         # Amount segments
+#         amount_segments = {
+#             'micro': donations.filter(amount__lt=50).count(),
+#             'small': donations.filter(amount__gte=50, amount__lt=250).count(),
+#             'medium': donations.filter(amount__gte=250, amount__lt=1000).count(),
+#             'large': donations.filter(amount__gte=1000, amount__lt=5000).count(),
+#             'major': donations.filter(amount__gte=5000).count()
+#         }
+        
+#         # Campaign performance
+#         campaign_performance = donations.filter(campaign__isnull=False).values(
+#             'campaign__title', 'campaign__id'
+#         ).annotate(
+#             total_raised=Sum('amount'),
+#             donation_count=Count('id'),
+#             avg_donation=Avg('amount')
+#         ).order_by('-total_raised')[:10]
+        
+#         analytics = {
+#             'period': f'{days} days',
+#             'summary': {
+#                 'total_donations': donations.count(),
+#                 'total_amount': donations.aggregate(total=Sum('amount'))['total'] or 0,
+#                 'average_donation': donations.aggregate(avg=Avg('amount'))['avg'] or 0,
+#                 'largest_donation': donations.aggregate(max=Sum('amount'))['max'] or 0
+#             },
+#             'daily_trends': list(daily_donations),
+#             'payment_methods': list(payment_methods),
+#             'donor_stats': donor_stats,
+#             'amount_segments': amount_segments,
+#             'top_campaigns': list(campaign_performance)
+#         }
+        
+#         return Response(analytics)
+    
+#     @action(detail=False, methods=['get'])
+#     def campaign_performance(self, request):
+#         """Get campaign performance analytics"""
+#         days = int(request.query_params.get('days', 30))
+#         limit = int(request.query_params.get('limit', 10))
+        
+#         end_date = timezone.now()
+#         start_date = end_date - timedelta(days=days)
+        
+#         # Get active campaigns with their performance metrics
+#         campaigns = DonationCampaign.objects.filter(
+#             is_active=True
+#         ).prefetch_related('donations')
+        
+#         campaign_data = []
+        
+#         for campaign in campaigns:
+#             # Get donations for this campaign in the time period
+#             campaign_donations = campaign.donations.filter(
+#                 status='completed',
+#                 donation_date__gte=start_date
+#             )
+            
+#             # Calculate metrics
+#             total_raised = campaign.current_amount
+#             period_raised = campaign_donations.aggregate(total=Sum('amount'))['total'] or 0
+#             donation_count = campaign_donations.count()
+#             unique_donors = campaign_donations.values('donor').distinct().count()
+#             avg_donation = campaign_donations.aggregate(avg=Avg('amount'))['avg'] or 0
+            
+#             # Progress metrics
+#             progress_percentage = campaign.progress_percentage
+#             days_remaining = (campaign.end_date - timezone.now().date()).days
+#             days_active = (timezone.now().date() - campaign.start_date).days + 1
+            
+#             # Performance indicators
+#             daily_avg = period_raised / days if days > 0 else 0
+#             target_daily_needed = (campaign.target_amount - total_raised) / max(days_remaining, 1) if days_remaining > 0 else 0
+            
+#             campaign_data.append({
+#                 'id': campaign.id,
+#                 'title': campaign.title,
+#                 'target_amount': float(campaign.target_amount),
+#                 'total_raised': float(total_raised),
+#                 'period_raised': float(period_raised),
+#                 'progress_percentage': float(progress_percentage),
+#                 'days_remaining': days_remaining,
+#                 'days_active': days_active,
+#                 'donation_count': donation_count,
+#                 'unique_donors': unique_donors,
+#                 'avg_donation': float(avg_donation),
+#                 'daily_avg_period': float(daily_avg),
+#                 'target_daily_needed': float(target_daily_needed),
+#                 'is_on_track': daily_avg >= target_daily_needed if days_remaining > 0 else progress_percentage >= 100,
+#                 'performance_score': min(100, (daily_avg / max(target_daily_needed, 1)) * 100) if target_daily_needed > 0 else 100,
+#                 'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
+#                 'start_date': campaign.start_date,
+#                 'end_date': campaign.end_date,
+#                 'is_featured': campaign.is_featured
+#             })
+        
+#         # Sort by performance score or total raised
+#         sort_by = request.query_params.get('sort', 'performance_score')
+#         if sort_by == 'total_raised':
+#             campaign_data.sort(key=lambda x: x['total_raised'], reverse=True)
+#         elif sort_by == 'progress_percentage':
+#             campaign_data.sort(key=lambda x: x['progress_percentage'], reverse=True)
+#         elif sort_by == 'period_raised':
+#             campaign_data.sort(key=lambda x: x['period_raised'], reverse=True)
+#         else:  # performance_score
+#             campaign_data.sort(key=lambda x: x['performance_score'], reverse=True)
+        
+#         # Limit results
+#         campaign_data = campaign_data[:limit]
+        
+#         # Calculate summary statistics
+#         total_campaigns = len(campaigns)
+#         active_campaigns = len([c for c in campaign_data if c['days_remaining'] > 0])
+#         successful_campaigns = len([c for c in campaign_data if c['progress_percentage'] >= 100])
+#         on_track_campaigns = len([c for c in campaign_data if c['is_on_track']])
+        
+#         # Overall performance metrics
+#         total_target = sum(c['target_amount'] for c in campaign_data)
+#         total_raised_all = sum(c['total_raised'] for c in campaign_data)
+#         total_period_raised = sum(c['period_raised'] for c in campaign_data)
+        
+#         performance = {
+#             'period_days': days,
+#             'summary': {
+#                 'total_campaigns': total_campaigns,
+#                 'active_campaigns': active_campaigns,
+#                 'successful_campaigns': successful_campaigns,
+#                 'on_track_campaigns': on_track_campaigns,
+#                 'success_rate': (successful_campaigns / max(total_campaigns, 1)) * 100,
+#                 'on_track_rate': (on_track_campaigns / max(active_campaigns, 1)) * 100,
+#                 'total_target_amount': float(total_target),
+#                 'total_raised': float(total_raised_all),
+#                 'period_raised': float(total_period_raised),
+#                 'overall_progress': (total_raised_all / max(total_target, 1)) * 100
+#             },
+#             'campaigns': campaign_data,
+#             'top_performers': campaign_data[:5],  # Top 5 performers
+#             'needs_attention': [
+#                 c for c in campaign_data 
+#                 if c['days_remaining'] > 0 and c['performance_score'] < 50
+#             ][:5]  # Campaigns that need attention
+#         }
+        
+#         return Response(performance)
+    
+#     @action(detail=False, methods=['get'])
+#     def budget_performance(self, request):
+#         """Get budget performance analytics"""
+#         fiscal_year = request.query_params.get('fiscal_year')
+        
+#         # Fetch budgets and convert to list to reuse evaluated objects
+#         budgets_qs = Budget.objects.filter(status__in=['active', 'completed'])
+#         if fiscal_year:
+#             budgets_qs = budgets_qs.filter(fiscal_year=fiscal_year)
+        
+#         # Prefetch related data if needed for spent_amount property
+#         budgets_qs = budgets_qs.prefetch_related('items')  
+#         budgets = list(budgets_qs)
+
+#         # Helper function for budget group calculations
+#         def calculate_group_stats(group):
+#             total_allocated = sum(b.total_amount for b in group)
+#             total_spent = sum(b.spent_amount for b in group)
+#             utilizations = [
+#                 (b.spent_amount / b.total_amount) * 100 
+#                 for b in group 
+#                 if b.total_amount > 0
+#             ]
+#             avg_utilization = sum(utilizations) / len(utilizations) if utilizations else 0
+#             return total_allocated, total_spent, avg_utilization
+
+#         # Budget utilization by type
+#         budget_by_type = []
+#         for budget_type in set(b.budget_type for b in budgets):
+#             type_budgets = [b for b in budgets if b.budget_type == budget_type]
+#             total_allocated, total_spent, avg_utilization = calculate_group_stats(type_budgets)
+            
+#             budget_by_type.append({
+#                 'budget_type': budget_type,
+#                 'count': len(type_budgets),
+#                 'total_allocated': float(total_allocated),
+#                 'total_spent': float(total_spent),
+#                 'avg_utilization': float(avg_utilization)
+#             })
+
+#         # Sort by total allocated
+#         budget_by_type.sort(key=lambda x: x['total_allocated'], reverse=True)
+        
+#         # Department budget analysis
+#         dept_budgets = []
+#         departments = {b.department: b.department.name for b in budgets if b.department}
+#         for dept_id, dept_name in departments.items():
+#             dept_budgets_group = [b for b in budgets if b.department == dept_id]
+#             total_allocated, total_spent, _ = calculate_group_stats(dept_budgets_group)
+#             utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
+            
+#             dept_budgets.append({
+#                 'department__name': dept_name,
+#                 'total_allocated': float(total_allocated),
+#                 'total_spent': float(total_spent),
+#                 'utilization': float(utilization)
+#             })
+
+#         # Sort by total allocated
+#         dept_budgets.sort(key=lambda x: x['total_allocated'], reverse=True)
+        
+#         # Budget alerts
+#         over_budget = 0
+#         near_limit = 0
+#         for budget in budgets:
+#             if budget.total_amount > 0:
+#                 utilization = (budget.spent_amount / budget.total_amount) * 100
+#                 if utilization > 100:
+#                     over_budget += 1
+#                 elif utilization >= 90:
+#                     near_limit += 1
+        
+#         # Monthly spending trends (unchanged)
+#         monthly_spending = OrganizationalExpense.objects.filter(
+#             status='paid',
+#             expense_date__gte=timezone.now() - timedelta(days=365)
+#         ).extra(
+#             select={'month': "date_trunc('month', expense_date)"}
+#         ).values('month').annotate(
+#             total=Sum('amount'),
+#             count=Count('id')
+#         ).order_by('month')
+        
+#         # Overall utilization calculation
+#         total_allocated = sum(b.total_amount for b in budgets)
+#         total_spent = sum(b.spent_amount for b in budgets)
+#         overall_utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
+        
+#         performance = {
+#             'summary': {
+#                 'total_budgets': len(budgets),
+#                 'total_allocated': float(total_allocated),
+#                 'total_spent': float(total_spent),
+#                 'overall_utilization': float(overall_utilization)
+#             },
+#             'alerts': {
+#                 'over_budget_count': over_budget,
+#                 'near_limit_count': near_limit,
+#                 'total_alerts': over_budget + near_limit
+#             },
+#             'by_type': budget_by_type,
+#             'by_department': dept_budgets,
+#             'monthly_trends': list(monthly_spending)
+#         }
+        
+#         return Response(performance)
+#     @action(detail=False, methods=['get'])
+#     def grant_pipeline(self, request):
+#         """Get grant pipeline analytics"""
+#         grants = Grant.objects.all()
+        
+#         # Pipeline by status
+#         pipeline_status = grants.values('status').annotate(
+#             count=Count('id'),
+#             total_amount=Sum('amount'),
+#             avg_amount=Avg('amount')
+#         ).order_by('status')
+        
+#         # Success rate
+#         total_submitted = grants.filter(status__in=[
+#             'submitted', 'under_review', 'approved', 'rejected', 'active', 'completed'
+#         ]).count()
+#         successful = grants.filter(status__in=['approved', 'active', 'completed']).count()
+#         success_rate = (successful / total_submitted * 100) if total_submitted > 0 else 0
+        
+#         # Grantor analysis
+#         grantor_performance = grants.filter(status__in=['approved', 'active', 'completed']).values(
+#             'grantor', 'grantor_type'
+#         ).annotate(
+#             grant_count=Count('id'),
+#             total_amount=Sum('amount'),
+#             avg_amount=Avg('amount')
+#         ).order_by('-total_amount')[:10]
+        
+#         # Disbursement tracking - Fixed calculation
+#         active_grants = grants.filter(status='active')
+#         total_approved = active_grants.aggregate(total=Sum('amount'))['total'] or 0
+#         total_received = active_grants.aggregate(total=Sum('amount_received'))['total'] or 0
+#         pending_disbursement = total_approved - total_received
+        
+#         disbursement_summary = {
+#             'total_approved': float(total_approved),
+#             'total_received': float(total_received),
+#             'pending_disbursement': float(pending_disbursement)
+#         }
+        
+#         # Upcoming deadlines
+#         upcoming_deadlines = GrantReport.objects.filter(
+#             due_date__gte=timezone.now().date(),
+#             due_date__lte=timezone.now().date() + timedelta(days=30),
+#             status__in=['draft', 'submitted']
+#         ).select_related('grant').order_by('due_date')[:10]
+        
+#         pipeline = {
+#             'summary': {
+#                 'total_grants': grants.count(),
+#                 'success_rate': float(success_rate),
+#                 'total_pipeline_value': grants.aggregate(total=Sum('amount'))['total'] or 0,
+#                 'active_grants': grants.filter(status='active').count()
+#             },
+#             'pipeline_status': list(pipeline_status),
+#             'disbursement_summary': disbursement_summary,
+#             'top_grantors': list(grantor_performance),
+#             'upcoming_deadlines': [
+#                 {
+#                     'grant_title': report.grant.title,
+#                     'report_type': report.report_type,
+#                     'due_date': report.due_date,
+#                     'days_until_due': (report.due_date - timezone.now().date()).days
+#                 }
+#                 for report in upcoming_deadlines
+#             ]
+#         }
+        
+#         return Response(pipeline)
+    
+#     @action(detail=False, methods=['get'])
+#     def cash_flow_forecast(self, request):
+#         """Get cash flow forecast"""
+#         from decimal import Decimal
+        
+#         days_ahead = int(request.query_params.get('days', 90))
+        
+#         # Current balance - ensure Decimal
+#         current_balance = sum(
+#             account.current_balance 
+#             for account in BankAccount.objects.filter(is_active=True)
+#         )
+#         if not isinstance(current_balance, Decimal):
+#             current_balance = Decimal(str(current_balance))
+        
+#         # Projected income
+#         # Recurring donations - ensure Decimal
+#         recurring_income_raw = RecurringDonation.objects.filter(
+#             status='active',
+#             next_payment_date__lte=timezone.now().date() + timedelta(days=days_ahead)
+#         ).aggregate(total=Sum('amount'))['total']
+#         recurring_income = Decimal(str(recurring_income_raw)) if recurring_income_raw else Decimal('0')
+        
+#         # Expected grant disbursements - ensure Decimal
+#         active_grants = Grant.objects.filter(status='active')
+#         expected_grants = Decimal('0')
+#         for grant in active_grants:
+#             remaining = grant.amount - grant.amount_received
+#             expected_grants += remaining
+        
+#         # Projected expenses
+#         # Approved but unpaid expenses - ensure Decimal
+#         pending_expenses_raw = OrganizationalExpense.objects.filter(
+#             status='approved'
+#         ).aggregate(total=Sum('amount'))['total']
+#         pending_expenses = Decimal(str(pending_expenses_raw)) if pending_expenses_raw else Decimal('0')
+        
+#         # Monthly recurring expenses (estimate based on last 3 months) - ensure Decimal
+#         avg_monthly_expenses_raw = OrganizationalExpense.objects.filter(
+#             status='paid',
+#             expense_date__gte=timezone.now().date() - timedelta(days=90)
+#         ).aggregate(avg=Avg('amount'))['avg']
+#         avg_monthly_expenses = Decimal(str(avg_monthly_expenses_raw)) if avg_monthly_expenses_raw else Decimal('0')
+        
+#         projected_monthly_expenses = avg_monthly_expenses * Decimal(str(days_ahead / 30))
+        
+#         # Calculate forecast - all Decimal operations
+#         projected_balance = (
+#             current_balance + 
+#             recurring_income + 
+#             expected_grants - 
+#             pending_expenses - 
+#             projected_monthly_expenses
+#         )
+        
+#         forecast = {
+#             'forecast_period_days': days_ahead,
+#             'current_balance': float(current_balance),
+#             'projected_income': {
+#                 'recurring_donations': float(recurring_income),
+#                 'expected_grants': float(expected_grants),
+#                 'total': float(recurring_income + expected_grants)
+#             },
+#             'projected_expenses': {
+#                 'pending_approved': float(pending_expenses),
+#                 'estimated_recurring': float(projected_monthly_expenses),
+#                 'total': float(pending_expenses + projected_monthly_expenses)
+#             },
+#             'projected_balance': float(projected_balance),
+#             'cash_flow_health': (
+#                 'healthy' if projected_balance > current_balance * Decimal('0.5')
+#                 else 'concerning' if projected_balance > Decimal('0')
+#                 else 'critical'
+#             )
+#         }
+        
+#         return Response(forecast)
+
+
+class DashboardViewSet(ActivityTrackingMixin, viewsets.ViewSet):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def _group_by_currency(self, queryset, currency_field='currency'):
+        """Helper method to group querysets by currency"""
+        currency_groups = {}
+        for item in queryset.select_related(currency_field):
+
+            currency = getattr(item, currency_field, None)
+            print(currency)
+            currency_code = currency.code if currency else 'Unknown'
+            currency_name = currency.name if currency else 'Unknown Currency'
+            currency_id = currency.id if currency else 0
+            
+            if currency_id not in currency_groups:
+                currency_groups[currency_id] = {
+                    'currency_id': currency_id,
+                    'currency_code': currency_code,
+                    'currency_name': currency_name,
+                    'items': []
+                }
+            currency_groups[currency_id]['items'].append(item)
+        
+        return currency_groups
+    
+    def _safe_aggregate(self, items, field, operation='sum'):
+        """Safely aggregate values from items"""
+        try:
+            values = [getattr(item, field) for item in items]
+            if operation == 'sum':
+                return sum(float(v) for v in values)
+            elif operation == 'avg':
+                return sum(float(v) for v in values) / len(values) if values else 0
+            elif operation == 'count':
+                return len(values)
+        except Exception:
+            print(f"Error aggregating field '{field}' with operation '{operation}'")
+            return 0
     
     @action(detail=False, methods=['get'])
     def financial_overview(self, request):
-        """Get comprehensive financial overview"""
+        """Get comprehensive financial overview grouped by currency"""
         # Time period filter
-        period = request.query_params.get('period', 'month')  # month, quarter, year, all
+        period = request.query_params.get('period', 'month') 
+        currency_id = request.query_params.get('currency')  
         
         end_date = timezone.now()
         if period == 'month':
@@ -4379,516 +4951,628 @@ class DashboardViewSet(ActivityTrackingMixin,viewsets.ViewSet):
         donations_qs = Donation.objects.filter(status='completed')
         grants_qs = Grant.objects.filter(status__in=['active', 'completed'])
         expenses_qs = OrganizationalExpense.objects.filter(status='paid')
-        budgets_qs = Budget.objects.filter(status='active').prefetch_related('items')  # Prefetch items
+        budgets_qs = Budget.objects.filter(status='active').prefetch_related('items')
         
         # Apply date filters
         if start_date:
             donations_qs = donations_qs.filter(donation_date__gte=start_date)
             expenses_qs = expenses_qs.filter(expense_date__gte=start_date)
         
-        # Calculate totals
-        total_donations = donations_qs.aggregate(total=Sum('amount'))['total'] or 0
-        total_grants_received = grants_qs.aggregate(total=Sum('amount_received'))['total'] or 0
-        total_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or 0
+        # Apply currency filter if specified
+        if currency_id:
+            donations_qs = donations_qs.filter(currency_id=currency_id)
+            grants_qs = grants_qs.filter(currency_id=currency_id)
+            expenses_qs = expenses_qs.filter(currency_id=currency_id)
+            budgets_qs = budgets_qs.filter(currency_id=currency_id)
         
-        # Evaluate budgets and calculate spent amount in memory
-        budgets = list(budgets_qs)
-        total_budget_allocated = sum(b.total_amount for b in budgets)
-        total_budget_spent = sum(b.spent_amount for b in budgets)
+        # Group by currency
+        donation_groups = self._group_by_currency(donations_qs, 'currency')
+        grant_groups = self._group_by_currency(grants_qs, 'currency')
+        expense_groups = self._group_by_currency(expenses_qs, 'currency')
+        budget_groups = self._group_by_currency(budgets_qs, 'currency')
         
-        # Account balances
-        active_accounts = BankAccount.objects.filter(is_active=True)
-        total_account_balance = sum(account.current_balance for account in active_accounts)
+        # Get all unique currencies
+        all_currencies = set()
+        all_currencies.update(donation_groups.keys())
+        all_currencies.update(grant_groups.keys())
+        all_currencies.update(expense_groups.keys())
+        all_currencies.update(budget_groups.keys())
+        print(f"All currencies found: {all_currencies}")
+        currency_overviews = {}
         
-        # Counts
-        active_campaigns = DonationCampaign.objects.filter(is_active=True).count()
-        active_grants = Grant.objects.filter(status='active').count()
-        pending_expenses = OrganizationalExpense.objects.filter(status='pending').count()
-        overdue_reports = GrantReport.objects.filter(
-            due_date__lt=timezone.now().date(),
-            status__in=['draft', 'submitted']
-        ).count()
-        
-        # Financial health indicators
-        net_income = total_donations + total_grants_received - total_expenses
-        budget_utilization = (total_budget_spent / total_budget_allocated * 100) if total_budget_allocated > 0 else 0
-        
-        # Liquidity ratio (current assets / current liabilities - simplified)
-        liquidity_ratio = total_account_balance / max(pending_expenses * 1000, 1)  # Rough estimate
-        
-        overview = {
-            'period': period,
-            'date_range': {
-                'start': start_date.isoformat() if start_date else None,
-                'end': end_date.isoformat()
-            },
-            'financial_summary': {
-                'total_donations': float(total_donations),
-                'total_grants_received': float(total_grants_received),
-                'total_expenses': float(total_expenses),
-                'net_income': float(net_income),
-                'total_account_balance': float(total_account_balance),
-                'total_budget_allocated': float(total_budget_allocated),
-                'total_budget_spent': float(total_budget_spent),
-                'budget_utilization_percentage': float(budget_utilization)
-            },
-            'activity_counts': {
-                'active_campaigns': active_campaigns,
-                'active_grants': active_grants,
-                'pending_expenses': pending_expenses,
-                'overdue_reports': overdue_reports,
-                'active_accounts': active_accounts.count()
-            },
-            'health_indicators': {
-                'financial_health': 'good' if net_income > 0 else 'concerning',
-                'budget_health': 'good' if budget_utilization < 90 else 'warning' if budget_utilization < 100 else 'critical',
-                'liquidity_health': 'good' if liquidity_ratio > 2 else 'warning' if liquidity_ratio > 1 else 'critical',
-                'liquidity_ratio': float(liquidity_ratio)
+        for currency_id in all_currencies:
+            # Get currency info
+            currency_info = (
+                donation_groups.get(currency_id, {}) or
+                grant_groups.get(currency_id, {}) or
+                expense_groups.get(currency_id, {}) or
+                budget_groups.get(currency_id, {})
+            )
+            
+            # Calculate totals for this currency
+            donations = donation_groups.get(currency_id, {}).get('items', [])
+            grants = grant_groups.get(currency_id, {}).get('items', [])
+            expenses = expense_groups.get(currency_id, {}).get('items', [])
+            budgets = budget_groups.get(currency_id, {}).get('items', [])
+            
+            total_donations = self._safe_aggregate(donations, 'amount')
+            total_grants_received = self._safe_aggregate(grants, 'amount_received')
+            total_expenses = self._safe_aggregate(expenses, 'amount')
+            total_budget_allocated = self._safe_aggregate(budgets, 'total_amount')
+            total_budget_spent = sum(getattr(b, 'spent_amount', 0) or 0 for b in budgets)
+            
+            # Account balances for this currency
+            active_accounts = BankAccount.objects.filter(
+                is_active=True,
+                currency_id=currency_id if currency_id != 0 else None
+            )
+            total_account_balance = sum(
+                float(account.current_balance or 0) for account in active_accounts
+            )
+            
+            # Counts
+            active_campaigns = DonationCampaign.objects.filter(
+                is_active=True,
+                target_currency_id=currency_id if currency_id != 0 else None
+            ).count()
+            
+            active_grants = len([g for g in grants if g.status == 'active'])
+            pending_expenses = OrganizationalExpense.objects.filter(
+                status='pending',
+                currency_id=currency_id if currency_id != 0 else None
+            ).count()
+            
+            overdue_reports = GrantReport.objects.filter(
+                due_date__lt=timezone.now().date(),
+                status__in=['draft', 'submitted'],
+                grant__currency_id=currency_id if currency_id != 0 else None
+            ).count()
+            
+            # Financial health indicators
+            net_income = total_donations + total_grants_received - total_expenses
+            budget_utilization = (
+                (float(total_budget_spent) / float(total_budget_allocated) * 100) 
+                if total_budget_allocated > 0 else 0
+            )
+            
+            # Liquidity ratio
+            liquidity_ratio = (
+                total_account_balance / max(pending_expenses * 1000, 1)
+            )
+            
+            currency_overviews[currency_id] = {
+                'currency_id': currency_info.get('currency_id', currency_id),
+                'currency_code': currency_info.get('currency_code', 'Unknown'),
+                'currency_name': currency_info.get('currency_name', 'Unknown Currency'),
+                'period': period,
+                'date_range': {
+                    'start': start_date.isoformat() if start_date else None,
+                    'end': end_date.isoformat()
+                },
+                'financial_summary': {
+                    'total_donations': float(total_donations),
+                    'total_grants_received': float(total_grants_received),
+                    'total_expenses': float(total_expenses),
+                    'net_income': float(net_income),
+                    'total_account_balance': float(total_account_balance),
+                    'total_budget_allocated': float(total_budget_allocated),
+                    'total_budget_spent': float(total_budget_spent),
+                    'budget_utilization_percentage': float(budget_utilization)
+                },
+                'activity_counts': {
+                    'active_campaigns': active_campaigns,
+                    'active_grants': active_grants,
+                    'pending_expenses': pending_expenses,
+                    'overdue_reports': overdue_reports,
+                    'active_accounts': active_accounts.count()
+                },
+                'health_indicators': {
+                    'financial_health': 'good' if net_income > 0 else 'concerning',
+                    'budget_health': (
+                        'good' if budget_utilization < 90 
+                        else 'warning' if budget_utilization < 100 
+                        else 'critical'
+                    ),
+                    'liquidity_health': (
+                        'good' if liquidity_ratio > 2 
+                        else 'warning' if liquidity_ratio > 1 
+                        else 'critical'
+                    ),
+                    'liquidity_ratio': float(liquidity_ratio)
+                }
             }
-        }
         
-        return Response(overview)
+        # Return single currency data if filtered, otherwise return all
+        # if currency_id and int(currency_id) in currency_overviews:
+        #     return Response(currency_overviews[int(currency_id)])
+        
+        # # If only one currency, return it directly for backward compatibility
+        # if len(currency_overviews) == 1:
+        #     return Response(list(currency_overviews.values()))
+        
+        # Multiple currencies
+        return Response({
+            'currencies': currency_overviews,
+            'generated_at': timezone.now().isoformat(),
+            'filters_applied': {
+                'period': period,
+                'currency': currency_id
+            }
+        })
     
     @action(detail=False, methods=['get'])
     def donation_analytics(self, request):
-        """Get detailed donation analytics"""
+        """Get detailed donation analytics grouped by currency"""
         days = int(request.query_params.get('days', 30))
+        currency_id = request.query_params.get('currency')
+        
         end_date = timezone.now()
         start_date = end_date - timedelta(days=days)
         
-        donations = Donation.objects.filter(
+        donations_qs = Donation.objects.filter(
             status='completed',
             donation_date__gte=start_date
         )
         
-        # Daily trends
-        daily_donations = donations.extra(
-            select={'day': 'date(donation_date)'}
-        ).values('day').annotate(
-            count=Count('id'),
-            total=Sum('amount'),
-            avg=Avg('amount')
-        ).order_by('day')
+        # Apply currency filter if specified
+        if currency_id:
+            donations_qs = donations_qs.filter(currency_id=currency_id)
         
-        # Payment method analysis
-        total_donations_count = donations.count()
-        payment_methods = donations.values('payment_method').annotate(
-            count=Count('id'),
-            total=Sum('amount'),
-            percentage=Case(
-                When(count__gt=0, then=Value(100.0) * Count('id') / Value(total_donations_count)),
-                default=Value(0.0),
-                output_field=FloatField()
+        # Group by currency
+        currency_groups = self._group_by_currency(donations_qs, 'currency')
+        
+        currency_analytics = {}
+        
+        for currency_id_key, currency_data in currency_groups.items():
+            donations = currency_data['items']
+            
+            # Daily trends
+            daily_donations = {}
+            for donation in donations:
+                day = donation.donation_date.date().isoformat()
+                if day not in daily_donations:
+                    daily_donations[day] = {'day': day, 'count': 0, 'total': 0, 'amounts': []}
+                daily_donations[day]['count'] += 1
+                daily_donations[day]['total'] += float(donation.amount or 0)
+                daily_donations[day]['amounts'].append(float(donation.amount or 0))
+            
+            # Calculate averages
+            for day_data in daily_donations.values():
+                day_data['avg'] = (
+                    sum(day_data['amounts']) / len(day_data['amounts']) 
+                    if day_data['amounts'] else 0
+                )
+                del day_data['amounts']  # Remove temporary field
+            
+            daily_trends = sorted(daily_donations.values(), key=lambda x: x['day'])
+            
+            # Payment method analysis
+            payment_methods = {}
+            total_donations_count = len(donations)
+            
+            for donation in donations:
+                method = donation.payment_method or 'unknown'
+                if method not in payment_methods:
+                    payment_methods[method] = {'payment_method': method, 'count': 0, 'total': 0}
+                payment_methods[method]['count'] += 1
+                payment_methods[method]['total'] += float(donation.amount or 0)
+            
+            # Calculate percentages
+            for method_data in payment_methods.values():
+                method_data['percentage'] = (
+                    (method_data['count'] / total_donations_count * 100) 
+                    if total_donations_count > 0 else 0
+                )
+            
+            payment_methods_list = sorted(
+                payment_methods.values(), 
+                key=lambda x: x['total'], 
+                reverse=True
             )
-        ).order_by('-total')
+            
+            # Donor analysis
+            unique_donors = set(d.donor_id for d in donations if d.donor_id)
+            anonymous_count = len([d for d in donations if d.is_anonymous])
+            
+            # Repeat donors calculation
+            donor_counts = {}
+            for donation in donations:
+                if donation.donor_id:
+                    donor_counts[donation.donor_id] = donor_counts.get(donation.donor_id, 0) + 1
+            repeat_donors = len([donor for donor, count in donor_counts.items() if count > 1])
+            
+            donor_stats = {
+                'total_donors': len(unique_donors),
+                'anonymous_donations': anonymous_count,
+                'repeat_donors': repeat_donors
+            }
+            
+            # Amount segments
+            amount_segments = {
+                'micro': len([d for d in donations if (d.amount or 0) < 50]),
+                'small': len([d for d in donations if 50 <= (d.amount or 0) < 250]),
+                'medium': len([d for d in donations if 250 <= (d.amount or 0) < 1000]),
+                'large': len([d for d in donations if 1000 <= (d.amount or 0) < 5000]),
+                'major': len([d for d in donations if (d.amount or 0) >= 5000])
+            }
+            
+            # Campaign performance
+            campaign_donations = [d for d in donations if d.campaign_id]
+            campaign_performance = {}
+            
+            for donation in campaign_donations:
+                campaign_id = donation.campaign_id
+                if campaign_id not in campaign_performance:
+                    campaign_performance[campaign_id] = {
+                        'campaign__title': donation.campaign.title if donation.campaign else 'Unknown',
+                        'campaign__id': campaign_id,
+                        'total_raised': 0,
+                        'donation_count': 0,
+                        'amounts': []
+                    }
+                campaign_performance[campaign_id]['total_raised'] += float(donation.amount or 0)
+                campaign_performance[campaign_id]['donation_count'] += 1
+                campaign_performance[campaign_id]['amounts'].append(float(donation.amount or 0))
+            
+            # Calculate average donations for campaigns
+            for camp_data in campaign_performance.values():
+                camp_data['avg_donation'] = (
+                    sum(camp_data['amounts']) / len(camp_data['amounts']) 
+                    if camp_data['amounts'] else 0
+                )
+                del camp_data['amounts']  # Remove temporary field
+            
+            top_campaigns = sorted(
+                campaign_performance.values(),
+                key=lambda x: x['total_raised'],
+                reverse=True
+            )[:10]
+            
+            # Calculate summary
+            total_amount = sum(float(d.amount or 0) for d in donations)
+            avg_donation = total_amount / len(donations) if donations else 0
+            largest_donation = max((float(d.amount or 0) for d in donations), default=0)
+            
+            currency_analytics[currency_id_key] = {
+                'currency_id': currency_data['currency_id'],
+                'currency_code': currency_data['currency_code'],
+                'currency_name': currency_data['currency_name'],
+                'period': f'{days} days',
+                'summary': {
+                    'total_donations': len(donations),
+                    'total_amount': float(total_amount),
+                    'average_donation': float(avg_donation),
+                    'largest_donation': float(largest_donation)
+                },
+                'daily_trends': daily_trends,
+                'payment_methods': payment_methods_list,
+                'donor_stats': donor_stats,
+                'amount_segments': amount_segments,
+                'top_campaigns': top_campaigns
+            }
         
-        # Donor analysis
-        donor_stats = {
-            'total_donors': donations.values('donor').distinct().count(),
-            'anonymous_donations': donations.filter(is_anonymous=True).count(),
-            'repeat_donors': donations.values('donor').annotate(
-                donation_count=Count('id')
-            ).filter(donation_count__gt=1).count()
-        }
+        # Return single currency data if filtered, otherwise return all
+        if currency_id and int(currency_id) in currency_analytics:
+            return Response(currency_analytics[int(currency_id)])
         
-        # Amount segments
-        amount_segments = {
-            'micro': donations.filter(amount__lt=50).count(),
-            'small': donations.filter(amount__gte=50, amount__lt=250).count(),
-            'medium': donations.filter(amount__gte=250, amount__lt=1000).count(),
-            'large': donations.filter(amount__gte=1000, amount__lt=5000).count(),
-            'major': donations.filter(amount__gte=5000).count()
-        }
+        # If only one currency, return it directly for backward compatibility
+        if len(currency_analytics) == 1:
+            return Response(list(currency_analytics.values())[0])
         
-        # Campaign performance
-        campaign_performance = donations.filter(campaign__isnull=False).values(
-            'campaign__title', 'campaign__id'
-        ).annotate(
-            total_raised=Sum('amount'),
-            donation_count=Count('id'),
-            avg_donation=Avg('amount')
-        ).order_by('-total_raised')[:10]
-        
-        analytics = {
-            'period': f'{days} days',
-            'summary': {
-                'total_donations': donations.count(),
-                'total_amount': donations.aggregate(total=Sum('amount'))['total'] or 0,
-                'average_donation': donations.aggregate(avg=Avg('amount'))['avg'] or 0,
-                'largest_donation': donations.aggregate(max=Sum('amount'))['max'] or 0
-            },
-            'daily_trends': list(daily_donations),
-            'payment_methods': list(payment_methods),
-            'donor_stats': donor_stats,
-            'amount_segments': amount_segments,
-            'top_campaigns': list(campaign_performance)
-        }
-        
-        return Response(analytics)
+        # Multiple currencies
+        return Response({
+            'currencies': currency_analytics,
+            'generated_at': timezone.now().isoformat(),
+            'filters_applied': {
+                'days': days,
+                'currency': currency_id
+            }
+        })
     
     @action(detail=False, methods=['get'])
     def campaign_performance(self, request):
-        """Get campaign performance analytics"""
+        """Get campaign performance analytics grouped by currency"""
         days = int(request.query_params.get('days', 30))
         limit = int(request.query_params.get('limit', 10))
+        currency_id = request.query_params.get('currency')
         
         end_date = timezone.now()
         start_date = end_date - timedelta(days=days)
         
-        # Get active campaigns with their performance metrics
-        campaigns = DonationCampaign.objects.filter(
-            is_active=True
-        ).prefetch_related('donations')
+        # Get campaigns with currency filtering
+        campaigns_qs = DonationCampaign.objects.filter(is_active=True)
+        if currency_id:
+            campaigns_qs = campaigns_qs.filter(target_currency_id=currency_id)
         
-        campaign_data = []
+        campaigns = campaigns_qs.prefetch_related('donations')
         
-        for campaign in campaigns:
-            # Get donations for this campaign in the time period
-            campaign_donations = campaign.donations.filter(
-                status='completed',
-                donation_date__gte=start_date
-            )
+        # Group campaigns by currency
+        currency_groups = self._group_by_currency(campaigns, 'target_currency')
+        
+        currency_performance = {}
+        
+        for currency_id_key, currency_data in currency_groups.items():
+            campaigns_list = currency_data['items']
+            campaign_data = []
             
-            # Calculate metrics
-            total_raised = campaign.current_amount
-            period_raised = campaign_donations.aggregate(total=Sum('amount'))['total'] or 0
-            donation_count = campaign_donations.count()
-            unique_donors = campaign_donations.values('donor').distinct().count()
-            avg_donation = campaign_donations.aggregate(avg=Avg('amount'))['avg'] or 0
+            for campaign in campaigns_list:
+                # Get donations for this campaign in the time period
+                campaign_donations = campaign.donations.filter(
+                    status='completed',
+                    donation_date__gte=start_date
+                )
+                
+                # Calculate metrics
+                total_raised = float(campaign.current_amount or 0)
+                period_raised = sum(float(d.amount or 0) for d in campaign_donations)
+                donation_count = campaign_donations.count()
+                unique_donors = campaign_donations.values('donor').distinct().count()
+                avg_donation = period_raised / donation_count if donation_count > 0 else 0
+                
+                # Progress metrics
+                target_amount = float(campaign.target_amount or 0)
+                progress_percentage = (total_raised / target_amount * 100) if target_amount > 0 else 0
+                
+                days_remaining = (campaign.end_date - timezone.now().date()).days if campaign.end_date else 0
+                days_active = (timezone.now().date() - campaign.start_date).days + 1 if campaign.start_date else 1
+                
+                # Performance indicators
+                daily_avg = period_raised / days if days > 0 else 0
+                target_daily_needed = (
+                    (target_amount - total_raised) / max(days_remaining, 1) 
+                    if days_remaining > 0 else 0
+                )
+                
+                is_on_track = (
+                    daily_avg >= target_daily_needed if days_remaining > 0 
+                    else progress_percentage >= 100
+                )
+                
+                performance_score = (
+                    min(100, (daily_avg / max(target_daily_needed, 1)) * 100) 
+                    if target_daily_needed > 0 else 100
+                )
+                
+                campaign_data.append({
+                    'id': campaign.id,
+                    'title': campaign.title,
+                    'target_amount': target_amount,
+                    'total_raised': total_raised,
+                    'period_raised': period_raised,
+                    'progress_percentage': progress_percentage,
+                    'days_remaining': days_remaining,
+                    'days_active': days_active,
+                    'donation_count': donation_count,
+                    'unique_donors': unique_donors,
+                    'avg_donation': avg_donation,
+                    'daily_avg_period': daily_avg,
+                    'target_daily_needed': target_daily_needed,
+                    'is_on_track': is_on_track,
+                    'performance_score': performance_score,
+                    'currency': currency_data['currency_code'],
+                    'start_date': campaign.start_date.isoformat() if campaign.start_date else None,
+                    'end_date': campaign.end_date.isoformat() if campaign.end_date else None,
+                    'is_featured': getattr(campaign, 'is_featured', False)
+                })
             
-            # Progress metrics
-            progress_percentage = campaign.progress_percentage
-            days_remaining = (campaign.end_date - timezone.now().date()).days
-            days_active = (timezone.now().date() - campaign.start_date).days + 1
+            # Sort campaigns
+            sort_by = request.query_params.get('sort', 'performance_score')
+            if sort_by == 'total_raised':
+                campaign_data.sort(key=lambda x: x['total_raised'], reverse=True)
+            elif sort_by == 'progress_percentage':
+                campaign_data.sort(key=lambda x: x['progress_percentage'], reverse=True)
+            elif sort_by == 'period_raised':
+                campaign_data.sort(key=lambda x: x['period_raised'], reverse=True)
+            else:  # performance_score
+                campaign_data.sort(key=lambda x: x['performance_score'], reverse=True)
             
-            # Performance indicators
-            daily_avg = period_raised / days if days > 0 else 0
-            target_daily_needed = (campaign.target_amount - total_raised) / max(days_remaining, 1) if days_remaining > 0 else 0
+            # Limit results
+            campaign_data = campaign_data[:limit]
             
-            campaign_data.append({
-                'id': campaign.id,
-                'title': campaign.title,
-                'target_amount': float(campaign.target_amount),
-                'total_raised': float(total_raised),
-                'period_raised': float(period_raised),
-                'progress_percentage': float(progress_percentage),
-                'days_remaining': days_remaining,
-                'days_active': days_active,
-                'donation_count': donation_count,
-                'unique_donors': unique_donors,
-                'avg_donation': float(avg_donation),
-                'daily_avg_period': float(daily_avg),
-                'target_daily_needed': float(target_daily_needed),
-                'is_on_track': daily_avg >= target_daily_needed if days_remaining > 0 else progress_percentage >= 100,
-                'performance_score': min(100, (daily_avg / max(target_daily_needed, 1)) * 100) if target_daily_needed > 0 else 100,
-                'currency': campaign.target_currency.code if campaign.target_currency else 'USD',
-                'start_date': campaign.start_date,
-                'end_date': campaign.end_date,
-                'is_featured': campaign.is_featured
-            })
+            # Calculate summary statistics
+            total_campaigns = len(campaigns_list)
+            active_campaigns = len([c for c in campaign_data if c['days_remaining'] > 0])
+            successful_campaigns = len([c for c in campaign_data if c['progress_percentage'] >= 100])
+            on_track_campaigns = len([c for c in campaign_data if c['is_on_track']])
+            
+            # Overall performance metrics
+            total_target = sum(c['target_amount'] for c in campaign_data)
+            total_raised_all = sum(c['total_raised'] for c in campaign_data)
+            total_period_raised = sum(c['period_raised'] for c in campaign_data)
+            
+            currency_performance[currency_id_key] = {
+                'currency_id': currency_data['currency_id'],
+                'currency_code': currency_data['currency_code'],
+                'currency_name': currency_data['currency_name'],
+                'period_days': days,
+                'summary': {
+                    'total_campaigns': total_campaigns,
+                    'active_campaigns': active_campaigns,
+                    'successful_campaigns': successful_campaigns,
+                    'on_track_campaigns': on_track_campaigns,
+                    'success_rate': (successful_campaigns / max(total_campaigns, 1)) * 100,
+                    'on_track_rate': (on_track_campaigns / max(active_campaigns, 1)) * 100,
+                    'total_target_amount': total_target,
+                    'total_raised': total_raised_all,
+                    'period_raised': total_period_raised,
+                    'overall_progress': (total_raised_all / max(total_target, 1)) * 100
+                },
+                'campaigns': campaign_data,
+                'top_performers': campaign_data[:5],
+                'needs_attention': [
+                    c for c in campaign_data 
+                    if c['days_remaining'] > 0 and c['performance_score'] < 50
+                ][:5]
+            }
         
-        # Sort by performance score or total raised
-        sort_by = request.query_params.get('sort', 'performance_score')
-        if sort_by == 'total_raised':
-            campaign_data.sort(key=lambda x: x['total_raised'], reverse=True)
-        elif sort_by == 'progress_percentage':
-            campaign_data.sort(key=lambda x: x['progress_percentage'], reverse=True)
-        elif sort_by == 'period_raised':
-            campaign_data.sort(key=lambda x: x['period_raised'], reverse=True)
-        else:  # performance_score
-            campaign_data.sort(key=lambda x: x['performance_score'], reverse=True)
+        # Return single currency data if filtered, otherwise return all
+        if currency_id and int(currency_id) in currency_performance:
+            return Response(currency_performance[int(currency_id)])
         
-        # Limit results
-        campaign_data = campaign_data[:limit]
+        # If only one currency, return it directly for backward compatibility
+        if len(currency_performance) == 1:
+            return Response(list(currency_performance.values())[0])
         
-        # Calculate summary statistics
-        total_campaigns = len(campaigns)
-        active_campaigns = len([c for c in campaign_data if c['days_remaining'] > 0])
-        successful_campaigns = len([c for c in campaign_data if c['progress_percentage'] >= 100])
-        on_track_campaigns = len([c for c in campaign_data if c['is_on_track']])
-        
-        # Overall performance metrics
-        total_target = sum(c['target_amount'] for c in campaign_data)
-        total_raised_all = sum(c['total_raised'] for c in campaign_data)
-        total_period_raised = sum(c['period_raised'] for c in campaign_data)
-        
-        performance = {
-            'period_days': days,
-            'summary': {
-                'total_campaigns': total_campaigns,
-                'active_campaigns': active_campaigns,
-                'successful_campaigns': successful_campaigns,
-                'on_track_campaigns': on_track_campaigns,
-                'success_rate': (successful_campaigns / max(total_campaigns, 1)) * 100,
-                'on_track_rate': (on_track_campaigns / max(active_campaigns, 1)) * 100,
-                'total_target_amount': float(total_target),
-                'total_raised': float(total_raised_all),
-                'period_raised': float(total_period_raised),
-                'overall_progress': (total_raised_all / max(total_target, 1)) * 100
-            },
-            'campaigns': campaign_data,
-            'top_performers': campaign_data[:5],  # Top 5 performers
-            'needs_attention': [
-                c for c in campaign_data 
-                if c['days_remaining'] > 0 and c['performance_score'] < 50
-            ][:5]  # Campaigns that need attention
-        }
-        
-        return Response(performance)
+        # Multiple currencies
+        return Response({
+            'currencies': currency_performance,
+            'generated_at': timezone.now().isoformat(),
+            'filters_applied': {
+                'days': days,
+                'limit': limit,
+                'sort': request.query_params.get('sort', 'performance_score'),
+                'currency': currency_id
+            }
+        })
     
     @action(detail=False, methods=['get'])
-    def budget_performance(self, request):
-        """Get budget performance analytics"""
-        fiscal_year = request.query_params.get('fiscal_year')
-        
-        # Fetch budgets and convert to list to reuse evaluated objects
-        budgets_qs = Budget.objects.filter(status__in=['active', 'completed'])
-        if fiscal_year:
-            budgets_qs = budgets_qs.filter(fiscal_year=fiscal_year)
-        
-        # Prefetch related data if needed for spent_amount property
-        budgets_qs = budgets_qs.prefetch_related('items')  
-        budgets = list(budgets_qs)
-
-        # Helper function for budget group calculations
-        def calculate_group_stats(group):
-            total_allocated = sum(b.total_amount for b in group)
-            total_spent = sum(b.spent_amount for b in group)
-            utilizations = [
-                (b.spent_amount / b.total_amount) * 100 
-                for b in group 
-                if b.total_amount > 0
-            ]
-            avg_utilization = sum(utilizations) / len(utilizations) if utilizations else 0
-            return total_allocated, total_spent, avg_utilization
-
-        # Budget utilization by type
-        budget_by_type = []
-        for budget_type in set(b.budget_type for b in budgets):
-            type_budgets = [b for b in budgets if b.budget_type == budget_type]
-            total_allocated, total_spent, avg_utilization = calculate_group_stats(type_budgets)
-            
-            budget_by_type.append({
-                'budget_type': budget_type,
-                'count': len(type_budgets),
-                'total_allocated': float(total_allocated),
-                'total_spent': float(total_spent),
-                'avg_utilization': float(avg_utilization)
-            })
-
-        # Sort by total allocated
-        budget_by_type.sort(key=lambda x: x['total_allocated'], reverse=True)
-        
-        # Department budget analysis
-        dept_budgets = []
-        departments = {b.department: b.department.name for b in budgets if b.department}
-        for dept_id, dept_name in departments.items():
-            dept_budgets_group = [b for b in budgets if b.department == dept_id]
-            total_allocated, total_spent, _ = calculate_group_stats(dept_budgets_group)
-            utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
-            
-            dept_budgets.append({
-                'department__name': dept_name,
-                'total_allocated': float(total_allocated),
-                'total_spent': float(total_spent),
-                'utilization': float(utilization)
-            })
-
-        # Sort by total allocated
-        dept_budgets.sort(key=lambda x: x['total_allocated'], reverse=True)
-        
-        # Budget alerts
-        over_budget = 0
-        near_limit = 0
-        for budget in budgets:
-            if budget.total_amount > 0:
-                utilization = (budget.spent_amount / budget.total_amount) * 100
-                if utilization > 100:
-                    over_budget += 1
-                elif utilization >= 90:
-                    near_limit += 1
-        
-        # Monthly spending trends (unchanged)
-        monthly_spending = OrganizationalExpense.objects.filter(
-            status='paid',
-            expense_date__gte=timezone.now() - timedelta(days=365)
-        ).extra(
-            select={'month': "date_trunc('month', expense_date)"}
-        ).values('month').annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        ).order_by('month')
-        
-        # Overall utilization calculation
-        total_allocated = sum(b.total_amount for b in budgets)
-        total_spent = sum(b.spent_amount for b in budgets)
-        overall_utilization = (total_spent / total_allocated * 100) if total_allocated > 0 else 0
-        
-        performance = {
-            'summary': {
-                'total_budgets': len(budgets),
-                'total_allocated': float(total_allocated),
-                'total_spent': float(total_spent),
-                'overall_utilization': float(overall_utilization)
-            },
-            'alerts': {
-                'over_budget_count': over_budget,
-                'near_limit_count': near_limit,
-                'total_alerts': over_budget + near_limit
-            },
-            'by_type': budget_by_type,
-            'by_department': dept_budgets,
-            'monthly_trends': list(monthly_spending)
-        }
-        
-        return Response(performance)
-    @action(detail=False, methods=['get'])
     def grant_pipeline(self, request):
-        """Get grant pipeline analytics"""
-        grants = Grant.objects.all()
+        """Get grant pipeline analytics grouped by currency"""
+        currency_id = request.query_params.get('currency')
         
-        # Pipeline by status
-        pipeline_status = grants.values('status').annotate(
-            count=Count('id'),
-            total_amount=Sum('amount'),
-            avg_amount=Avg('amount')
-        ).order_by('status')
+        grants_qs = Grant.objects.all()
+        if currency_id:
+            grants_qs = grants_qs.filter(currency_id=currency_id)
         
-        # Success rate
-        total_submitted = grants.filter(status__in=[
-            'submitted', 'under_review', 'approved', 'rejected', 'active', 'completed'
-        ]).count()
-        successful = grants.filter(status__in=['approved', 'active', 'completed']).count()
-        success_rate = (successful / total_submitted * 100) if total_submitted > 0 else 0
+        # Group grants by currency
+        currency_groups = self._group_by_currency(grants_qs, 'currency')
         
-        # Grantor analysis
-        grantor_performance = grants.filter(status__in=['approved', 'active', 'completed']).values(
-            'grantor', 'grantor_type'
-        ).annotate(
-            grant_count=Count('id'),
-            total_amount=Sum('amount'),
-            avg_amount=Avg('amount')
-        ).order_by('-total_amount')[:10]
+        currency_pipelines = {}
         
-        # Disbursement tracking - Fixed calculation
-        active_grants = grants.filter(status='active')
-        total_approved = active_grants.aggregate(total=Sum('amount'))['total'] or 0
-        total_received = active_grants.aggregate(total=Sum('amount_received'))['total'] or 0
-        pending_disbursement = total_approved - total_received
-        
-        disbursement_summary = {
-            'total_approved': float(total_approved),
-            'total_received': float(total_received),
-            'pending_disbursement': float(pending_disbursement)
-        }
-        
-        # Upcoming deadlines
-        upcoming_deadlines = GrantReport.objects.filter(
-            due_date__gte=timezone.now().date(),
-            due_date__lte=timezone.now().date() + timedelta(days=30),
-            status__in=['draft', 'submitted']
-        ).select_related('grant').order_by('due_date')[:10]
-        
-        pipeline = {
-            'summary': {
-                'total_grants': grants.count(),
-                'success_rate': float(success_rate),
-                'total_pipeline_value': grants.aggregate(total=Sum('amount'))['total'] or 0,
-                'active_grants': grants.filter(status='active').count()
-            },
-            'pipeline_status': list(pipeline_status),
-            'disbursement_summary': disbursement_summary,
-            'top_grantors': list(grantor_performance),
-            'upcoming_deadlines': [
+        for currency_id_key, currency_data in currency_groups.items():
+            grants = currency_data['items']
+            
+            # Pipeline by status
+            pipeline_status = {}
+            for grant in grants:
+                status = grant.status
+                if status not in pipeline_status:
+                    pipeline_status[status] = {
+                        'status': status,
+                        'count': 0,
+                        'total_amount': 0,
+                        'amounts': []
+                    }
+                pipeline_status[status]['count'] += 1
+                pipeline_status[status]['total_amount'] += float(grant.amount or 0)
+                pipeline_status[status]['amounts'].append(float(grant.amount or 0))
+            
+            # Calculate averages
+            for status_data in pipeline_status.values():
+                status_data['avg_amount'] = (
+                    sum(status_data['amounts']) / len(status_data['amounts']) 
+                    if status_data['amounts'] else 0
+                )
+                del status_data['amounts']  # Remove temporary field
+            
+            pipeline_status_list = list(pipeline_status.values())
+            
+            # Success rate
+            submitted_statuses = ['submitted', 'under_review', 'approved', 'rejected', 'active', 'completed']
+            total_submitted = len([g for g in grants if g.status in submitted_statuses])
+            successful = len([g for g in grants if g.status in ['approved', 'active', 'completed']])
+            success_rate = (successful / total_submitted * 100) if total_submitted > 0 else 0
+            
+            # Grantor analysis
+            grantor_performance = {}
+            successful_grants = [g for g in grants if g.status in ['approved', 'active', 'completed']]
+            
+            for grant in successful_grants:
+                grantor = grant.grantor or 'Unknown'
+                grantor_type = getattr(grant, 'grantor_type', 'Unknown')
+                
+                key = (grantor, grantor_type)
+                if key not in grantor_performance:
+                    grantor_performance[key] = {
+                        'grantor': grantor,
+                        'grantor_type': grantor_type,
+                        'grant_count': 0,
+                        'total_amount': 0,
+                        'amounts': []
+                    }
+                
+                grantor_performance[key]['grant_count'] += 1
+                grantor_performance[key]['total_amount'] += float(grant.amount or 0)
+                grantor_performance[key]['amounts'].append(float(grant.amount or 0))
+            
+            # Calculate averages for grantors
+            for grantor_data in grantor_performance.values():
+                grantor_data['avg_amount'] = (
+                    sum(grantor_data['amounts']) / len(grantor_data['amounts']) 
+                    if grantor_data['amounts'] else 0
+                )
+                del grantor_data['amounts']  # Remove temporary field
+            
+            top_grantors = sorted(
+                grantor_performance.values(),
+                key=lambda x: x['total_amount'],
+                reverse=True
+            )[:10]
+            
+            # Disbursement tracking
+            active_grants = [g for g in grants if g.status == 'active']
+            total_approved = sum(float(g.amount or 0) for g in active_grants)
+            total_received = sum(float(getattr(g, 'amount_received', 0) or 0) for g in active_grants)
+            pending_disbursement = total_approved - total_received
+            
+            disbursement_summary = {
+                'total_approved': total_approved,
+                'total_received': total_received,
+                'pending_disbursement': pending_disbursement
+            }
+            
+            # Upcoming deadlines for this currency
+            grant_ids = [g.id for g in grants]
+            upcoming_deadlines = GrantReport.objects.filter(
+                grant_id__in=grant_ids,
+                due_date__gte=timezone.now().date(),
+                due_date__lte=timezone.now().date() + timedelta(days=30),
+                status__in=['draft', 'submitted']
+            ).select_related('grant').order_by('due_date')[:10]
+            
+            upcoming_deadlines_list = [
                 {
                     'grant_title': report.grant.title,
-                    'report_type': report.report_type,
-                    'due_date': report.due_date,
+                    'report_type': getattr(report, 'report_type', 'Unknown'),
+                    'due_date': report.due_date.isoformat(),
                     'days_until_due': (report.due_date - timezone.now().date()).days
                 }
                 for report in upcoming_deadlines
             ]
-        }
+            
+            currency_pipelines[currency_id_key] = {
+                'currency_id': currency_data['currency_id'],
+                'currency_code': currency_data['currency_code'],
+                'currency_name': currency_data['currency_name'],
+                'summary': {
+                    'total_grants': len(grants),
+                    'success_rate': success_rate,
+                    'total_pipeline_value': sum(float(g.amount or 0) for g in grants),
+                    'active_grants': len(active_grants)
+                },
+                'pipeline_status': pipeline_status_list,
+                'disbursement_summary': disbursement_summary,
+                'top_grantors': top_grantors,
+                'upcoming_deadlines': upcoming_deadlines_list
+            }
         
-        return Response(pipeline)
+        # Return single currency data if filtered, otherwise return all
+        if currency_id and int(currency_id) in currency_pipelines:
+            return Response(currency_pipelines[int(currency_id)])
+        
+        # If only one currency, return it directly for backward compatibility
+        if len(currency_pipelines) == 1:
+            return Response(list(currency_pipelines.values())[0])
+        
+        # Multiple currencies
+        return Response({
+            'currencies': currency_pipelines,
+            'generated_at': timezone.now().isoformat(),
+            'filters_applied': {
+                'currency': currency_id
+            }
+        })
     
-    @action(detail=False, methods=['get'])
-    def cash_flow_forecast(self, request):
-        """Get cash flow forecast"""
-        from decimal import Decimal
-        
-        days_ahead = int(request.query_params.get('days', 90))
-        
-        # Current balance - ensure Decimal
-        current_balance = sum(
-            account.current_balance 
-            for account in BankAccount.objects.filter(is_active=True)
-        )
-        if not isinstance(current_balance, Decimal):
-            current_balance = Decimal(str(current_balance))
-        
-        # Projected income
-        # Recurring donations - ensure Decimal
-        recurring_income_raw = RecurringDonation.objects.filter(
-            status='active',
-            next_payment_date__lte=timezone.now().date() + timedelta(days=days_ahead)
-        ).aggregate(total=Sum('amount'))['total']
-        recurring_income = Decimal(str(recurring_income_raw)) if recurring_income_raw else Decimal('0')
-        
-        # Expected grant disbursements - ensure Decimal
-        active_grants = Grant.objects.filter(status='active')
-        expected_grants = Decimal('0')
-        for grant in active_grants:
-            remaining = grant.amount - grant.amount_received
-            expected_grants += remaining
-        
-        # Projected expenses
-        # Approved but unpaid expenses - ensure Decimal
-        pending_expenses_raw = OrganizationalExpense.objects.filter(
-            status='approved'
-        ).aggregate(total=Sum('amount'))['total']
-        pending_expenses = Decimal(str(pending_expenses_raw)) if pending_expenses_raw else Decimal('0')
-        
-        # Monthly recurring expenses (estimate based on last 3 months) - ensure Decimal
-        avg_monthly_expenses_raw = OrganizationalExpense.objects.filter(
-            status='paid',
-            expense_date__gte=timezone.now().date() - timedelta(days=90)
-        ).aggregate(avg=Avg('amount'))['avg']
-        avg_monthly_expenses = Decimal(str(avg_monthly_expenses_raw)) if avg_monthly_expenses_raw else Decimal('0')
-        
-        projected_monthly_expenses = avg_monthly_expenses * Decimal(str(days_ahead / 30))
-        
-        # Calculate forecast - all Decimal operations
-        projected_balance = (
-            current_balance + 
-            recurring_income + 
-            expected_grants - 
-            pending_expenses - 
-            projected_monthly_expenses
-        )
-        
-        forecast = {
-            'forecast_period_days': days_ahead,
-            'current_balance': float(current_balance),
-            'projected_income': {
-                'recurring_donations': float(recurring_income),
-                'expected_grants': float(expected_grants),
-                'total': float(recurring_income + expected_grants)
-            },
-            'projected_expenses': {
-                'pending_approved': float(pending_expenses),
-                'estimated_recurring': float(projected_monthly_expenses),
-                'total': float(pending_expenses + projected_monthly_expenses)
-            },
-            'projected_balance': float(projected_balance),
-            'cash_flow_health': (
-                'healthy' if projected_balance > current_balance * Decimal('0.5')
-                else 'concerning' if projected_balance > Decimal('0')
-                else 'critical'
-            )
-        }
-        
-        return Response(forecast)
 
 class GrantReportViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     queryset = GrantReport.objects.select_related('grant', 'submitted_by', 'reviewed_by')
