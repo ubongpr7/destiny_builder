@@ -127,7 +127,6 @@ class FundAllocationAdmin(admin.ModelAdmin):
 
 @admin.register(CampaignBankAccount)
 class CampaignBankAccountAdmin(admin.ModelAdmin):
-    list_display = ['campaign', 'bank_account', 'is_primary', 'created_at']
+    list_display = ['campaign', 'bank_account', 'is_primary', ]
     list_filter = ['is_primary', ]
     search_fields = ['campaign__title', 'bank_account__name']
-    readonly_fields = ['created_at']
