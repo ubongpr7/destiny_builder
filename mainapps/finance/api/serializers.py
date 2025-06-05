@@ -547,7 +547,7 @@ class RecurringDonationListSerializer(serializers.ModelSerializer):
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
-    
+    d_type=serializers.SerializerMethodField()
     # Enhanced properties
     formatted_amount = serializers.ReadOnlyField()
     total_donated = serializers.ReadOnlyField()
@@ -568,10 +568,11 @@ class RecurringDonationListSerializer(serializers.ModelSerializer):
             # Enhanced properties
             'formatted_amount', 'total_donated', 'formatted_total_donated',
             'success_rate', 'is_healthy', 'is_at_risk', 'days_until_next_payment',
-            'subscription_age_months'
+            'subscription_age_months','d_type',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
+    def get_d_type(self,obj):
+        return 'recurring'
 class RecurringDonationDetailSerializer(serializers.ModelSerializer):
     """Comprehensive detail serializer for recurring donations"""
     donor = UserBasicSerializer(read_only=True)

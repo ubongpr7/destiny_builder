@@ -1661,6 +1661,7 @@ class Donation(models.Model):
         return f"{self.donor_name_display} - {self.formatted_amount} ({self.get_status_display()})"
 
 
+
 class RecurringDonation(models.Model):
     
     FREQUENCY_CHOICES = [
