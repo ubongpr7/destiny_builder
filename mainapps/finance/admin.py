@@ -4,7 +4,7 @@ from .models import (
     FinancialInstitution, BankAccount, ExchangeRate, DonationCampaign,
     Donation, RecurringDonation, InKindDonation, Grant, GrantReport,
     FundingSource, Budget, BudgetFunding, BudgetItem, OrganizationalExpense,
-    AccountTransaction, FundAllocation
+    AccountTransaction, FundAllocation,CampaignBankAccount
 )
 
 @admin.register(FinancialInstitution)
@@ -123,3 +123,11 @@ class FundAllocationAdmin(admin.ModelAdmin):
     list_filter = ['is_active', 'allocation_date']
     search_fields = ['purpose']
     readonly_fields = ['formatted_amount']
+
+
+@admin.register(CampaignBankAccount)
+class CampaignBankAccountAdmin(admin.ModelAdmin):
+    list_display = ['campaign', 'bank_account', 'is_primary', 'created_at']
+    list_filter = ['is_primary', ]
+    search_fields = ['campaign__title', 'bank_account__name']
+    readonly_fields = ['created_at']
