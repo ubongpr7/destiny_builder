@@ -825,6 +825,8 @@ class DonationCampaignViewSet(viewsets.ModelViewSet):
                     },
                     'formatted_balance': campaign_account.bank_account.formatted_balance,
                     'is_active': campaign_account.bank_account.is_active,
+                    'current_balance': float(campaign_account.bank_account.current_balance),
+
                 },
                 'is_primary': campaign_account.is_primary,
                 'priority_order': campaign_account.priority_order,
