@@ -68,14 +68,114 @@ def ge_route(request):
     return Response(route,status=201)
 
 
+# class VerificationAPI(APIView):
+#     throttle_classes = [AnonRateThrottle]
+    
+#     def get(self, request):
+#         """Send verification code via email (GET)"""
+#         email = request.query_params.get('email')
+#         password= request.query_params.get('password')
+
+
+#         if not email:
+#             return Response(
+#                 {"error": "Email parameter is required"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+        
+#         try:
+            
+#             user = User.objects.get(email=email)
+            
+#             code = VerificationCode.objects.get(
+#                 user=user
+#             )
+#             code.save()
+            
+#             send_html_email(
+#                 subject=f'Your Verification Code: {code.code}',
+#                 message=f'Use this code to verify your login: {code.code}',
+#                 to_email=[user.email],
+#                 html_file='accounts/verify.html'
+#             )
+            
+#             return Response(
+#                 {"message": "Verification code sent successfully"},
+#                 status=status.HTTP_200_OK
+#             )
+            
+#         except User.DoesNotExist:
+#             return Response(
+#                 {"error": "User not found with this email"},
+#                 status=status.HTTP_404_NOT_FOUND
+#             )
+
+#     def post(self, request):
+#         """Verify code submission (POST)"""
+#         email = request.data.get('email')
+#         code_input = request.data.get('code')
+        
+#         if not email or not code_input:
+#             return Response(
+#                 {"error": "Both email and code are required"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         try:
+#             user = User.objects.get(email=email)
+#             verification_code = VerificationCode.objects.get(slug=user.email)
+            
+
+#             if str(verification_code.code) != code_input.strip():
+#                 return Response(
+#                     {"error": "Invalid verification code"},
+#                     status=status.HTTP_400_BAD_REQUEST
+#                 )
+
+#             return Response(
+#                 {
+#                     "message": "Verification successful",
+#                     "user_id": user.id,
+#                     "email": user.email
+#                 },
+#                 status=status.HTTP_200_OK
+#             )
+            
+#         except User.DoesNotExist:
+#             return Response(
+#                 {"error": "User not found"},
+#                 status=status.HTTP_404_NOT_FOUND
+#             )
+#         except VerificationCode.DoesNotExist:
+#             return Response(
+#                 {"error": "No active verification code for this user"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+
+
+
+
 class VerificationAPI(APIView):
     throttle_classes = [AnonRateThrottle]
-    
-    def get(self, request):
-        """Send verification code via email (GET)"""
-        email = request.query_params.get('email')
-        password= request.query_params.get('password')
 
+    def post(self, request):
+        """Handle both sending verification code and verifying code submission (POST)"""
+        action = request.data.get('action')
+
+        if action == 'send_code':
+            return self.send_verification_code(request)
+        elif action == 'verify_code':
+            return self.verify_code(request)
+        else:
+            return Response(
+                {"error": "Invalid action. Use 'send_code' or 'verify_code'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def send_verification_code(self, request):
+        """Send verification code via email"""
+        email = request.data.get('email')
 
         if not email:
             return Response(
@@ -84,13 +184,9 @@ class VerificationAPI(APIView):
             )
         
         try:
-            
             user = User.objects.get(email=email)
-            
-            code = VerificationCode.objects.get(
-                user=user
-            )
-            code.save()
+            code, created = VerificationCode.objects.get_or_create(user=user)
+            code.save()  # Ensure the code is saved or updated
             
             send_html_email(
                 subject=f'Your Verification Code: {code.code}',
@@ -106,12 +202,12 @@ class VerificationAPI(APIView):
             
         except User.DoesNotExist:
             return Response(
-                {"error": "User not found with this email"},
+                {"error": "User  not found with this email"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-    def post(self, request):
-        """Verify code submission (POST)"""
+    def verify_code(self, request):
+        """Verify code submission"""
         email = request.data.get('email')
         code_input = request.data.get('code')
         
@@ -123,8 +219,7 @@ class VerificationAPI(APIView):
 
         try:
             user = User.objects.get(email=email)
-            verification_code = VerificationCode.objects.get(slug=user.email)
-            
+            verification_code = VerificationCode.objects.get(user=user)
 
             if str(verification_code.code) != code_input.strip():
                 return Response(
@@ -143,7 +238,7 @@ class VerificationAPI(APIView):
             
         except User.DoesNotExist:
             return Response(
-                {"error": "User not found"},
+                {"error": "User  not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
         except VerificationCode.DoesNotExist:
@@ -151,6 +246,8 @@ class VerificationAPI(APIView):
                 {"error": "No active verification code for this user"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
 
 
 class UserDetailView(APIView):

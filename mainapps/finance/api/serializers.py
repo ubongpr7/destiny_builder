@@ -18,10 +18,11 @@ User = get_user_model()
 class UserBasicSerializer(serializers.ModelSerializer):
     """Basic user info for nested serialization"""
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    phone_number = serializers.CharField(source='profile.phone_number', read_only=True)
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name','phone_number']
         read_only_fields = ['id', 'username', 'email', 'full_name']
 
 class CurrencySerializer(serializers.ModelSerializer):
@@ -583,6 +584,7 @@ class RecurringDonationDetailSerializer(serializers.ModelSerializer):
     project_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     currency = CurrencySerializer(read_only=True)
     currency_id = serializers.IntegerField(write_only=True)
+
     
     # Financial calculations
     total_donated = serializers.ReadOnlyField()
@@ -619,7 +621,7 @@ class RecurringDonationDetailSerializer(serializers.ModelSerializer):
             'frequency', 'start_date', 'end_date', 'next_payment_date',
             'last_payment_date', 'payment_method', 'subscription_id',
             'payment_processor', 'status', 'payment_count', 'failed_payment_count',
-            'max_failed_payments', 'notes', 'receipt_image', 'created_at', 'updated_at',
+            'max_failed_payments', 'notes', 'receipt_image', 'created_at', 'updated_at','donor_phone'
             # Enhanced properties
             'payment_instances',
             'total_donated', 'total_net_donated', 'average_donation_amount',
