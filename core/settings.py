@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
 ALLOWED_HOSTS = [
     'dsetinybuilder.africa',
@@ -18,7 +18,6 @@ ALLOWED_HOSTS = [
     'dev.destinybuilders.africa',
     'localhost',
     '127.0.0.1',
-    '13.51.147.202'
     
 ]
 # ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
@@ -50,6 +49,7 @@ THIRD_PARTY_APPS=[
     'djoser',
     'social_django',
     'schema_graph',
+    'axes',
 ]
 CORE_APPS = [
     'mainapps.accounts',
@@ -83,10 +83,15 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'middleware.ip_address_middleware.IPBlackListMiddleware',
-    'middleware.time_zone.TimezoneMiddleware'
+    'middleware.time_zone.TimezoneMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
-BANNED_IPS=['127.0.0.']
+# BANNED_IPS=['127.0.0.']
+AXES_FAILURE_LIMIT = 5  # Block after 5 failed login attempts
+AXES_COOLOFF_TIME = timedelta(minutes=15)  # Block duration
+AXES_LOCKOUT_URL = '/locked/'  
+AXES_RESET_ON_SUCCESS = True
 
 ROOT_URLCONF = 'core.urls'
 AUTH_USER_MODEL = 'accounts.User' 
@@ -206,7 +211,7 @@ AUTHENTICATION_BACKENDS = [
     'social_core.backends.google.GoogleOAuth2',
     'social_core.backends.facebook.FacebookOAuth2',
     "djoser.auth_backends.LoginFieldBackend",
-
+    'axes.backends.AxesBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
 import os
@@ -266,10 +271,11 @@ SIMPLE_JWT = {
 AUTH_COOKIE='access'
 AUTH_COOKIE_ACCESS_MAX_AGE=60*10
 AUTH_COOKIE_REFRESH_MAX_AGE=60*60*24
-AUTH_COOKIE_SECURE=False 
+AUTH_COOKIE_SECURE=True 
 AUTH_COOKIE_HTTP_ONLY=True
 AUTH_COOKIE_PATH='/'
-AUTH_COOKIE_SAMESITE='None'
+AUTH_COOKIE_SAMESITE='Strict'
+SECURE_SSL_REDIRECT = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'mainapps.accounts.authentication.AccountJWTAuthentication',
@@ -277,7 +283,7 @@ REST_FRAMEWORK = {
     )
 }
 
-CORS_ALLOW_ALL_ORIGINS=True
+CORS_ALLOW_ALL_ORIGINS=False
 CORS_ORIGIN_ALLOW_ALL=True
 
 CORS_ALLOW_CREDENTIALS=True
@@ -294,15 +300,12 @@ CORS_ALLOW_METHODS = (
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    'http://3.212.68.52:3000',
     "https://intera-inventory.vercel.app",
-    "http://3.84.22.207:3000",
     "https://www.destinybuilders.africa",
     "https://dev.destinybuilders.africa",
     "https://destinybuilders.africa",
 
 ]
-CORS_ALLOW_ALL_ORIGINS = True
 
 
 TINYMCE_DEFAULT_CONFIG = {

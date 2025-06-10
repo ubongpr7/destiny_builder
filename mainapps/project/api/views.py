@@ -103,7 +103,7 @@ class ProjectViewSet(ActivityTrackingMixin,viewsets.ModelViewSet):
     """
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['project_type', 'status', 'category']
     search_fields = ['title', 'description', 'location']

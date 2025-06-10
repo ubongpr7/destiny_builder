@@ -85,3 +85,4 @@ django-synchro
 qrcode
 forex-python
 freecurrencyapi
+django-axes
