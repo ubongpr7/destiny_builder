@@ -2,6 +2,8 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import os
+from datetime import timedelta
 
 load_dotenv()
 
@@ -214,8 +216,6 @@ AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
-import os
-from datetime import timedelta
 
 # DJOSER CONFIGURATION
 DJOSER = {
