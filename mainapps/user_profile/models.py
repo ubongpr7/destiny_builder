@@ -19,7 +19,7 @@ class TeamMember(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-priority', 'name']
+        ordering = ['priority', 'name']
         verbose_name = "Team Member"
         verbose_name_plural = "Team Members"
 
