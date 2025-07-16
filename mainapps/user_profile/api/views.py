@@ -1386,7 +1386,7 @@ class TeamMemberViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TeamMember.objects.all()
     
     def get_queryset(self):
-        return TeamMember.objects.order_by('-priority', 'name')
+        return TeamMember.objects.all()
     
     def get_serializer_context(self):
         return {'request': self.request}
