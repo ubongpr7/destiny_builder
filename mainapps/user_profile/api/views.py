@@ -23,7 +23,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
 from mainapps.user_profile.api.utils import ReferenceGenerator, generate_certificate_pdf, send_certificate_email
-from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DepartmentSerializer, DepartmentTreeSerializer, DisabilityTypeSerializer, ProfileRoleSerializer
+from mainapps.user_profile.models import TeamMember
+from .serializers import CAddressSerializer, CombinedReadUserSerializer, CombinedUserProfileSerializer, DepartmentSerializer, DepartmentTreeSerializer, DisabilityTypeSerializer, ProfileRoleSerializer, TeamMemberSerializer
 from django.shortcuts import get_object_or_404
 from mainapps.common.models import Address
 from mainapps.accounts.models import Department, Disability, Industry, Expertise,VerificationCode, Membership, PartnershipType, PartnershipLevel, Skill, UserProfile
@@ -1379,3 +1380,13 @@ def department_search(request):
             {'error': str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+class TeamMemberViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = TeamMemberSerializer
+    queryset = TeamMember.objects.all()
+    
+    def get_queryset(self):
+        return TeamMember.objects.order_by('-priority', 'name')
+    
+    def get_serializer_context(self):
+        return {'request': self.request}

@@ -5,6 +5,8 @@ from mainapps.common.api.serializers import CitySerializer, CountrySerializer, R
 from mainapps.common.models import Address
 from django.contrib.auth import get_user_model
 
+from mainapps.user_profile.models import TeamMember
+
 
 User = get_user_model()
 
@@ -408,3 +410,20 @@ class DepartmentMinimalSerializer(serializers.ModelSerializer):
     
     def get_full_name(self, obj):
         return f"{obj.code} - {obj.name}"
+
+
+class TeamMemberSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            return self.context['request'].build_absolute_uri(obj.image.url)
+        return None
+
+    class Meta:
+        model = TeamMember
+        fields = [
+            'id', 'name', 'position', 'image_url',
+            'social_facebook', 'social_twitter', 'social_instagram',
+            'priority'
+        ]

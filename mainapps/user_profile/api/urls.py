@@ -13,10 +13,9 @@ router.register(r'membership', MembershipViewSet)
 router.register(r'disabilities', DisabilityViewSet)
 router.register(r'users', UserViewSet)
 router.register(r'user-profiles', UserProfileViewSet,basename='user-profiles')
+router.register(r'team-members', TeamMemberViewSet, basename='team-member')
 
 
-urlpatterns = [
-]
 urlpatterns = [
     path('', include(router.urls)),
     path('profile-roles/', UserProfileRoleView.as_view(), name='profile-role'),
@@ -42,6 +41,7 @@ urlpatterns = [
     path('departments/search/', department_search, name='department-search'),
          
 ]
+
 
 
 
